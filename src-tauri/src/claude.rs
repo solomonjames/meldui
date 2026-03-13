@@ -36,10 +36,7 @@ fn find_claude_binary() -> Option<PathBuf> {
     }
 
     // Fallback: try bare "claude" in case PATH works (e.g., dev mode)
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("claude")
-        .output()
-    {
+    if let Ok(output) = std::process::Command::new("which").arg("claude").output() {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
@@ -53,8 +50,9 @@ fn find_claude_binary() -> Option<PathBuf> {
 
 /// Create a Command with the full path to the claude binary
 fn claude_command() -> Result<Command, String> {
-    let bin = find_claude_binary()
-        .ok_or_else(|| "Claude Code CLI not found. Install it from https://code.claude.com".to_string())?;
+    let bin = find_claude_binary().ok_or_else(|| {
+        "Claude Code CLI not found. Install it from https://code.claude.com".to_string()
+    })?;
     Ok(Command::new(bin))
 }
 
@@ -75,7 +73,15 @@ pub async fn get_status() -> Result<String, String> {
 
     // Check auth status
     let auth_check = Command::new(&bin_path)
-        .args(["--print", "--output-format", "json", "--max-turns", "0", "--", "test"])
+        .args([
+            "--print",
+            "--output-format",
+            "json",
+            "--max-turns",
+            "0",
+            "--",
+            "test",
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -170,9 +176,7 @@ pub async fn send_message(
                         if let Some(content) = message.get("content") {
                             if let Some(content_arr) = content.as_array() {
                                 for block in content_arr {
-                                    if block.get("type").and_then(|t| t.as_str())
-                                        == Some("text")
-                                    {
+                                    if block.get("type").and_then(|t| t.as_str()) == Some("text") {
                                         if let Some(text) =
                                             block.get("text").and_then(|t| t.as_str())
                                         {

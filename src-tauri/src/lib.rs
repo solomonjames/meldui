@@ -1,19 +1,19 @@
 mod beads;
 mod claude;
+mod workflow;
 
 use beads::BeadsIssue;
 use claude::ClaudeMessage;
+use workflow::{StepExecutionResult, WorkflowDefinition, WorkflowState};
 // ── Folder dialog command ──
 
 #[tauri::command]
 async fn open_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .pick_folder(move |folder| {
-            let _ = tx.send(folder.map(|p| p.to_string()));
-        });
+    app.dialog().file().pick_folder(move |folder| {
+        let _ = tx.send(folder.map(|p| p.to_string()));
+    });
     rx.await.map_err(|e| e.to_string())
 }
 
@@ -91,6 +91,7 @@ async fn beads_update(
     notes: Option<String>,
     design: Option<String>,
     acceptance: Option<String>,
+    metadata: Option<String>,
 ) -> Result<serde_json::Value, String> {
     beads::update_issue(
         &project_dir,
@@ -102,6 +103,7 @@ async fn beads_update(
         notes.as_deref(),
         design.as_deref(),
         acceptance.as_deref(),
+        metadata.as_deref(),
     )
     .await
 }
@@ -132,6 +134,53 @@ async fn beads_add_comment(
     text: String,
 ) -> Result<serde_json::Value, String> {
     beads::add_comment(&project_dir, &id, &text).await
+}
+
+// ── Workflow commands ──
+
+#[tauri::command]
+async fn workflow_list(project_dir: String) -> Result<Vec<WorkflowDefinition>, String> {
+    Ok(workflow::list_workflows(&project_dir))
+}
+
+#[tauri::command]
+async fn workflow_get(
+    project_dir: String,
+    workflow_id: String,
+) -> Result<WorkflowDefinition, String> {
+    workflow::get_workflow(&project_dir, &workflow_id)
+        .ok_or_else(|| format!("Workflow '{}' not found", workflow_id))
+}
+
+#[tauri::command]
+async fn workflow_assign(
+    project_dir: String,
+    issue_id: String,
+    workflow_id: String,
+) -> Result<WorkflowState, String> {
+    workflow::assign_workflow(&project_dir, &issue_id, &workflow_id).await
+}
+
+#[tauri::command]
+async fn workflow_advance(project_dir: String, issue_id: String) -> Result<WorkflowState, String> {
+    workflow::advance_step(&project_dir, &issue_id).await
+}
+
+#[tauri::command]
+async fn workflow_state(
+    project_dir: String,
+    issue_id: String,
+) -> Result<Option<WorkflowState>, String> {
+    workflow::get_workflow_state(&project_dir, &issue_id).await
+}
+
+#[tauri::command]
+async fn workflow_execute_step(
+    project_dir: String,
+    issue_id: String,
+    app: tauri::AppHandle,
+) -> Result<StepExecutionResult, String> {
+    workflow::execute_step(&project_dir, &issue_id, app).await
 }
 
 // ── App setup ──
@@ -166,6 +215,12 @@ pub fn run() {
             beads_show,
             beads_delete,
             beads_add_comment,
+            workflow_list,
+            workflow_get,
+            workflow_assign,
+            workflow_advance,
+            workflow_state,
+            workflow_execute_step,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -69,6 +69,8 @@ pub struct BeadsIssue {
     pub parent_id: Option<String>,
     #[serde(default)]
     pub comments: Option<Vec<BeadsComment>>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
 }
 
 /// Find the bd CLI binary — checks bundled sidecar first, then system locations
@@ -118,8 +120,9 @@ fn find_bd_binary() -> Option<PathBuf> {
 
 /// Create a Command for bd with the project directory set
 fn bd_command(project_dir: &str) -> Result<Command, String> {
-    let bin = find_bd_binary()
-        .ok_or_else(|| "Beads CLI (bd) not found. Install from https://github.com/steveyegge/beads".to_string())?;
+    let bin = find_bd_binary().ok_or_else(|| {
+        "Beads CLI (bd) not found. Install from https://github.com/steveyegge/beads".to_string()
+    })?;
     let mut cmd = Command::new(bin);
     cmd.current_dir(project_dir);
     Ok(cmd)
@@ -146,7 +149,8 @@ async fn run_bd_json<T: for<'de> Deserialize<'de>>(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(&stdout).map_err(|e| format!("Failed to parse bd output: {} — raw: {}", e, stdout))
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse bd output: {} — raw: {}", e, stdout))
 }
 
 /// Check if beads is available and initialized in a directory
@@ -217,14 +221,11 @@ pub async fn list_issues(
         if issue.parent_id.is_some() {
             continue;
         }
-        issue.parent_id = issue
-            .dependencies
-            .as_ref()
-            .and_then(|deps| {
-                deps.iter()
-                    .find(|d| d.dep_type.as_deref() == Some("parent-child"))
-                    .and_then(|d| d.depends_on_id.clone())
-            });
+        issue.parent_id = issue.dependencies.as_ref().and_then(|deps| {
+            deps.iter()
+                .find(|d| d.dep_type.as_deref() == Some("parent-child"))
+                .and_then(|d| d.depends_on_id.clone())
+        });
     }
 
     Ok(issues)
@@ -261,6 +262,7 @@ pub async fn update_issue(
     notes: Option<&str>,
     design: Option<&str>,
     acceptance: Option<&str>,
+    metadata: Option<&str>,
 ) -> Result<serde_json::Value, String> {
     let mut args: Vec<&str> = vec!["update", id];
 
@@ -291,6 +293,10 @@ pub async fn update_issue(
     if let Some(a) = acceptance {
         args.push("--acceptance");
         args.push(a);
+    }
+    if let Some(m) = metadata {
+        args.push("--metadata");
+        args.push(m);
     }
 
     run_bd_json(project_dir, &args).await
@@ -323,7 +329,11 @@ pub async fn delete_issue(project_dir: &str, id: &str) -> Result<serde_json::Val
 }
 
 /// Add a comment to an issue
-pub async fn add_comment(project_dir: &str, id: &str, text: &str) -> Result<serde_json::Value, String> {
+pub async fn add_comment(
+    project_dir: &str,
+    id: &str,
+    text: &str,
+) -> Result<serde_json::Value, String> {
     run_bd_json(project_dir, &["comments", "add", id, text]).await
 }
 

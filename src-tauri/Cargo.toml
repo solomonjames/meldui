@@ -25,3 +25,5 @@ tauri-plugin-shell = "2.3.5"
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
 tokio = { version = "1", features = ["process", "io-util", "sync"] }
+serde_yaml = "0.9"
+chrono = { version = "0.4", features = ["serde"] }

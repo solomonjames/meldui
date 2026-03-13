@@ -258,6 +258,9 @@ pub async fn update_issue(
     status: Option<&str>,
     priority: Option<&str>,
     description: Option<&str>,
+    notes: Option<&str>,
+    design: Option<&str>,
+    acceptance: Option<&str>,
 ) -> Result<serde_json::Value, String> {
     let mut args: Vec<&str> = vec!["update", id];
 
@@ -276,6 +279,18 @@ pub async fn update_issue(
     if let Some(d) = description {
         args.push("-d");
         args.push(d);
+    }
+    if let Some(n) = notes {
+        args.push("--notes");
+        args.push(n);
+    }
+    if let Some(ds) = design {
+        args.push("--design");
+        args.push(ds);
+    }
+    if let Some(a) = acceptance {
+        args.push("--acceptance");
+        args.push(a);
     }
 
     run_bd_json(project_dir, &args).await

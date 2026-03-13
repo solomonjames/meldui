@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Hash,
   ArrowUp,
@@ -8,6 +10,7 @@ import {
   Trash2,
   Check,
   Send,
+  Pencil,
 } from "lucide-react";
 import {
   Dialog,
@@ -28,7 +31,12 @@ interface TicketDetailDialogProps {
   onDelete?: (id: string) => Promise<void>;
   onSave?: (
     id: string,
-    updates: { description?: string }
+    updates: {
+      description?: string;
+      notes?: string;
+      design?: string;
+      acceptance?: string;
+    }
   ) => Promise<void>;
   onShowIssue?: (id: string) => Promise<BeadsIssue | null>;
   onAddComment?: (id: string, text: string) => Promise<void>;
@@ -42,15 +50,77 @@ const STATUS_CONFIG: Record<string, { dot: string; label: string }> = {
   closed: { dot: "bg-emerald-500", label: "Closed" },
 };
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
+function EditableSection({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.selectionStart = textareaRef.current.value.length;
+    }
+  }, [editing]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setEditing(false);
+    }
+  };
+
   return (
     <div className="space-y-1.5">
-      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        {label}
-      </h3>
-      <div className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 text-sm whitespace-pre-wrap">
-        {children}
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          {label}
+        </h3>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+          onClick={() => setEditing(!editing)}
+        >
+          {editing ? (
+            <Check className="w-3.5 h-3.5" />
+          ) : (
+            <Pencil className="w-3.5 h-3.5" />
+          )}
+        </Button>
       </div>
+      {editing ? (
+        <textarea
+          ref={textareaRef}
+          className="w-full rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 text-sm resize-none min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={`No ${label.toLowerCase()}`}
+        />
+      ) : (
+        <div
+          className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 text-sm cursor-text"
+          onDoubleClick={() => setEditing(true)}
+        >
+          {value ? (
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {value}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">
+              No {label.toLowerCase()}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -111,18 +181,21 @@ export function TicketDetailDialog({
   const [comments, setComments] = useState<BeadsComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentText, setCommentText] = useState("");
-  const [editedDescription, setEditedDescription] = useState<string | null>(null);
+  const [edits, setEdits] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  const setField = (field: string, value: string) =>
+    setEdits((prev) => ({ ...prev, [field]: value }));
 
   // Reset stack when the root issue changes or dialog closes
   useEffect(() => {
     if (issue && open) {
       setIssueStack([issue]);
-      setEditedDescription(null);
+      setEdits({});
     } else {
       setIssueStack([]);
       setComments([]);
-      setEditedDescription(null);
+      setEdits({});
     }
   }, [issue, open]);
 
@@ -148,6 +221,13 @@ export function TicketDetailDialog({
     }
   }, [currentIssue?.id, open, fetchComments]);
 
+  const hasChanges =
+    currentIssue != null &&
+    Object.entries(edits).some(
+      ([field, value]) =>
+        value !== ((currentIssue as Record<string, unknown>)[field] ?? "")
+    );
+
   // Keyboard shortcut: Cmd+S to save
   useEffect(() => {
     if (!open) return;
@@ -159,7 +239,7 @@ export function TicketDetailDialog({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, currentIssue, editedDescription]);
+  }, [open, currentIssue, edits]);
 
   if (!currentIssue) return null;
 
@@ -171,16 +251,14 @@ export function TicketDetailDialog({
   const subTickets = allIssues.filter((i) => i.parent_id === currentIssue.id);
   const canGoBack = issueStack.length > 1;
 
-  const hasChanges = editedDescription !== null && editedDescription !== (currentIssue.description ?? "");
-
   const handleBack = () => {
     setIssueStack((stack) => stack.slice(0, -1));
-    setEditedDescription(null);
+    setEdits({});
   };
 
   const handleSubTicketClick = (subTicket: BeadsIssue) => {
     setIssueStack((stack) => [...stack, subTicket]);
-    setEditedDescription(null);
+    setEdits({});
   };
 
   const handleDelete = async () => {
@@ -193,10 +271,14 @@ export function TicketDetailDialog({
     if (!onSave || !hasChanges) return;
     setIsSaving(true);
     try {
-      await onSave(currentIssue.id, {
-        description: editedDescription ?? undefined,
-      });
-      setEditedDescription(null);
+      const updates: Record<string, string> = {};
+      for (const [field, value] of Object.entries(edits)) {
+        if (value !== ((currentIssue as Record<string, unknown>)[field] ?? "")) {
+          updates[field] = value;
+        }
+      }
+      await onSave(currentIssue.id, updates);
+      setEdits({});
     } finally {
       setIsSaving(false);
     }
@@ -273,27 +355,32 @@ export function TicketDetailDialog({
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {/* Content sections */}
           <div className="space-y-4">
-            {/* Editable description */}
-            <div className="space-y-1.5">
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Description
-              </h3>
-              <textarea
-                className="w-full rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 text-sm resize-none min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                value={editedDescription ?? currentIssue.description ?? ""}
-                onChange={(e) => setEditedDescription(e.target.value)}
-                placeholder="No description"
-              />
-            </div>
+            <EditableSection
+              label="Description"
+              value={edits.description ?? currentIssue.description ?? ""}
+              onChange={(v) => setField("description", v)}
+            />
 
-            {currentIssue.design && (
-              <Section label="Design">{currentIssue.design}</Section>
+            {(currentIssue.design || edits.design !== undefined) && (
+              <EditableSection
+                label="Design"
+                value={edits.design ?? currentIssue.design ?? ""}
+                onChange={(v) => setField("design", v)}
+              />
             )}
-            {currentIssue.notes && (
-              <Section label="Notes">{currentIssue.notes}</Section>
+            {(currentIssue.notes || edits.notes !== undefined) && (
+              <EditableSection
+                label="Notes"
+                value={edits.notes ?? currentIssue.notes ?? ""}
+                onChange={(v) => setField("notes", v)}
+              />
             )}
-            {currentIssue.acceptance && (
-              <Section label="Acceptance Criteria">{currentIssue.acceptance}</Section>
+            {(currentIssue.acceptance || edits.acceptance !== undefined) && (
+              <EditableSection
+                label="Acceptance Criteria"
+                value={edits.acceptance ?? currentIssue.acceptance ?? ""}
+                onChange={(v) => setField("acceptance", v)}
+              />
             )}
           </div>
 

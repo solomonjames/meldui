@@ -88,6 +88,9 @@ async fn beads_update(
     status: Option<String>,
     priority: Option<String>,
     description: Option<String>,
+    notes: Option<String>,
+    design: Option<String>,
+    acceptance: Option<String>,
 ) -> Result<serde_json::Value, String> {
     beads::update_issue(
         &project_dir,
@@ -96,6 +99,9 @@ async fn beads_update(
         status.as_deref(),
         priority.as_deref(),
         description.as_deref(),
+        notes.as_deref(),
+        design.as_deref(),
+        acceptance.as_deref(),
     )
     .await
 }

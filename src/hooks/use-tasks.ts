@@ -81,6 +81,9 @@ export function useBeads(projectDir: string) {
         status?: string;
         priority?: string;
         description?: string;
+        notes?: string;
+        design?: string;
+        acceptance?: string;
       }
     ) => {
       try {

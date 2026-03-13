@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { KanbanColumn } from "./kanban-column";
 import { KanbanCard } from "./kanban-card";
+import { TicketDetailDialog } from "./ticket-detail-dialog";
 import type { BeadsIssue, BeadsStatus } from "@/types";
 
 interface BacklogPageProps {
@@ -61,6 +62,7 @@ export function BacklogPage({
   const [sortMode, setSortMode] = useState<SortMode>("priority");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<BeadsIssue | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -68,7 +70,7 @@ export function BacklogPage({
   );
 
   const filteredIssues = useMemo(() => {
-    let filtered = issues;
+    let filtered = issues.filter((i) => !i.parent_id);
     if (typeFilter) {
       filtered = filtered.filter((i) => i.issue_type === typeFilter);
     }
@@ -246,6 +248,7 @@ export function BacklogPage({
                   issues={columnIssues}
                   onUpdate={onUpdateIssue}
                   onClose={onCloseIssue}
+                  onCardClick={setSelectedIssue}
                 />
               );
             })}
@@ -263,6 +266,14 @@ export function BacklogPage({
           </DragOverlay>
         </DndContext>
       </div>
+      <TicketDetailDialog
+        issue={selectedIssue}
+        allIssues={issues}
+        open={!!selectedIssue}
+        onOpenChange={(open) => {
+          if (!open) setSelectedIssue(null);
+        }}
+      />
     </div>
   );
 }

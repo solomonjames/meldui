@@ -19,6 +19,7 @@ interface KanbanColumnProps {
     updates: { status?: string; priority?: string }
   ) => Promise<void>;
   onClose: (id: string) => Promise<void>;
+  onCardClick?: (issue: BeadsIssue) => void;
 }
 
 const COLUMN_CONFIG: Record<
@@ -50,6 +51,7 @@ export function KanbanColumn({
   issues,
   onUpdate,
   onClose,
+  onCardClick,
 }: KanbanColumnProps) {
   const config = COLUMN_CONFIG[variant];
   const Icon = config.icon;
@@ -84,6 +86,7 @@ export function KanbanColumn({
                 variant={variant}
                 onUpdate={onUpdate}
                 onClose={onClose}
+                onClick={onCardClick}
               />
             ))}
           </div>

@@ -10,7 +10,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import type { BeadsIssue } from "@/types";
 
-const TYPE_CONFIG: Record<
+export const TYPE_CONFIG: Record<
   string,
   { icon: typeof Sparkles; color: string; bg: string }
 > = {
@@ -41,7 +41,7 @@ const TYPE_CONFIG: Record<
   },
 };
 
-const PRIORITY_CONFIG: Record<number, { label: string; color: string; bg: string }> = {
+export const PRIORITY_CONFIG: Record<number, { label: string; color: string; bg: string }> = {
   0: { label: "P0", color: "text-red-600", bg: "bg-red-500/10" },
   1: { label: "P1", color: "text-amber-600", bg: "bg-amber-500/10" },
   2: { label: "P2", color: "text-cyan-600", bg: "bg-cyan-500/10" },
@@ -64,10 +64,11 @@ interface KanbanCardProps {
     updates: { status?: string; priority?: string }
   ) => Promise<void>;
   onClose: (id: string) => Promise<void>;
+  onClick?: (issue: BeadsIssue) => void;
   isOverlay?: boolean;
 }
 
-export function KanbanCard({ issue, variant, onUpdate, onClose, isOverlay }: KanbanCardProps) {
+export function KanbanCard({ issue, variant, onUpdate, onClose, onClick, isOverlay }: KanbanCardProps) {
   const typeInfo = TYPE_CONFIG[issue.issue_type] ?? TYPE_CONFIG.task;
   const priorityInfo = PRIORITY_CONFIG[issue.priority] ?? PRIORITY_CONFIG[2];
   const TypeIcon = typeInfo.icon;
@@ -95,6 +96,9 @@ export function KanbanCard({ issue, variant, onUpdate, onClose, isOverlay }: Kan
       style={style}
       {...attributes}
       {...listeners}
+      onClick={() => {
+        if (!isDragging && onClick) onClick(issue);
+      }}
       className={`rounded-[10px] border p-3.5 shadow-sm transition-colors cursor-grab active:cursor-grabbing ${
         isDragging ? "opacity-40" : ""
       } ${isOverlay ? "shadow-lg ring-2 ring-zinc-300 dark:ring-zinc-600 rotate-[2deg]" : ""} ${

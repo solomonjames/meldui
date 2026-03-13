@@ -5,6 +5,14 @@ use std::process::Stdio;
 use tokio::process::Command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BeadsDependency {
+    #[serde(default)]
+    pub depends_on_id: Option<String>,
+    #[serde(default, rename = "type")]
+    pub dep_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BeadsIssue {
     pub id: String,
     pub title: String,
@@ -41,6 +49,8 @@ pub struct BeadsIssue {
     pub comment_count: Option<i32>,
     #[serde(default)]
     pub labels: Option<Vec<String>>,
+    #[serde(default)]
+    pub dependencies: Option<Vec<BeadsDependency>>,
     #[serde(default)]
     pub parent_id: Option<String>,
 }
@@ -184,7 +194,24 @@ pub async fn list_issues(
     args.push("-n");
     args.push("0"); // unlimited
 
-    run_bd_json(project_dir, &args).await
+    let mut issues: Vec<BeadsIssue> = run_bd_json(project_dir, &args).await?;
+
+    // Derive parent_id from dependencies with type "parent-child"
+    for issue in &mut issues {
+        if issue.parent_id.is_some() {
+            continue;
+        }
+        issue.parent_id = issue
+            .dependencies
+            .as_ref()
+            .and_then(|deps| {
+                deps.iter()
+                    .find(|d| d.dep_type.as_deref() == Some("parent-child"))
+                    .and_then(|d| d.depends_on_id.clone())
+            });
+    }
+
+    Ok(issues)
 }
 
 /// Create a new issue

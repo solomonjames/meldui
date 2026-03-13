@@ -114,6 +114,20 @@ async fn beads_show(project_dir: String, id: String) -> Result<Vec<BeadsIssue>, 
     beads::show_issue(&project_dir, &id).await
 }
 
+#[tauri::command]
+async fn beads_delete(project_dir: String, id: String) -> Result<serde_json::Value, String> {
+    beads::delete_issue(&project_dir, &id).await
+}
+
+#[tauri::command]
+async fn beads_add_comment(
+    project_dir: String,
+    id: String,
+    text: String,
+) -> Result<serde_json::Value, String> {
+    beads::add_comment(&project_dir, &id, &text).await
+}
+
 // ── App setup ──
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -144,6 +158,8 @@ pub fn run() {
             beads_update,
             beads_close,
             beads_show,
+            beads_delete,
+            beads_add_comment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

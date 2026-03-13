@@ -12,6 +12,14 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+export interface BeadsComment {
+  id: number;
+  issue_id: string;
+  author: string;
+  text: string;
+  created_at: string;
+}
+
 // Matches beads JSON output exactly
 export interface BeadsIssue {
   id: string;
@@ -35,6 +43,7 @@ export interface BeadsIssue {
   comment_count?: number;
   labels?: string[];
   parent_id?: string;
+  comments?: BeadsComment[];
 }
 
 export interface BeadsStatus {

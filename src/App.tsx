@@ -78,6 +78,9 @@ function App() {
           error={beads.error}
           onUpdateIssue={beads.updateIssue}
           onCloseIssue={beads.closeIssue}
+          onDeleteIssue={beads.deleteIssue}
+          onShowIssue={beads.showIssue}
+          onAddComment={beads.addComment}
           onRefresh={beads.refreshIssues}
           onInitBeads={beads.initBeads}
         />

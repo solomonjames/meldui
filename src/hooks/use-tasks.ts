@@ -113,6 +113,45 @@ export function useBeads(projectDir: string) {
     [projectDir, refreshIssues]
   );
 
+  const showIssue = useCallback(
+    async (id: string): Promise<BeadsIssue | null> => {
+      try {
+        const result = await invoke<BeadsIssue[]>("beads_show", {
+          projectDir,
+          id,
+        });
+        return result[0] ?? null;
+      } catch (err) {
+        setError(`Show failed: ${err}`);
+        return null;
+      }
+    },
+    [projectDir]
+  );
+
+  const deleteIssue = useCallback(
+    async (id: string) => {
+      try {
+        await invoke("beads_delete", { projectDir, id });
+        await refreshIssues();
+      } catch (err) {
+        setError(`Delete failed: ${err}`);
+      }
+    },
+    [projectDir, refreshIssues]
+  );
+
+  const addComment = useCallback(
+    async (id: string, text: string) => {
+      try {
+        await invoke("beads_add_comment", { projectDir, id, text });
+      } catch (err) {
+        setError(`Add comment failed: ${err}`);
+      }
+    },
+    [projectDir]
+  );
+
   const getIssuesByStatus = useCallback(
     (filterStatus: string) => {
       return issues.filter((i) => i.status === filterStatus);
@@ -131,6 +170,9 @@ export function useBeads(projectDir: string) {
     createIssue,
     updateIssue,
     closeIssue,
+    showIssue,
+    deleteIssue,
+    addComment,
     getIssuesByStatus,
   };
 }

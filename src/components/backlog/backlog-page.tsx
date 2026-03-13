@@ -26,6 +26,9 @@ interface BacklogPageProps {
     updates: { status?: string; priority?: string; description?: string }
   ) => Promise<void>;
   onCloseIssue: (id: string, reason?: string) => Promise<void>;
+  onDeleteIssue: (id: string) => Promise<void>;
+  onShowIssue: (id: string) => Promise<BeadsIssue | null>;
+  onAddComment: (id: string, text: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onInitBeads: () => Promise<void>;
 }
@@ -56,6 +59,9 @@ export function BacklogPage({
   error,
   onUpdateIssue,
   onCloseIssue,
+  onDeleteIssue,
+  onShowIssue,
+  onAddComment,
   onRefresh,
   onInitBeads,
 }: BacklogPageProps) {
@@ -273,6 +279,12 @@ export function BacklogPage({
         onOpenChange={(open) => {
           if (!open) setSelectedIssue(null);
         }}
+        onDelete={onDeleteIssue}
+        onSave={async (id, updates) => {
+          await onUpdateIssue(id, updates);
+        }}
+        onShowIssue={onShowIssue}
+        onAddComment={onAddComment}
       />
     </div>
   );

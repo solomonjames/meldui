@@ -5,6 +5,20 @@ use std::process::Stdio;
 use tokio::process::Command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BeadsComment {
+    #[serde(default)]
+    pub id: i32,
+    #[serde(default)]
+    pub issue_id: String,
+    #[serde(default)]
+    pub author: String,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BeadsDependency {
     #[serde(default)]
     pub depends_on_id: Option<String>,
@@ -53,6 +67,8 @@ pub struct BeadsIssue {
     pub dependencies: Option<Vec<BeadsDependency>>,
     #[serde(default)]
     pub parent_id: Option<String>,
+    #[serde(default)]
+    pub comments: Option<Vec<BeadsComment>>,
 }
 
 /// Find the bd CLI binary — checks bundled sidecar first, then system locations
@@ -284,6 +300,16 @@ pub async fn close_issue(
 /// Show issue details
 pub async fn show_issue(project_dir: &str, id: &str) -> Result<Vec<BeadsIssue>, String> {
     run_bd_json(project_dir, &["show", id]).await
+}
+
+/// Delete an issue
+pub async fn delete_issue(project_dir: &str, id: &str) -> Result<serde_json::Value, String> {
+    run_bd_json(project_dir, &["delete", id, "--force"]).await
+}
+
+/// Add a comment to an issue
+pub async fn add_comment(project_dir: &str, id: &str, text: &str) -> Result<serde_json::Value, String> {
+    run_bd_json(project_dir, &["comments", "add", id, text]).await
 }
 
 /// Initialize beads in a project directory

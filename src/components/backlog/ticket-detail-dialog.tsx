@@ -219,8 +219,8 @@ export function TicketDetailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col p-0">
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {/* Sticky header */}
+        <div className="border-b px-6 pt-6 pb-4 space-y-4 bg-zinc-50/50 dark:bg-zinc-900/50">
           <DialogHeader>
             {/* Back button + ID badge */}
             <div className="flex items-center gap-2">
@@ -267,7 +267,10 @@ export function TicketDetailDialog({
               {currentIssue.issue_type}
             </span>
           </div>
+        </div>
 
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {/* Content sections */}
           <div className="space-y-4">
             {/* Editable description */}

@@ -8,6 +8,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TYPE_CONFIG, PRIORITY_CONFIG } from "./kanban-card";
 
 interface CreateTicketDialogProps {
   open: boolean;
@@ -61,31 +69,44 @@ export function CreateTicketDialog({
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="text-sm font-medium mb-1 block">Type</label>
-              <select
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={issueType}
-                onChange={(e) => setIssueType(e.target.value)}
-              >
-                <option value="task">Task</option>
-                <option value="feature">Feature</option>
-                <option value="bug">Bug</option>
-                <option value="chore">Chore</option>
-                <option value="epic">Epic</option>
-              </select>
+              <Select value={issueType} onValueChange={setIssueType}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TYPE_CONFIG).map(([key, config]) => {
+                    const Icon = config.icon;
+                    return (
+                      <SelectItem key={key} value={key}>
+                        <span className={`inline-flex items-center gap-2 ${config.color}`}>
+                          <Icon className="w-3.5 h-3.5" />
+                          {key.charAt(0).toUpperCase() + key.slice(1)}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex-1">
               <label className="text-sm font-medium mb-1 block">Priority</label>
-              <select
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-              >
-                <option value="0">P0 - Critical</option>
-                <option value="1">P1 - High</option>
-                <option value="2">P2 - Medium</option>
-                <option value="3">P3 - Low</option>
-                <option value="4">P4 - Minimal</option>
-              </select>
+              <Select value={priority} onValueChange={setPriority}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PRIORITY_CONFIG).map(([key, config]) => (
+                    <SelectItem key={key} value={key}>
+                      <span className={`inline-flex items-center gap-2 ${config.color}`}>
+                        {config.label}
+                        <span className="text-muted-foreground font-normal">
+                          {["Critical", "High", "Medium", "Low", "Minimal"][Number(key)]}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <Button

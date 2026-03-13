@@ -44,6 +44,7 @@ export interface BeadsIssue {
   labels?: string[];
   parent_id?: string;
   comments?: BeadsComment[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface BeadsStatus {
@@ -51,4 +52,57 @@ export interface BeadsStatus {
   initialized: boolean;
   path?: string;
   message: string;
+}
+
+// ── Workflow Types ──
+
+export interface WorkflowDefinition {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  steps: WorkflowStep[];
+}
+
+export interface WorkflowStep {
+  id: string;
+  name: string;
+  description: string;
+  instructions: StepInstructions;
+  human_gate: boolean;
+  view?: string;
+  writes_to?: string[];
+}
+
+export type StepInstructions =
+  | { prompt: string }
+  | { file: string };
+
+export interface WorkflowState {
+  workflow_id: string;
+  current_step_id: string | null;
+  step_status: StepStatus;
+  step_history: StepRecord[];
+}
+
+export type StepStatus =
+  | "pending"
+  | "awaiting_gate"
+  | "in_progress"
+  | "completed"
+  | { failed: string };
+
+export interface StepRecord {
+  step_id: string;
+  status: StepStatus;
+  started_at?: string;
+  completed_at?: string;
+  output_summary?: string;
+}
+
+export interface StepExecutionResult {
+  step_id: string;
+  response: string;
+  awaiting_gate: boolean;
+  workflow_completed: boolean;
 }

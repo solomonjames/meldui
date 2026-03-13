@@ -1,0 +1,98 @@
+id: meld-quick
+name: MELD Quick Flow
+description: "Skip spec engineering — assess complexity, then implement directly"
+version: "1.0"
+steps:
+  - id: complexity-assessment
+    name: Assess Complexity
+    description: Evaluate complexity signals and recommend approach depth
+    instructions:
+      prompt: |
+        You are a complexity analyst. Evaluate this ticket and recommend the right depth of planning.
+
+        Count the following complexity signals (each one present = 1 point):
+        1. **Multiple files**: Does this touch more than 3 files?
+        2. **New patterns**: Does this introduce patterns not already in the codebase?
+        3. **External dependencies**: Does this require new packages, APIs, or services?
+        4. **Ambiguous requirements**: Are there open questions or undefined edge cases?
+        5. **Cross-cutting concerns**: Does this affect auth, state management, error handling, or data flow?
+
+        Based on the signal count, categorize:
+        - **0–1 signals → Simple**: Execute directly. No spec needed.
+        - **2–3 signals → Moderate**: Quick spec recommended — capture scope and tasks before coding.
+        - **4–5 signals → Complex**: Full spec required — investigate codebase, define acceptance criteria, review before implementation.
+
+        Format your response as:
+        ## Complexity Assessment
+
+        ### Signals
+        For each signal, mark ✓ present or ✗ absent with a brief explanation.
+
+        ### Score: N/5
+
+        ### Recommendation: Simple | Moderate | Complex
+        Brief justification for the routing.
+
+        ### Suggested Approach
+        What the next step should be based on the complexity level.
+    human_gate: true
+    writes_to:
+      - notes
+
+  - id: implement
+    name: Implement
+    description: TDD implementation from the ticket description
+    instructions:
+      prompt: |
+        You are an expert developer. Implement the feature described in the ticket context.
+
+        Analyze the ticket description and notes to understand what needs to be built.
+        Then implement using strict TDD methodology:
+        1. RED: Write a failing test first
+        2. GREEN: Write minimal code to pass
+        3. REFACTOR: Clean up while keeping tests green
+
+        Rules:
+        - Match existing codebase patterns exactly
+        - Run tests after every change
+        - If no test framework exists, implement directly
+
+        After completing implementation, provide a summary:
+        ## Implementation Report
+        ### Files Changed
+        ### Tests Added
+        ### Test Results
+        ### Notes
+    human_gate: false
+    writes_to:
+      - notes
+
+  - id: verify
+    name: Verify
+    description: Run verification gate — fresh evidence for all completion claims
+    instructions:
+      prompt: |
+        You are a verification engineer. Verify the implementation is complete and correct.
+
+        Run the following checks and provide FRESH EVIDENCE for each:
+        1. Run the full test suite — read complete output
+        2. Run the build — confirm it succeeds
+        3. Run the linter — confirm clean or only pre-existing warnings
+
+        Format your response as:
+        ## Verification Report
+
+        ### Test Suite
+        Result: PASS/FAIL
+        Details: ...
+
+        ### Build
+        Result: PASS/FAIL
+
+        ### Linter
+        Result: PASS/FAIL
+
+        ### Overall: PASS/FAIL
+    human_gate: true
+    writes_to:
+      - notes

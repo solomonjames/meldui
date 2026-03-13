@@ -1,0 +1,256 @@
+id: meld-full
+name: MELD Full Flow
+description: "Complexity assessment, spec engineering, then implementation with review"
+version: "1.0"
+steps:
+  - id: complexity-assessment
+    name: Assess Complexity
+    description: Evaluate complexity signals and recommend approach depth
+    instructions:
+      prompt: |
+        You are a complexity analyst. Evaluate this ticket and recommend the right depth of planning.
+
+        Count the following complexity signals (each one present = 1 point):
+        1. **Multiple files**: Does this touch more than 3 files?
+        2. **New patterns**: Does this introduce patterns not already in the codebase?
+        3. **External dependencies**: Does this require new packages, APIs, or services?
+        4. **Ambiguous requirements**: Are there open questions or undefined edge cases?
+        5. **Cross-cutting concerns**: Does this affect auth, state management, error handling, or data flow?
+
+        Based on the signal count, categorize:
+        - **0–1 signals → Simple**: Execute directly. No spec needed.
+        - **2–3 signals → Moderate**: Quick spec recommended — capture scope and tasks before coding.
+        - **4–5 signals → Complex**: Full spec required — investigate codebase, define acceptance criteria, review before implementation.
+
+        Format your response as:
+        ## Complexity Assessment
+
+        ### Signals
+        For each signal, mark ✓ present or ✗ absent with a brief explanation.
+
+        ### Score: N/5
+
+        ### Recommendation: Simple | Moderate | Complex
+        Brief justification for the routing.
+
+        ### Suggested Approach
+        What the next step should be based on the complexity level.
+    human_gate: true
+    writes_to:
+      - notes
+
+  - id: spec-understand
+    name: "Spec: Understand"
+    description: Capture problem statement, solution approach, and scope boundaries
+    instructions:
+      prompt: |
+        You are a spec engineer. Your job is to understand the feature being requested.
+
+        Review the ticket context below and:
+        1. Identify the core problem being solved
+        2. Propose a clear solution approach
+        3. Define what is in scope and out of scope
+        4. Ask clarifying questions if the requirement is ambiguous
+
+        Format your response as:
+        ## Problem Statement
+        What problem does this solve?
+
+        ## Solution
+        What will we build?
+
+        ## Scope
+        ### In Scope
+        - ...
+        ### Out of Scope
+        - ...
+
+        ## Clarifying Questions
+        - ...
+    human_gate: true
+    writes_to:
+      - design
+
+  - id: spec-investigate
+    name: "Spec: Investigate"
+    description: Deep code investigation to map files, patterns, and dependencies
+    instructions:
+      prompt: |
+        You are a spec engineer performing deep code investigation.
+
+        Based on the ticket context (especially the Design field), investigate the codebase to understand:
+
+        1. **Files to Modify**: Identify all existing files that need changes and new files to create
+        2. **Codebase Patterns**: Document code style, naming conventions, import patterns, error handling, and test patterns
+        3. **Dependencies**: Note external packages needed and internal modules to integrate with
+        4. **Technical Constraints**: Identify anything that affects the implementation approach
+
+        Be specific — reference actual file paths, function names, and line numbers.
+
+        Format your response as:
+        ## Files to Modify
+        - `path/to/file.ts` — what changes are needed
+
+        ## New Files
+        - `path/to/new-file.ts` — purpose
+
+        ## Codebase Patterns
+        ### Code Style
+        ### Error Handling
+        ### Test Patterns
+
+        ## Dependencies
+
+        ## Technical Constraints
+    human_gate: true
+    writes_to:
+      - notes
+
+  - id: spec-generate
+    name: "Spec: Generate Tasks & Acceptance Criteria"
+    description: Generate ordered implementation tasks and Given/When/Then acceptance criteria
+    instructions:
+      prompt: |
+        You are a spec engineer generating the implementation plan.
+
+        Using the Design (problem/solution/scope) and Notes (technical investigation) from the ticket context, generate:
+
+        ## Implementation Tasks
+        Create discrete, actionable tasks ordered by dependency (lowest-level first). Each task must have:
+        - Clear description of what to do
+        - Specific file path(s)
+        - Action (create, modify, delete)
+        - Implementation notes and edge cases
+
+        Format as:
+        - [ ] Task 1: Description
+          - File: `path/to/file`
+          - Action: create|modify
+          - Notes: implementation details
+
+        ## Acceptance Criteria
+        Write Given/When/Then criteria covering:
+        - Happy path for every feature
+        - Error handling and validation failures
+        - Edge cases (empty state, boundary values)
+        - Authorization checks where applicable
+
+        Format as:
+        - Given [precondition], When [action], Then [expected result]
+
+        ## Testing Strategy
+        - Unit tests needed
+        - Integration tests needed
+        - Manual verification steps
+
+        Verify the spec meets the ready-for-dev standard:
+        - Every task has a clear file path and specific action
+        - Tasks are ordered by dependency
+        - All ACs follow Given/When/Then format
+        - No placeholders or TBD items
+    human_gate: true
+    writes_to:
+      - acceptance
+      - notes
+
+  - id: spec-review
+    name: "Spec: Review"
+    description: Review the complete spec against ready-for-dev standards
+    instructions:
+      prompt: |
+        You are a spec reviewer. Review the complete specification in the ticket context.
+
+        Check against the ready-for-dev standard:
+        1. **Actionable**: Every task has a clear file path and specific action
+        2. **Logical**: Tasks are ordered by dependency (lowest level first)
+        3. **Testable**: All ACs follow Given/When/Then, cover happy path and edge cases
+        4. **Complete**: All investigation results inlined, no placeholders or TBD
+        5. **Self-Contained**: A fresh developer can implement without additional context
+
+        Provide your assessment:
+        ## Spec Review
+
+        ### Status: READY | NEEDS WORK
+
+        ### Findings
+        For each issue found:
+        - What's wrong
+        - How to fix it
+
+        ### Summary
+        - Tasks: N total, all actionable? yes/no
+        - ACs: N total, all testable? yes/no
+        - Coverage: Any gaps?
+    human_gate: true
+    writes_to:
+      - design
+
+  - id: implement
+    name: Implement
+    description: TDD implementation following the spec tasks
+    instructions:
+      prompt: |
+        You are an expert developer. Implement the feature described in the ticket context.
+
+        Follow the implementation tasks from the Acceptance Criteria and Notes fields.
+        Use strict TDD methodology:
+        1. RED: Write a failing test first
+        2. GREEN: Write minimal code to pass
+        3. REFACTOR: Clean up while keeping tests green
+
+        Rules:
+        - Implement exactly what's specified, no gold-plating
+        - Match existing codebase patterns exactly
+        - Run tests after every change
+        - If no test framework exists, implement directly
+
+        After completing all tasks, provide a summary:
+        ## Implementation Report
+        ### Files Changed
+        ### Tests Added
+        ### Test Results
+        ### Notes
+    human_gate: false
+    writes_to:
+      - notes
+
+  - id: verify
+    name: Verify
+    description: Run verification gate — fresh evidence for all completion claims
+    instructions:
+      prompt: |
+        You are a verification engineer. Verify the implementation is complete and correct.
+
+        Run the following checks and provide FRESH EVIDENCE for each:
+        1. Run the full test suite — read complete output
+        2. Run the build — confirm it succeeds
+        3. Run the linter — confirm clean or only pre-existing warnings
+        4. Check each acceptance criterion from the ticket — is it satisfied?
+        5. Review the implementation against the spec — any drift?
+
+        Format your response as:
+        ## Verification Report
+
+        ### Test Suite
+        Command: `...`
+        Result: PASS/FAIL
+        Details: ...
+
+        ### Build
+        Command: `...`
+        Result: PASS/FAIL
+
+        ### Linter
+        Command: `...`
+        Result: PASS/FAIL
+
+        ### Acceptance Criteria
+        For each AC:
+        - AC: [criterion]
+        - Status: PASS/FAIL
+        - Evidence: [how verified]
+
+        ### Overall: PASS/FAIL
+    human_gate: true
+    writes_to:
+      - notes

@@ -3,6 +3,19 @@ mod claude;
 
 use beads::BeadsIssue;
 use claude::ClaudeMessage;
+// ── Folder dialog command ──
+
+#[tauri::command]
+async fn open_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .pick_folder(move |folder| {
+            let _ = tx.send(folder.map(|p| p.to_string()));
+        });
+    rx.await.map_err(|e| e.to_string())
+}
 
 // ── Claude commands ──
 
@@ -107,6 +120,8 @@ async fn beads_show(project_dir: String, id: String) -> Result<Vec<BeadsIssue>, 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -118,6 +133,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            open_folder_dialog,
             claude_status,
             claude_login,
             claude_send,

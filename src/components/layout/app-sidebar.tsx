@@ -1,4 +1,4 @@
-import { Layers, LayoutGrid } from "lucide-react";
+import { FolderOpen, Layers, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -9,6 +9,8 @@ interface AppSidebarProps {
   onNavigate: (page: string) => void;
   issues: BeadsIssue[];
   onCreateTicket: () => void;
+  folderName: string | null;
+  onOpenFolder: () => void;
 }
 
 const NAV_ITEMS = [
@@ -20,6 +22,8 @@ export function AppSidebar({
   onNavigate,
   issues,
   onCreateTicket,
+  folderName,
+  onOpenFolder,
 }: AppSidebarProps) {
   const activeTickets = issues.filter((i) => i.status === "in_progress");
 
@@ -33,8 +37,21 @@ export function AppSidebar({
         </div>
       </div>
 
+      {/* Project indicator */}
+      <div className="px-6 pt-4">
+        <button
+          onClick={onOpenFolder}
+          className="w-full flex items-center gap-1.5 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+        >
+          <FolderOpen className="w-3 h-3 text-zinc-400 shrink-0" />
+          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 truncate">
+            {folderName ?? "Open project..."}
+          </span>
+        </button>
+      </div>
+
       {/* Create button */}
-      <div className="px-6 pt-6">
+      <div className="px-6 pt-4">
         <Button
           onClick={onCreateTicket}
           className="w-full bg-emerald hover:bg-emerald/90 text-white"

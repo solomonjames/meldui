@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { Circle, Loader2, CheckCircle2 } from "lucide-react";
+import { useDroppable } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { KanbanCard } from "./kanban-card";
@@ -51,8 +54,16 @@ export function KanbanColumn({
   const config = COLUMN_CONFIG[variant];
   const Icon = config.icon;
 
+  const { setNodeRef, isOver } = useDroppable({ id: variant });
+  const itemIds = useMemo(() => issues.map((i) => i.id), [issues]);
+
   return (
-    <div className="flex flex-col min-w-0">
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col min-w-0 min-h-0 h-full rounded-lg transition-colors ${
+        isOver ? "bg-zinc-200/60 dark:bg-zinc-800/60 ring-2 ring-inset ring-zinc-300 dark:ring-zinc-600" : ""
+      }`}
+    >
       <div className="flex items-center gap-2 pb-3">
         <Icon className={`w-4 h-4 ${config.iconColor}`} />
         <span className="text-sm font-medium">{title}</span>
@@ -64,17 +75,19 @@ export function KanbanColumn({
         </Badge>
       </div>
       <ScrollArea className="flex-1">
-        <div className="flex flex-col gap-2 pr-2">
-          {issues.map((issue) => (
-            <KanbanCard
-              key={issue.id}
-              issue={issue}
-              variant={variant}
-              onUpdate={onUpdate}
-              onClose={onClose}
-            />
-          ))}
-        </div>
+        <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+          <div className="flex flex-col gap-2 pr-2">
+            {issues.map((issue) => (
+              <KanbanCard
+                key={issue.id}
+                issue={issue}
+                variant={variant}
+                onUpdate={onUpdate}
+                onClose={onClose}
+              />
+            ))}
+          </div>
+        </SortableContext>
       </ScrollArea>
     </div>
   );

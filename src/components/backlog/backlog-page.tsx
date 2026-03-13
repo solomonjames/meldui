@@ -1,7 +1,18 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { LayoutList } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { KanbanColumn } from "./kanban-column";
+import { KanbanCard } from "./kanban-card";
 import type { BeadsIssue, BeadsStatus } from "@/types";
 
 interface BacklogPageProps {
@@ -29,6 +40,14 @@ const COLUMNS = [
   { key: "closed", title: "Closed", variant: "closed" as const },
 ];
 
+const COLUMN_VARIANTS = new Set(COLUMNS.map((c) => c.variant));
+
+function getColumnForStatus(status: string): "open" | "in_progress" | "closed" {
+  if (status === "open" || status === "blocked") return "open";
+  if (status === "in_progress") return "in_progress";
+  return "closed";
+}
+
 export function BacklogPage({
   issues,
   beadsStatus,
@@ -41,6 +60,12 @@ export function BacklogPage({
 }: BacklogPageProps) {
   const [sortMode, setSortMode] = useState<SortMode>("priority");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
 
   const filteredIssues = useMemo(() => {
     let filtered = issues;
@@ -52,6 +77,42 @@ export function BacklogPage({
       return (b.created_at ?? "").localeCompare(a.created_at ?? "");
     });
   }, [issues, sortMode, typeFilter]);
+
+  const activeIssue = activeId ? issues.find((i) => i.id === activeId) ?? null : null;
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  }, []);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveId(null);
+      const { active, over } = event;
+      if (!over) return;
+
+      const issueId = String(active.id);
+      const targetColumn = String(over.id);
+
+      if (!COLUMN_VARIANTS.has(targetColumn as "open" | "in_progress" | "closed")) return;
+
+      const issue = issues.find((i) => i.id === issueId);
+      if (!issue) return;
+
+      const currentColumn = getColumnForStatus(issue.status);
+      if (currentColumn === targetColumn) return;
+
+      if (targetColumn === "closed") {
+        onCloseIssue(issueId);
+      } else {
+        onUpdateIssue(issueId, { status: targetColumn });
+      }
+    },
+    [issues, onUpdateIssue, onCloseIssue]
+  );
+
+  const handleDragCancel = useCallback(() => {
+    setActiveId(null);
+  }, []);
 
   if (!beadsStatus?.installed) {
     return (
@@ -165,26 +226,42 @@ export function BacklogPage({
 
       {/* Kanban Board */}
       <div className="flex-1 overflow-hidden px-8 py-5">
-        <div className="grid grid-cols-3 gap-5 h-full">
-          {COLUMNS.map((col) => {
-            const columnIssues = filteredIssues.filter((i) =>
-              col.key === "open"
-                ? i.status === "open" || i.status === "blocked"
-                : i.status === col.key
-            );
-            return (
-              <KanbanColumn
-                key={col.key}
-                title={col.title}
-                variant={col.variant}
-                count={columnIssues.length}
-                issues={columnIssues}
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div className="grid grid-cols-3 gap-5 h-full">
+            {COLUMNS.map((col) => {
+              const columnIssues = filteredIssues.filter(
+                (i) => getColumnForStatus(i.status) === col.variant
+              );
+              return (
+                <KanbanColumn
+                  key={col.key}
+                  title={col.title}
+                  variant={col.variant}
+                  count={columnIssues.length}
+                  issues={columnIssues}
+                  onUpdate={onUpdateIssue}
+                  onClose={onCloseIssue}
+                />
+              );
+            })}
+          </div>
+          <DragOverlay dropAnimation={null}>
+            {activeIssue ? (
+              <KanbanCard
+                issue={activeIssue}
+                variant={getColumnForStatus(activeIssue.status)}
                 onUpdate={onUpdateIssue}
                 onClose={onCloseIssue}
+                isOverlay
               />
-            );
-          })}
-        </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
     </div>
   );

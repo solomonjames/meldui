@@ -5,6 +5,8 @@ import {
   Wrench,
   Bug,
 } from "lucide-react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import type { BeadsIssue } from "@/types";
 
@@ -47,6 +49,13 @@ const PRIORITY_CONFIG: Record<number, { label: string; color: string; bg: string
   4: { label: "P4", color: "text-zinc-500", bg: "bg-zinc-500/10" },
 };
 
+const NEXT_STATUS: Record<string, string | null> = {
+  open: "in_progress",
+  in_progress: null,
+  blocked: "in_progress",
+  closed: null,
+};
+
 interface KanbanCardProps {
   issue: BeadsIssue;
   variant: "open" | "in_progress" | "closed";
@@ -55,9 +64,10 @@ interface KanbanCardProps {
     updates: { status?: string; priority?: string }
   ) => Promise<void>;
   onClose: (id: string) => Promise<void>;
+  isOverlay?: boolean;
 }
 
-export function KanbanCard({ issue, variant, onUpdate, onClose }: KanbanCardProps) {
+export function KanbanCard({ issue, variant, onUpdate, onClose, isOverlay }: KanbanCardProps) {
   const typeInfo = TYPE_CONFIG[issue.issue_type] ?? TYPE_CONFIG.task;
   const priorityInfo = PRIORITY_CONFIG[issue.priority] ?? PRIORITY_CONFIG[2];
   const TypeIcon = typeInfo.icon;
@@ -65,16 +75,29 @@ export function KanbanCard({ issue, variant, onUpdate, onClose }: KanbanCardProp
   const isClosed = variant === "closed";
   const isInProgress = variant === "in_progress";
 
-  const nextStatus: Record<string, string | null> = {
-    open: "in_progress",
-    in_progress: null,
-    blocked: "in_progress",
-    closed: null,
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: issue.id, disabled: isOverlay });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
   };
 
   return (
     <div
-      className={`rounded-[10px] border p-3.5 shadow-sm transition-colors ${
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`rounded-[10px] border p-3.5 shadow-sm transition-colors cursor-grab active:cursor-grabbing ${
+        isDragging ? "opacity-40" : ""
+      } ${isOverlay ? "shadow-lg ring-2 ring-zinc-300 dark:ring-zinc-600 rotate-[2deg]" : ""} ${
         isClosed
           ? "bg-zinc-50 dark:bg-zinc-800/50 opacity-85"
           : isInProgress
@@ -106,16 +129,17 @@ export function KanbanCard({ issue, variant, onUpdate, onClose }: KanbanCardProp
         </span>
         {!isClosed && (
           <div className="ml-auto flex gap-1">
-            {nextStatus[issue.status] && (
+            {NEXT_STATUS[issue.status] && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-5 text-[10px] px-1.5"
-                onClick={() =>
-                  onUpdate(issue.id, { status: nextStatus[issue.status]! })
-                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdate(issue.id, { status: NEXT_STATUS[issue.status]! });
+                }}
               >
-                {nextStatus[issue.status]?.replace("_", " ")} →
+                {NEXT_STATUS[issue.status]?.replace("_", " ")} →
               </Button>
             )}
             {issue.status === "in_progress" && (
@@ -123,7 +147,10 @@ export function KanbanCard({ issue, variant, onUpdate, onClose }: KanbanCardProp
                 variant="ghost"
                 size="sm"
                 className="h-5 text-[10px] px-1.5"
-                onClick={() => onClose(issue.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose(issue.id);
+                }}
               >
                 close →
               </Button>

@@ -1,16 +1,134 @@
+mod beads;
+mod claude;
+
+use beads::BeadsIssue;
+use claude::ClaudeMessage;
+
+// ── Claude commands ──
+
+#[tauri::command]
+async fn claude_status() -> Result<String, String> {
+    claude::get_status().await
+}
+
+#[tauri::command]
+async fn claude_login() -> Result<String, String> {
+    claude::login().await
+}
+
+#[tauri::command]
+async fn claude_send(prompt: String, app: tauri::AppHandle) -> Result<Vec<ClaudeMessage>, String> {
+    claude::send_message(&prompt, app).await
+}
+
+// ── Beads commands ──
+
+#[tauri::command]
+async fn beads_status(project_dir: String) -> Result<String, String> {
+    beads::get_status(&project_dir).await
+}
+
+#[tauri::command]
+async fn beads_init(project_dir: String) -> Result<String, String> {
+    beads::init(&project_dir).await
+}
+
+#[tauri::command]
+async fn beads_list(
+    project_dir: String,
+    status: Option<String>,
+    issue_type: Option<String>,
+    show_all: Option<bool>,
+) -> Result<Vec<BeadsIssue>, String> {
+    beads::list_issues(
+        &project_dir,
+        status.as_deref(),
+        issue_type.as_deref(),
+        show_all.unwrap_or(false),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn beads_create(
+    project_dir: String,
+    title: String,
+    description: Option<String>,
+    issue_type: Option<String>,
+    priority: Option<String>,
+) -> Result<BeadsIssue, String> {
+    beads::create_issue(
+        &project_dir,
+        &title,
+        description.as_deref(),
+        issue_type.as_deref().unwrap_or("task"),
+        priority.as_deref().unwrap_or("2"),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn beads_update(
+    project_dir: String,
+    id: String,
+    title: Option<String>,
+    status: Option<String>,
+    priority: Option<String>,
+    description: Option<String>,
+) -> Result<serde_json::Value, String> {
+    beads::update_issue(
+        &project_dir,
+        &id,
+        title.as_deref(),
+        status.as_deref(),
+        priority.as_deref(),
+        description.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+async fn beads_close(
+    project_dir: String,
+    id: String,
+    reason: Option<String>,
+) -> Result<serde_json::Value, String> {
+    beads::close_issue(&project_dir, &id, reason.as_deref()).await
+}
+
+#[tauri::command]
+async fn beads_show(project_dir: String, id: String) -> Result<Vec<BeadsIssue>, String> {
+    beads::show_issue(&project_dir, &id).await
+}
+
+// ── App setup ──
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
-    .setup(|app| {
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
-      Ok(())
-    })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            claude_status,
+            claude_login,
+            claude_send,
+            beads_status,
+            beads_init,
+            beads_list,
+            beads_create,
+            beads_update,
+            beads_close,
+            beads_show,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

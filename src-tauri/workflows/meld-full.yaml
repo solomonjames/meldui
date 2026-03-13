@@ -1,47 +1,12 @@
 id: meld-full
 name: MELD Full Flow
-description: "Complexity assessment, spec engineering, then implementation with review"
+description: "Spec engineering, then implementation with review"
 version: "1.0"
 steps:
-  - id: complexity-assessment
-    name: Assess Complexity
-    description: Evaluate complexity signals and recommend approach depth
-    instructions:
-      prompt: |
-        You are a complexity analyst. Evaluate this ticket and recommend the right depth of planning.
-
-        Count the following complexity signals (each one present = 1 point):
-        1. **Multiple files**: Does this touch more than 3 files?
-        2. **New patterns**: Does this introduce patterns not already in the codebase?
-        3. **External dependencies**: Does this require new packages, APIs, or services?
-        4. **Ambiguous requirements**: Are there open questions or undefined edge cases?
-        5. **Cross-cutting concerns**: Does this affect auth, state management, error handling, or data flow?
-
-        Based on the signal count, categorize:
-        - **0–1 signals → Simple**: Execute directly. No spec needed.
-        - **2–3 signals → Moderate**: Quick spec recommended — capture scope and tasks before coding.
-        - **4–5 signals → Complex**: Full spec required — investigate codebase, define acceptance criteria, review before implementation.
-
-        Format your response as:
-        ## Complexity Assessment
-
-        ### Signals
-        For each signal, mark ✓ present or ✗ absent with a brief explanation.
-
-        ### Score: N/5
-
-        ### Recommendation: Simple | Moderate | Complex
-        Brief justification for the routing.
-
-        ### Suggested Approach
-        What the next step should be based on the complexity level.
-    human_gate: true
-    writes_to:
-      - notes
-
   - id: spec-understand
     name: "Spec: Understand"
     description: Capture problem statement, solution approach, and scope boundaries
+    view: chat
     instructions:
       prompt: |
         You are a spec engineer. Your job is to understand the feature being requested.
@@ -74,6 +39,7 @@ steps:
   - id: spec-investigate
     name: "Spec: Investigate"
     description: Deep code investigation to map files, patterns, and dependencies
+    view: chat
     instructions:
       prompt: |
         You are a spec engineer performing deep code investigation.
@@ -109,6 +75,7 @@ steps:
   - id: spec-generate
     name: "Spec: Generate Tasks & Acceptance Criteria"
     description: Generate ordered implementation tasks and Given/When/Then acceptance criteria
+    view: chat
     instructions:
       prompt: |
         You are a spec engineer generating the implementation plan.
@@ -142,12 +109,6 @@ steps:
         - Unit tests needed
         - Integration tests needed
         - Manual verification steps
-
-        Verify the spec meets the ready-for-dev standard:
-        - Every task has a clear file path and specific action
-        - Tasks are ordered by dependency
-        - All ACs follow Given/When/Then format
-        - No placeholders or TBD items
     human_gate: true
     writes_to:
       - acceptance
@@ -156,6 +117,7 @@ steps:
   - id: spec-review
     name: "Spec: Review"
     description: Review the complete spec against ready-for-dev standards
+    view: review
     instructions:
       prompt: |
         You are a spec reviewer. Review the complete specification in the ticket context.
@@ -188,6 +150,7 @@ steps:
   - id: implement
     name: Implement
     description: TDD implementation following the spec tasks
+    view: progress
     instructions:
       prompt: |
         You are an expert developer. Implement the feature described in the ticket context.
@@ -217,6 +180,7 @@ steps:
   - id: verify
     name: Verify
     description: Run verification gate — fresh evidence for all completion claims
+    view: review
     instructions:
       prompt: |
         You are a verification engineer. Verify the implementation is complete and correct.
@@ -254,3 +218,23 @@ steps:
     human_gate: true
     writes_to:
       - notes
+
+  - id: diff-review
+    name: Diff Review
+    description: Review all code changes before committing
+    view: diff_review
+    instructions:
+      prompt: |
+        Review the git diff and provide feedback on the changes.
+        Flag any issues with code quality, security, or correctness.
+    human_gate: true
+
+  - id: commit
+    name: Commit
+    description: Review changes and commit
+    view: commit
+    instructions:
+      prompt: |
+        Generate a concise commit message summarizing all changes made during this workflow.
+        Format: conventional commit style (feat:, fix:, refactor:, etc.)
+    human_gate: true

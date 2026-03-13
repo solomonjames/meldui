@@ -12,6 +12,16 @@ pub struct WorkflowDefinition {
     pub steps: Vec<WorkflowStep>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum StepViewType {
+    Chat,
+    Review,
+    Progress,
+    DiffReview,
+    Commit,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkflowStep {
     pub id: String,
@@ -20,8 +30,7 @@ pub struct WorkflowStep {
     pub instructions: StepInstructions,
     #[serde(default)]
     pub human_gate: bool,
-    #[serde(default)]
-    pub view: Option<String>,
+    pub view: StepViewType,
     #[serde(default)]
     pub writes_to: Option<Vec<String>>,
 }
@@ -435,19 +444,27 @@ pub async fn execute_step(
     // 4. Build prompt
     let prompt = build_step_prompt(step, issue, &state)?;
 
-    // 5. Call Claude
-    let messages = crate::claude::send_message(&prompt, app_handle).await?;
-    let response_text = messages
-        .iter()
-        .map(|m| m.content.clone())
-        .collect::<Vec<_>>()
-        .join("\n");
+    // 5. Call Claude with streaming events
+    let response_text =
+        crate::claude::send_message_streaming(&prompt, &app_handle, issue_id, Some(project_dir)).await?;
 
-    // 6. Write response to ticket fields specified by writes_to
+    // 6. Write response to ticket fields specified by writes_to (APPEND semantics)
     if let Some(writes_to) = &step.writes_to {
+        // Re-fetch the issue to get current field values for appending
+        let fresh_issues: Vec<crate::beads::BeadsIssue> =
+            crate::beads::show_issue(project_dir, issue_id).await?;
+        let fresh_issue = fresh_issues.first().ok_or("Issue not found")?;
+
         for field in writes_to {
+            let separator = "\n\n---\n\n";
             match field.as_str() {
                 "notes" => {
+                    let existing = fresh_issue.notes.as_deref().unwrap_or("");
+                    let new_value = if existing.is_empty() {
+                        response_text.clone()
+                    } else {
+                        format!("{}{}{}", existing, separator, response_text)
+                    };
                     crate::beads::update_issue(
                         project_dir,
                         issue_id,
@@ -455,7 +472,7 @@ pub async fn execute_step(
                         None,
                         None,
                         None,
-                        Some(&response_text),
+                        Some(&new_value),
                         None,
                         None,
                         None,
@@ -463,6 +480,12 @@ pub async fn execute_step(
                     .await?;
                 }
                 "design" => {
+                    let existing = fresh_issue.design.as_deref().unwrap_or("");
+                    let new_value = if existing.is_empty() {
+                        response_text.clone()
+                    } else {
+                        format!("{}{}{}", existing, separator, response_text)
+                    };
                     crate::beads::update_issue(
                         project_dir,
                         issue_id,
@@ -471,13 +494,19 @@ pub async fn execute_step(
                         None,
                         None,
                         None,
-                        Some(&response_text),
+                        Some(&new_value),
                         None,
                         None,
                     )
                     .await?;
                 }
                 "acceptance" => {
+                    let existing = fresh_issue.acceptance.as_deref().unwrap_or("");
+                    let new_value = if existing.is_empty() {
+                        response_text.clone()
+                    } else {
+                        format!("{}{}{}", existing, separator, response_text)
+                    };
                     crate::beads::update_issue(
                         project_dir,
                         issue_id,
@@ -487,7 +516,7 @@ pub async fn execute_step(
                         None,
                         None,
                         None,
-                        Some(&response_text),
+                        Some(&new_value),
                         None,
                     )
                     .await?;
@@ -525,4 +554,147 @@ pub struct StepExecutionResult {
     pub response: String,
     pub awaiting_gate: bool,
     pub workflow_completed: bool,
+}
+
+// ── Workflow Suggestion ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkflowSuggestion {
+    pub workflow_id: String,
+    pub reasoning: String,
+}
+
+/// Suggest a workflow for a ticket based on complexity analysis
+pub async fn suggest_workflow(
+    project_dir: &str,
+    issue_id: &str,
+    app_handle: tauri::AppHandle,
+) -> Result<WorkflowSuggestion, String> {
+    // Load the ticket
+    let issues: Vec<crate::beads::BeadsIssue> =
+        crate::beads::show_issue(project_dir, issue_id).await?;
+    let issue = issues.first().ok_or("Issue not found")?;
+
+    // Load available workflows
+    let workflows = list_workflows(project_dir);
+    let workflow_list: Vec<String> = workflows
+        .iter()
+        .map(|wf| format!("- {} ({}): {}", wf.id, wf.name, wf.description))
+        .collect();
+
+    let prompt = format!(
+        "You are a complexity analyst. Evaluate this ticket and recommend which workflow to use.\n\n\
+        ## Ticket\n\
+        **Title:** {}\n\
+        **Description:** {}\n\
+        **Acceptance Criteria:** {}\n\n\
+        ## Available Workflows\n\
+        {}\n\n\
+        Respond with ONLY a JSON object (no markdown, no code fences):\n\
+        {{\"workflow_id\": \"the-id\", \"reasoning\": \"brief explanation\"}}\n",
+        issue.title,
+        issue.description.as_deref().unwrap_or("(none)"),
+        issue.acceptance.as_deref().unwrap_or("(none)"),
+        workflow_list.join("\n"),
+    );
+
+    let response = crate::claude::send_message_streaming(&prompt, &app_handle, issue_id, Some(project_dir)).await?;
+
+    // Parse the JSON response
+    let trimmed = response.trim();
+    // Try to extract JSON from the response (handle possible markdown wrapping)
+    let json_str = if let Some(start) = trimmed.find('{') {
+        if let Some(end) = trimmed.rfind('}') {
+            &trimmed[start..=end]
+        } else {
+            trimmed
+        }
+    } else {
+        trimmed
+    };
+
+    serde_json::from_str::<WorkflowSuggestion>(json_str).map_err(|e| {
+        format!(
+            "Failed to parse workflow suggestion: {} — raw: {}",
+            e, response
+        )
+    })
+}
+
+// ── Diff for Review ──
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DiffFile {
+    pub path: String,
+    pub status: String,
+    pub content: String,
+}
+
+/// Get the git diff for the current project (for diff-review view)
+pub async fn get_diff(project_dir: &str) -> Result<Vec<DiffFile>, String> {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    // Get both staged and unstaged changes
+    let output = Command::new("git")
+        .args(["diff", "HEAD"])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git diff: {}", e))?;
+
+    if !output.status.success() {
+        // Might be a fresh repo with no commits — try just `git diff`
+        let output2 = Command::new("git")
+            .arg("diff")
+            .current_dir(project_dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run git diff: {}", e))?;
+
+        let diff_text = String::from_utf8_lossy(&output2.stdout).to_string();
+        return Ok(parse_diff(&diff_text));
+    }
+
+    let diff_text = String::from_utf8_lossy(&output.stdout).to_string();
+    Ok(parse_diff(&diff_text))
+}
+
+fn parse_diff(diff_text: &str) -> Vec<DiffFile> {
+    let mut files: Vec<DiffFile> = Vec::new();
+    let mut current_path = String::new();
+    let mut current_content = String::new();
+
+    for line in diff_text.lines() {
+        if line.starts_with("diff --git") {
+            // Save previous file if any
+            if !current_path.is_empty() {
+                files.push(DiffFile {
+                    path: current_path.clone(),
+                    status: "modified".to_string(),
+                    content: current_content.clone(),
+                });
+            }
+            // Extract file path from "diff --git a/path b/path"
+            current_path = line.split(" b/").last().unwrap_or("").to_string();
+            current_content = String::new();
+        }
+        current_content.push_str(line);
+        current_content.push('\n');
+    }
+
+    // Save last file
+    if !current_path.is_empty() {
+        files.push(DiffFile {
+            path: current_path,
+            status: "modified".to_string(),
+            content: current_content,
+        });
+    }
+
+    files
 }

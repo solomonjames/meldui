@@ -1,9 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   WorkflowDefinition,
   WorkflowState,
   StepExecutionResult,
+  WorkflowSuggestion,
+  StreamChunk,
+  DiffFile,
 } from "@/types";
 
 export function useWorkflow(projectDir: string) {
@@ -11,6 +15,53 @@ export function useWorkflow(projectDir: string) {
   const [currentState, setCurrentState] = useState<WorkflowState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [streamOutput, setStreamOutput] = useState("");
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const unlistenRef = useRef<UnlistenFn | null>(null);
+
+  // Subscribe to streaming events
+  useEffect(() => {
+    let cancelled = false;
+
+    const setup = async () => {
+      // Clean up previous listener
+      if (unlistenRef.current) {
+        unlistenRef.current();
+        unlistenRef.current = null;
+      }
+
+      const unlisten = await listen<StreamChunk>(
+        "workflow-step-output",
+        (event) => {
+          if (cancelled) return;
+          const chunk = event.payload;
+          // Only process chunks for the active ticket
+          if (activeTicketId && chunk.issue_id !== activeTicketId) return;
+          if (chunk.chunk_type === "text") {
+            setStreamOutput((prev) => prev + chunk.content);
+          } else if (chunk.chunk_type === "result") {
+            setStreamOutput(chunk.content);
+          }
+        }
+      );
+
+      if (!cancelled) {
+        unlistenRef.current = unlisten;
+      } else {
+        unlisten();
+      }
+    };
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      if (unlistenRef.current) {
+        unlistenRef.current();
+        unlistenRef.current = null;
+      }
+    };
+  }, [activeTicketId]);
 
   const listWorkflows = useCallback(async () => {
     try {
@@ -86,6 +137,7 @@ export function useWorkflow(projectDir: string) {
       try {
         setLoading(true);
         setError(null);
+        setStreamOutput(""); // Clear previous output
         const result = await invoke<StepExecutionResult>(
           "workflow_execute_step",
           { projectDir, issueId }
@@ -107,6 +159,7 @@ export function useWorkflow(projectDir: string) {
     async (issueId: string) => {
       try {
         setLoading(true);
+        setStreamOutput(""); // Clear output for next step
         const state = await invoke<WorkflowState>("workflow_advance", {
           projectDir,
           issueId,
@@ -123,16 +176,55 @@ export function useWorkflow(projectDir: string) {
     [projectDir]
   );
 
+  const suggestWorkflow = useCallback(
+    async (issueId: string) => {
+      try {
+        setLoading(true);
+        setError(null);
+        const suggestion = await invoke<WorkflowSuggestion>(
+          "workflow_suggest",
+          { projectDir, issueId }
+        );
+        return suggestion;
+      } catch {
+        setError(`Unable to suggest workflow — please select manually`);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [projectDir]
+  );
+
+  const getDiff = useCallback(async () => {
+    try {
+      return await invoke<DiffFile[]>("workflow_get_diff", { projectDir });
+    } catch (err) {
+      setError(`Failed to get diff: ${err}`);
+      return [];
+    }
+  }, [projectDir]);
+
+  const clearStreamOutput = useCallback(() => {
+    setStreamOutput("");
+  }, []);
+
   return {
     workflows,
     currentState,
     loading,
     error,
+    streamOutput,
+    activeTicketId,
+    setActiveTicketId,
     listWorkflows,
     getWorkflow,
     assignWorkflow,
     getWorkflowState,
     executeStep,
     approveGate,
+    suggestWorkflow,
+    getDiff,
+    clearStreamOutput,
   };
 }

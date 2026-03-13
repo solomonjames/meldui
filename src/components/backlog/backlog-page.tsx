@@ -14,7 +14,14 @@ import { Button } from "@/components/ui/button";
 import { KanbanColumn } from "./kanban-column";
 import { KanbanCard } from "./kanban-card";
 import { TicketDetailDialog } from "./ticket-detail-dialog";
-import type { BeadsIssue, BeadsStatus } from "@/types";
+import { WorkflowSelector } from "@/components/workflow/workflow-selector";
+import type {
+  BeadsIssue,
+  BeadsStatus,
+  WorkflowDefinition,
+  WorkflowState,
+  WorkflowSuggestion,
+} from "@/types";
 
 interface BacklogPageProps {
   issues: BeadsIssue[];
@@ -31,6 +38,12 @@ interface BacklogPageProps {
   onAddComment: (id: string, text: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onInitBeads: () => Promise<void>;
+  onAutoStart?: (issue: BeadsIssue) => Promise<void>;
+  workflows?: WorkflowDefinition[];
+  onAssignWorkflow?: (issueId: string, workflowId: string) => Promise<WorkflowState | null>;
+  onSuggestWorkflow?: (issueId: string) => Promise<WorkflowSuggestion | null>;
+  onGetWorkflowState?: (issueId: string) => Promise<WorkflowState | null>;
+  onStartWorkflow?: (issue: BeadsIssue) => Promise<void>;
 }
 
 type SortMode = "priority" | "date";
@@ -60,6 +73,10 @@ export function BacklogPage({
   onAddComment,
   onRefresh,
   onInitBeads,
+  onAutoStart,
+  workflows = [],
+  onAssignWorkflow,
+  onSuggestWorkflow,
 }: BacklogPageProps) {
   const [sortMode, setSortMode] = useState<SortMode>("priority");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(null);
@@ -89,7 +106,7 @@ export function BacklogPage({
   }, []);
 
   const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
+    async (event: DragEndEvent) => {
       setActiveId(null);
       const { active, over } = event;
       if (!over) return;
@@ -105,12 +122,17 @@ export function BacklogPage({
       if (issue.status === targetColumn) return;
 
       if (targetColumn === "closed") {
-        onCloseIssue(issueId);
+        await onCloseIssue(issueId);
       } else {
-        onUpdateIssue(issueId, { status: targetColumn });
+        await onUpdateIssue(issueId, { status: targetColumn });
+
+        // Auto-start workflow when dragging to In Progress
+        if (targetColumn === "in_progress" && onAutoStart) {
+          onAutoStart(issue);
+        }
       }
     },
-    [issues, onUpdateIssue, onCloseIssue]
+    [issues, onUpdateIssue, onCloseIssue, onAutoStart]
   );
 
   const handleDragCancel = useCallback(() => {
@@ -281,6 +303,32 @@ export function BacklogPage({
         }}
         onShowIssue={onShowIssue}
         onAddComment={onAddComment}
+        workflowSelector={
+          selectedIssue && onAssignWorkflow && onSuggestWorkflow ? (
+            <WorkflowSelector
+              currentWorkflowId={
+                ((issues.find((i) => i.id === selectedIssue.id) ?? selectedIssue)
+                  .metadata?.workflow as { workflow_id?: string })
+                  ?.workflow_id
+              }
+              workflows={workflows}
+              onAssign={async (workflowId) => {
+                await onAssignWorkflow(selectedIssue.id, workflowId);
+                await onRefresh();
+              }}
+              onSuggest={async () => {
+                return onSuggestWorkflow(selectedIssue.id);
+              }}
+            />
+          ) : undefined
+        }
+        hasWorkflowAssigned={
+          !!(
+            (issues.find((i) => i.id === selectedIssue?.id) ?? selectedIssue)
+              ?.metadata?.workflow as { workflow_id?: string } | undefined
+          )?.workflow_id
+        }
+        onStartWorkflow={onAutoStart}
       />
     </div>
   );

@@ -4,7 +4,9 @@ mod workflow;
 
 use beads::BeadsIssue;
 use claude::ClaudeMessage;
-use workflow::{StepExecutionResult, WorkflowDefinition, WorkflowState};
+use workflow::{
+    DiffFile, StepExecutionResult, WorkflowDefinition, WorkflowState, WorkflowSuggestion,
+};
 // ── Folder dialog command ──
 
 #[tauri::command]
@@ -183,6 +185,20 @@ async fn workflow_execute_step(
     workflow::execute_step(&project_dir, &issue_id, app).await
 }
 
+#[tauri::command]
+async fn workflow_suggest(
+    project_dir: String,
+    issue_id: String,
+    app: tauri::AppHandle,
+) -> Result<WorkflowSuggestion, String> {
+    workflow::suggest_workflow(&project_dir, &issue_id, app).await
+}
+
+#[tauri::command]
+async fn workflow_get_diff(project_dir: String) -> Result<Vec<DiffFile>, String> {
+    workflow::get_diff(&project_dir).await
+}
+
 // ── App setup ──
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -221,6 +237,8 @@ pub fn run() {
             workflow_advance,
             workflow_state,
             workflow_execute_step,
+            workflow_suggest,
+            workflow_get_diff,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

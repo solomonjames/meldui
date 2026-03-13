@@ -40,6 +40,9 @@ interface TicketDetailDialogProps {
   ) => Promise<void>;
   onShowIssue?: (id: string) => Promise<BeadsIssue | null>;
   onAddComment?: (id: string, text: string) => Promise<void>;
+  workflowSelector?: React.ReactNode;
+  onStartWorkflow?: (issue: BeadsIssue) => void;
+  hasWorkflowAssigned?: boolean;
 }
 
 const STATUS_CONFIG: Record<string, { dot: string; label: string }> = {
@@ -176,6 +179,9 @@ export function TicketDetailDialog({
   onSave,
   onShowIssue,
   onAddComment,
+  workflowSelector,
+  onStartWorkflow,
+  hasWorkflowAssigned,
 }: TicketDetailDialogProps) {
   const [issueStack, setIssueStack] = useState<BeadsIssue[]>([]);
   const [comments, setComments] = useState<BeadsComment[]>([]);
@@ -349,6 +355,25 @@ export function TicketDetailDialog({
               {currentIssue.issue_type}
             </span>
           </div>
+
+          {/* Workflow selector */}
+          {workflowSelector && (
+            <div className="pt-2 space-y-2">
+              {workflowSelector}
+              {hasWorkflowAssigned && onStartWorkflow && currentIssue && (
+                <Button
+                  size="sm"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => {
+                    onStartWorkflow(currentIssue);
+                    onOpenChange(false);
+                  }}
+                >
+                  Start Workflow
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Scrollable body */}

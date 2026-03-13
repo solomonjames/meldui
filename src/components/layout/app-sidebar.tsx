@@ -11,6 +11,7 @@ interface AppSidebarProps {
   onCreateTicket: () => void;
   folderName: string | null;
   onOpenFolder: () => void;
+  onTicketClick?: (issue: BeadsIssue) => void;
 }
 
 const NAV_ITEMS = [
@@ -24,6 +25,7 @@ export function AppSidebar({
   onCreateTicket,
   folderName,
   onOpenFolder,
+  onTicketClick,
 }: AppSidebarProps) {
   const activeTickets = issues.filter((i) => i.status === "in_progress");
 
@@ -102,9 +104,10 @@ export function AppSidebar({
             </p>
           ) : (
             activeTickets.map((issue) => (
-              <div
+              <button
                 key={issue.id}
-                className="px-3 py-2 rounded-lg hover:bg-white/50 dark:hover:bg-zinc-800/50 transition-colors cursor-default"
+                onClick={() => onTicketClick?.(issue)}
+                className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono text-muted-foreground shrink-0">
@@ -115,7 +118,7 @@ export function AppSidebar({
                   </span>
                 </div>
                 <p className="text-xs mt-0.5 truncate">{issue.title}</p>
-              </div>
+              </button>
             ))
           )}
         </ScrollArea>

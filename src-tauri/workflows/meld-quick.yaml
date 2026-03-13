@@ -1,47 +1,12 @@
 id: meld-quick
 name: MELD Quick Flow
-description: "Skip spec engineering — assess complexity, then implement directly"
+description: "Skip spec engineering — implement directly with verification"
 version: "1.0"
 steps:
-  - id: complexity-assessment
-    name: Assess Complexity
-    description: Evaluate complexity signals and recommend approach depth
-    instructions:
-      prompt: |
-        You are a complexity analyst. Evaluate this ticket and recommend the right depth of planning.
-
-        Count the following complexity signals (each one present = 1 point):
-        1. **Multiple files**: Does this touch more than 3 files?
-        2. **New patterns**: Does this introduce patterns not already in the codebase?
-        3. **External dependencies**: Does this require new packages, APIs, or services?
-        4. **Ambiguous requirements**: Are there open questions or undefined edge cases?
-        5. **Cross-cutting concerns**: Does this affect auth, state management, error handling, or data flow?
-
-        Based on the signal count, categorize:
-        - **0–1 signals → Simple**: Execute directly. No spec needed.
-        - **2–3 signals → Moderate**: Quick spec recommended — capture scope and tasks before coding.
-        - **4–5 signals → Complex**: Full spec required — investigate codebase, define acceptance criteria, review before implementation.
-
-        Format your response as:
-        ## Complexity Assessment
-
-        ### Signals
-        For each signal, mark ✓ present or ✗ absent with a brief explanation.
-
-        ### Score: N/5
-
-        ### Recommendation: Simple | Moderate | Complex
-        Brief justification for the routing.
-
-        ### Suggested Approach
-        What the next step should be based on the complexity level.
-    human_gate: true
-    writes_to:
-      - notes
-
   - id: implement
     name: Implement
     description: TDD implementation from the ticket description
+    view: progress
     instructions:
       prompt: |
         You are an expert developer. Implement the feature described in the ticket context.
@@ -70,6 +35,7 @@ steps:
   - id: verify
     name: Verify
     description: Run verification gate — fresh evidence for all completion claims
+    view: review
     instructions:
       prompt: |
         You are a verification engineer. Verify the implementation is complete and correct.
@@ -96,3 +62,13 @@ steps:
     human_gate: true
     writes_to:
       - notes
+
+  - id: commit
+    name: Commit
+    description: Review changes and commit
+    view: commit
+    instructions:
+      prompt: |
+        Generate a concise commit message summarizing all changes made during this workflow.
+        Format: conventional commit style (feat:, fix:, refactor:, etc.)
+    human_gate: true

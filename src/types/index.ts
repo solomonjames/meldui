@@ -56,6 +56,8 @@ export interface BeadsStatus {
 
 // ── Workflow Types ──
 
+export type StepViewType = "chat" | "review" | "progress" | "diff_review" | "commit";
+
 export interface WorkflowDefinition {
   id: string;
   name: string;
@@ -70,7 +72,7 @@ export interface WorkflowStep {
   description: string;
   instructions: StepInstructions;
   human_gate: boolean;
-  view?: string;
+  view: StepViewType;
   writes_to?: string[];
 }
 
@@ -105,4 +107,21 @@ export interface StepExecutionResult {
   response: string;
   awaiting_gate: boolean;
   workflow_completed: boolean;
+}
+
+export interface WorkflowSuggestion {
+  workflow_id: string;
+  reasoning: string;
+}
+
+export interface StreamChunk {
+  issue_id: string;
+  chunk_type: string;
+  content: string;
+}
+
+export interface DiffFile {
+  path: string;
+  status: string;
+  content: string;
 }

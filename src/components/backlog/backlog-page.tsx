@@ -39,18 +39,14 @@ type TypeFilter = string | null;
 const ISSUE_TYPES = ["feature", "task", "bug", "chore", "epic"] as const;
 
 const COLUMNS = [
-  { key: "open", title: "Open", variant: "open" as const },
-  { key: "in_progress", title: "In Progress", variant: "in_progress" as const },
-  { key: "closed", title: "Closed", variant: "closed" as const },
+  { key: "open", title: "Open" },
+  { key: "in_progress", title: "In Progress" },
+  { key: "blocked", title: "Blocked" },
+  { key: "deferred", title: "Deferred" },
+  { key: "closed", title: "Closed" },
 ];
 
-const COLUMN_VARIANTS = new Set(COLUMNS.map((c) => c.variant));
-
-function getColumnForStatus(status: string): "open" | "in_progress" | "closed" {
-  if (status === "open" || status === "blocked") return "open";
-  if (status === "in_progress") return "in_progress";
-  return "closed";
-}
+const COLUMN_KEYS = new Set(COLUMNS.map((c) => c.key));
 
 export function BacklogPage({
   issues,
@@ -101,13 +97,12 @@ export function BacklogPage({
       const issueId = String(active.id);
       const targetColumn = String(over.id);
 
-      if (!COLUMN_VARIANTS.has(targetColumn as "open" | "in_progress" | "closed")) return;
+      if (!COLUMN_KEYS.has(targetColumn)) return;
 
       const issue = issues.find((i) => i.id === issueId);
       if (!issue) return;
 
-      const currentColumn = getColumnForStatus(issue.status);
-      if (currentColumn === targetColumn) return;
+      if (issue.status === targetColumn) return;
 
       if (targetColumn === "closed") {
         onCloseIssue(issueId);
@@ -240,22 +235,23 @@ export function BacklogPage({
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
         >
-          <div className="grid grid-cols-3 gap-5 h-full">
+          <div className="flex gap-5 h-full overflow-x-auto">
             {COLUMNS.map((col) => {
               const columnIssues = filteredIssues.filter(
-                (i) => getColumnForStatus(i.status) === col.variant
+                (i) => i.status === col.key
               );
               return (
-                <KanbanColumn
-                  key={col.key}
-                  title={col.title}
-                  variant={col.variant}
-                  count={columnIssues.length}
-                  issues={columnIssues}
-                  onUpdate={onUpdateIssue}
-                  onClose={onCloseIssue}
-                  onCardClick={setSelectedIssue}
-                />
+                <div key={col.key} className="min-w-[280px] w-[280px] shrink-0 h-full">
+                  <KanbanColumn
+                    title={col.title}
+                    variant={col.key}
+                    count={columnIssues.length}
+                    issues={columnIssues}
+                    onUpdate={onUpdateIssue}
+                    onClose={onCloseIssue}
+                    onCardClick={setSelectedIssue}
+                  />
+                </div>
               );
             })}
           </div>
@@ -263,7 +259,7 @@ export function BacklogPage({
             {activeIssue ? (
               <KanbanCard
                 issue={activeIssue}
-                variant={getColumnForStatus(activeIssue.status)}
+                variant={activeIssue.status}
                 onUpdate={onUpdateIssue}
                 onClose={onCloseIssue}
                 isOverlay

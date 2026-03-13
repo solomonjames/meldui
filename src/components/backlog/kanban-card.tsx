@@ -58,7 +58,7 @@ const NEXT_STATUS: Record<string, string | null> = {
 
 interface KanbanCardProps {
   issue: BeadsIssue;
-  variant: "open" | "in_progress" | "closed";
+  variant: string;
   onUpdate: (
     id: string,
     updates: { status?: string; priority?: string }

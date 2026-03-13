@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Circle, Loader2, CheckCircle2 } from "lucide-react";
+import { Circle, Loader2, CheckCircle2, ShieldAlert, PauseCircle } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Badge } from "@/components/ui/badge";
@@ -7,11 +7,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { KanbanCard } from "./kanban-card";
 import type { BeadsIssue } from "@/types";
 
-type ColumnVariant = "open" | "in_progress" | "closed";
-
 interface KanbanColumnProps {
   title: string;
-  variant: ColumnVariant;
+  variant: string;
   count: number;
   issues: BeadsIssue[];
   onUpdate: (
@@ -23,7 +21,7 @@ interface KanbanColumnProps {
 }
 
 const COLUMN_CONFIG: Record<
-  ColumnVariant,
+  string,
   { icon: typeof Circle; iconColor: string; badgeBg: string }
 > = {
   open: {
@@ -35,6 +33,16 @@ const COLUMN_CONFIG: Record<
     icon: Loader2,
     iconColor: "text-blue-500",
     badgeBg: "bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400",
+  },
+  blocked: {
+    icon: ShieldAlert,
+    iconColor: "text-red-500",
+    badgeBg: "bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-400",
+  },
+  deferred: {
+    icon: PauseCircle,
+    iconColor: "text-amber-500",
+    badgeBg: "bg-amber-100 text-amber-600 dark:bg-amber-900 dark:text-amber-400",
   },
   closed: {
     icon: CheckCircle2,
@@ -53,7 +61,7 @@ export function KanbanColumn({
   onClose,
   onCardClick,
 }: KanbanColumnProps) {
-  const config = COLUMN_CONFIG[variant];
+  const config = COLUMN_CONFIG[variant] ?? COLUMN_CONFIG.open;
   const Icon = config.icon;
 
   const { setNodeRef, isOver } = useDroppable({ id: variant });

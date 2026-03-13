@@ -38,6 +38,7 @@ const STATUS_CONFIG: Record<string, { dot: string; label: string }> = {
   open: { dot: "bg-zinc-400", label: "Open" },
   in_progress: { dot: "bg-blue-500", label: "In Progress" },
   blocked: { dot: "bg-red-500", label: "Blocked" },
+  deferred: { dot: "bg-amber-400", label: "Deferred" },
   closed: { dot: "bg-emerald-500", label: "Closed" },
 };
 

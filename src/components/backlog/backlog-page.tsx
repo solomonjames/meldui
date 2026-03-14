@@ -128,7 +128,7 @@ export function BacklogPage({
 
         // Auto-start workflow when dragging to In Progress
         if (targetColumn === "in_progress" && onAutoStart) {
-          onAutoStart(issue);
+          await onAutoStart(issue);
         }
       }
     },

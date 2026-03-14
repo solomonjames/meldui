@@ -444,9 +444,61 @@ pub async fn execute_step(
     // 4. Build prompt
     let prompt = build_step_prompt(step, issue, &state)?;
 
-    // 5. Call Claude with streaming events
-    let response_text =
-        crate::claude::send_message_streaming(&prompt, &app_handle, issue_id, Some(project_dir)).await?;
+    // 5. Determine allowed tools based on step view type
+    let view_str = match &step.view {
+        StepViewType::Progress => "progress",
+        StepViewType::Chat => "chat",
+        StepViewType::Review => "review",
+        _ => "progress",
+    };
+    let allowed_tools = crate::agent::tools_for_view(view_str);
+
+    // 6. Get session_id from workflow state metadata for continuity
+    let session_id = issue
+        .metadata
+        .as_ref()
+        .and_then(|m| m.get("agent_session_id"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    // 7. Call agent sidecar with streaming events
+    let (response_text, new_session_id) = crate::agent::execute_step(
+        project_dir,
+        issue_id,
+        &prompt,
+        session_id.as_deref(),
+        Some(allowed_tools),
+        &app_handle,
+    )
+    .await?;
+
+    // 8. Store session_id back into metadata for next step
+    if !new_session_id.is_empty() {
+        let fresh_issues2: Vec<crate::beads::BeadsIssue> =
+            crate::beads::show_issue(project_dir, issue_id).await?;
+        if let Some(fresh_issue2) = fresh_issues2.first() {
+            let mut meta = fresh_issue2
+                .metadata
+                .clone()
+                .unwrap_or_else(|| serde_json::json!({}));
+            meta["agent_session_id"] = serde_json::Value::String(new_session_id);
+            let meta_str = serde_json::to_string(&meta)
+                .map_err(|e| format!("Failed to serialize session metadata: {}", e))?;
+            crate::beads::update_issue(
+                project_dir,
+                issue_id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(&meta_str),
+            )
+            .await?;
+        }
+    }
 
     // 6. Write response to ticket fields specified by writes_to (APPEND semantics)
     if let Some(writes_to) = &step.writes_to {
@@ -538,12 +590,12 @@ pub async fn execute_step(
             workflow_completed: false,
         })
     } else {
-        let new_state = advance_step(project_dir, issue_id).await?;
+        update_step_status(project_dir, issue_id, StepStatus::Completed).await?;
         Ok(StepExecutionResult {
             step_id: current_step_id.clone(),
             response: response_text,
             awaiting_gate: false,
-            workflow_completed: new_state.current_step_id.is_none(),
+            workflow_completed: false,
         })
     }
 }
@@ -598,7 +650,15 @@ pub async fn suggest_workflow(
         workflow_list.join("\n"),
     );
 
-    let response = crate::claude::send_message_streaming(&prompt, &app_handle, issue_id, Some(project_dir)).await?;
+    let (response, _session_id) = crate::agent::execute_step(
+        project_dir,
+        issue_id,
+        &prompt,
+        None,
+        Some(vec!["Read".into(), "Glob".into(), "Grep".into()]),
+        &app_handle,
+    )
+    .await?;
 
     // Parse the JSON response
     let trimmed = response.trim();

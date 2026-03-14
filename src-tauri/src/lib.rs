@@ -1,9 +1,10 @@
+mod agent;
 mod beads;
 mod claude;
 mod workflow;
 
+use agent::AgentState;
 use beads::BeadsIssue;
-use claude::ClaudeMessage;
 use workflow::{
     DiffFile, StepExecutionResult, WorkflowDefinition, WorkflowState, WorkflowSuggestion,
 };
@@ -31,9 +32,20 @@ async fn claude_login() -> Result<String, String> {
     claude::login().await
 }
 
+// ── Agent commands ──
+
 #[tauri::command]
-async fn claude_send(prompt: String, app: tauri::AppHandle) -> Result<Vec<ClaudeMessage>, String> {
-    claude::send_message(&prompt, app).await
+async fn agent_permission_respond(
+    request_id: String,
+    allowed: bool,
+    state: tauri::State<'_, AgentState>,
+) -> Result<(), String> {
+    let handle_guard = state.handle.lock().await;
+    if let Some(handle) = handle_guard.as_ref() {
+        handle.respond_to_permission(&request_id, allowed).await
+    } else {
+        Err("No active agent session".to_string())
+    }
 }
 
 // ── Beads commands ──
@@ -207,6 +219,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .manage(AgentState::new())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -221,7 +234,7 @@ pub fn run() {
             open_folder_dialog,
             claude_status,
             claude_login,
-            claude_send,
+            agent_permission_respond,
             beads_status,
             beads_init,
             beads_list,

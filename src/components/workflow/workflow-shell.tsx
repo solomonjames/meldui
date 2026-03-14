@@ -10,7 +10,9 @@ import type {
   WorkflowDefinition,
   WorkflowState,
   StepExecutionResult,
+  StepOutputStream,
   DiffFile,
+  PermissionRequest,
 } from "@/types";
 
 interface WorkflowShellProps {
@@ -18,9 +20,11 @@ interface WorkflowShellProps {
   projectDir: string;
   workflowState: WorkflowState;
   workflowDefinition: WorkflowDefinition | null;
-  streamOutput: string;
+  stepOutputs: Record<string, StepOutputStream>;
   loading: boolean;
   error: string | null;
+  pendingPermission: PermissionRequest | null;
+  onRespondToPermission: (requestId: string, allowed: boolean) => void;
   onExecuteStep: (issueId: string) => Promise<StepExecutionResult | null>;
   onApproveGate: (issueId: string) => Promise<unknown>;
   onGetDiff: () => Promise<DiffFile[]>;
@@ -31,9 +35,11 @@ export function WorkflowShell({
   issue,
   workflowState,
   workflowDefinition,
-  streamOutput,
+  stepOutputs,
   loading,
   error,
+  pendingPermission,
+  onRespondToPermission,
   onExecuteStep,
   onApproveGate,
   onGetDiff,
@@ -118,8 +124,10 @@ export function WorkflowShell({
 
   const isAwaitingGate = workflowState.step_status === "awaiting_gate";
   const isExecuting = workflowState.step_status === "in_progress" || loading;
+  const isCompleted = workflowState.step_status === "completed";
   const isFailed = typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
-  const responseText = lastResult?.response ?? streamOutput;
+  const currentStepOutput = currentStep ? stepOutputs[currentStep.id] : undefined;
+  const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
 
   const renderView = () => {
     switch (currentStep.view) {
@@ -151,9 +159,11 @@ export function WorkflowShell({
         return (
           <ProgressView
             stepName={currentStep.name}
-            streamOutput={streamOutput}
+            stepOutput={currentStepOutput}
             isExecuting={isExecuting}
-            response={lastResult?.response}
+            isCompleted={isCompleted}
+            pendingPermission={pendingPermission}
+            onRespondToPermission={onRespondToPermission}
           />
         );
       case "diff_review":

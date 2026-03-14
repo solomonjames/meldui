@@ -64,15 +64,18 @@ function App() {
     assignWorkflow: assignWf,
   } = workflow;
 
+  const { setActiveTicketId } = workflow;
+
   const handleStartWorkflow = useCallback(
     async (issue: BeadsIssue) => {
       const state = await getWorkflowState(issue.id);
       if (state) {
         setActiveWorkflowTicket(issue);
+        setActiveTicketId(issue.id);
         setActivePage("workflow");
       }
     },
-    [getWorkflowState]
+    [getWorkflowState, setActiveTicketId]
   );
 
   const handleAutoStart = useCallback(
@@ -89,19 +92,21 @@ function App() {
 
       if (state) {
         setActiveWorkflowTicket(issue);
+        setActiveTicketId(issue.id);
         setActivePage("workflow");
       }
     },
-    [getWorkflowState, suggestWf, assignWf]
+    [getWorkflowState, suggestWf, assignWf, setActiveTicketId]
   );
 
   const { refreshIssues } = beads;
 
   const handleBackToBoard = useCallback(() => {
     setActiveWorkflowTicket(null);
+    setActiveTicketId(null);
     setActivePage("backlog");
     refreshIssues();
-  }, [refreshIssues]);
+  }, [refreshIssues, setActiveTicketId]);
 
   const handleSidebarNavigate = useCallback(
     (page: string) => {
@@ -119,10 +124,11 @@ function App() {
       const state = await getWorkflowState(issue.id);
       if (state) {
         setActiveWorkflowTicket(issue);
+        setActiveTicketId(issue.id);
         setActivePage("workflow");
       }
     },
-    [getWorkflowState]
+    [getWorkflowState, setActiveTicketId]
   );
 
   if (dirLoading) return null;
@@ -142,6 +148,7 @@ function App() {
           folderName={folderName}
           onOpenFolder={openFolderDialog}
           onTicketClick={handleSidebarTicketClick}
+          activeTicketId={activeWorkflowTicket?.id}
         />
       }
       statusBar={
@@ -158,9 +165,11 @@ function App() {
           projectDir={projectDir}
           workflowState={workflow.currentState}
           workflowDefinition={workflowDef}
-          streamOutput={workflow.streamOutput}
+          stepOutputs={workflow.stepOutputs}
           loading={workflow.loading}
           error={workflow.error}
+          pendingPermission={workflow.pendingPermission}
+          onRespondToPermission={workflow.respondToPermission}
           onExecuteStep={workflow.executeStep}
           onApproveGate={workflow.approveGate}
           onGetDiff={workflow.getDiff}

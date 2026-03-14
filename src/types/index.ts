@@ -116,8 +116,31 @@ export interface WorkflowSuggestion {
 
 export interface StreamChunk {
   issue_id: string;
-  chunk_type: string;
+  chunk_type: "text" | "tool_start" | "tool_input" | "tool_end" | "tool_result" | "thinking" | "result" | "error" | "stderr";
   content: string;
+}
+
+export interface ToolActivity {
+  tool_id: string;
+  tool_name: string;
+  input: string;
+  result?: string;
+  is_error?: boolean;
+  status: "running" | "complete";
+}
+
+export interface StepOutputStream {
+  textContent: string;
+  toolActivities: ToolActivity[];
+  stderrLines: string[];
+  resultContent: string | null;
+  thinkingContent: string;
+}
+
+export interface PermissionRequest {
+  request_id: string;
+  tool_name: string;
+  input: Record<string, unknown>;
 }
 
 export interface DiffFile {

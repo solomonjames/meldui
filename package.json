@@ -8,8 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "tauri:build": "tauri build",
-    "tauri:dev": "tauri dev"
+    "agent:install": "cd src/agent && bun install",
+    "agent:build": "cd src/agent && bun run build.ts",
+    "tauri:build": "bun run agent:build && tauri build --bundles app",
+    "tauri:dev": "bun run agent:build && tauri dev"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",

@@ -142,7 +142,20 @@ impl AgentState {
 ///
 /// In production: next to the Tauri app executable (bundled via externalBin).
 /// In dev: built by `bun run agent:build` in src-tauri/binaries/.
+///
+/// Override: set `MELDUI_AGENT_BINARY` env var to use a custom binary path
+/// (e.g. the mock sidecar for E2E testing).
 fn find_agent_binary() -> Option<PathBuf> {
+    // 0. Environment variable override (for E2E testing with mock sidecar)
+    if let Ok(override_path) = env::var("MELDUI_AGENT_BINARY") {
+        let path = PathBuf::from(&override_path);
+        if path.exists() {
+            log::info!("agent: using override binary from MELDUI_AGENT_BINARY: {}", override_path);
+            return Some(path);
+        }
+        log::warn!("agent: MELDUI_AGENT_BINARY set but path does not exist: {}", override_path);
+    }
+
     // 1. Check next to the app executable (Tauri externalBin placement)
     if let Ok(exe_path) = env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
@@ -261,6 +274,14 @@ pub async fn execute_step(
         "Agent sidecar binary not found. Run 'bun run agent:build' first.".to_string()
     })?;
 
+    log::info!("agent: using binary at {:?}", agent_bin);
+
+    // NDJSON capture file for recording sessions (set MELDUI_CAPTURE_NDJSON=path)
+    let capture_file = env::var("MELDUI_CAPTURE_NDJSON").ok();
+    if let Some(ref path) = capture_file {
+        log::info!("agent: capturing NDJSON to {}", path);
+    }
+
     let config = SidecarConfig {
         project_dir: project_dir.to_string(),
         system_prompt: None,
@@ -281,15 +302,37 @@ pub async fn execute_step(
     let execute_json = serde_json::to_string(&execute_cmd)
         .map_err(|e| format!("Failed to serialize execute command: {}", e))?;
 
-    // Spawn the sidecar with augmented PATH
-    let mut child = Command::new(&agent_bin)
-        .env("PATH", augmented_path())
+    log::info!("agent: sending execute command for issue {}", issue_id);
+
+    // Spawn the sidecar with augmented PATH + forward auth/env vars
+    let mut cmd = Command::new(&agent_bin);
+    cmd.env("PATH", augmented_path())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    // Forward auth-critical and runtime env vars
+    for key in [
+        "HOME",
+        "USER",
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+        "CLAUDE_CODE_USE_FOUNDRY",
+    ] {
+        if let Ok(val) = env::var(key) {
+            cmd.env(key, val);
+        }
+    }
+
+    // Forward mock fixture dir for E2E testing
+    if let Ok(fixture_dir) = env::var("MOCK_FIXTURE_DIR") {
+        cmd.env("MOCK_FIXTURE_DIR", fixture_dir);
+    }
+
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to spawn agent sidecar: {}", e))?;
-
     // Send execute command on stdin
     let mut stdin = child
         .stdin
@@ -348,6 +391,15 @@ pub async fn execute_step(
         }
     });
 
+    // Open capture file if MELDUI_CAPTURE_NDJSON is set
+    let mut capture_writer = capture_file.as_ref().and_then(|path| {
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok()
+    });
+
     let reader = BufReader::new(stdout);
     let mut lines = reader.lines();
     let mut response_text = String::new();
@@ -363,6 +415,12 @@ pub async fn execute_step(
     {
         if line.trim().is_empty() {
             continue;
+        }
+
+        // Capture NDJSON line to file if enabled
+        if let Some(ref mut writer) = capture_writer {
+            use std::io::Write;
+            let _ = writeln!(writer, "{}", &line);
         }
 
         let json: serde_json::Value = match serde_json::from_str(&line) {
@@ -384,6 +442,17 @@ pub async fn execute_step(
             .get("type")
             .and_then(|t| t.as_str())
             .unwrap_or("unknown");
+
+        // Log type + summary for debugging
+        match msg_type {
+            "error" => log::error!("agent: NDJSON recv type=error message={}",
+                json.get("message").and_then(|m| m.as_str()).unwrap_or("(none)")),
+            "result" => log::info!("agent: NDJSON recv type=result len={}",
+                json.get("content").and_then(|c| c.as_str()).map(|s| s.len()).unwrap_or(0)),
+            "text" => log::info!("agent: NDJSON recv type=text len={}",
+                json.get("content").and_then(|c| c.as_str()).map(|s| s.len()).unwrap_or(0)),
+            _ => log::info!("agent: NDJSON recv type={}", msg_type),
+        }
 
         match msg_type {
             "session" => {
@@ -549,6 +618,8 @@ pub async fn execute_step(
         .wait()
         .await
         .map_err(|e| format!("Failed to wait for agent sidecar: {}", e))?;
+
+    log::info!("agent: sidecar exited with status {}", status);
 
     // Clear the agent handle
     if let Some(state) = app_handle.try_state::<AgentState>() {

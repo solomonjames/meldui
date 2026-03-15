@@ -171,6 +171,10 @@ async function main(): Promise<void> {
     await agent.execute(executeCmd.prompt, config);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[main-catch] Unhandled execute error: ${message}\n`);
+    if (err instanceof Error && err.stack) {
+      process.stderr.write(`[main-stack] ${err.stack}\n`);
+    }
     send({ type: "error", message });
   }
 

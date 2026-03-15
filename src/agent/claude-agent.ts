@@ -11,6 +11,21 @@ import { createTicketMcpServer } from "./mcp/ticket-server.js";
 import { buildSystemPromptAppend } from "./config.js";
 import type { AgentConfig, MeldAgentEvents, MeldAgent } from "./types.js";
 import { resolve, isAbsolute } from "path";
+import { existsSync } from "fs";
+
+function findClaudeBinary(): string | undefined {
+  const home = process.env.HOME ?? "";
+  const candidates = [
+    `${home}/.claude/bin/claude`,
+    `${home}/.local/bin/claude`,
+    "/opt/homebrew/bin/claude",
+    "/usr/local/bin/claude",
+  ];
+  for (const p of candidates) {
+    try { if (existsSync(p)) return p; } catch {}
+  }
+  return undefined;
+}
 
 export class ClaudeAgent
   extends EventEmitter<MeldAgentEvents>
@@ -25,6 +40,14 @@ export class ClaudeAgent
     const ticketMcpServer = createTicketMcpServer(config.projectDir);
 
     const systemPromptAppend = buildSystemPromptAppend(config);
+
+    // Find claude binary — inside a compiled Bun binary, SDK auto-detection fails
+    const claudePath = findClaudeBinary();
+    if (claudePath) {
+      process.stderr.write(`[agent] Found claude binary: ${claudePath}\n`);
+    } else {
+      process.stderr.write(`[agent] No claude binary found, falling back to SDK auto-detect\n`);
+    }
 
     // Build query options
     const options: Record<string, unknown> = {
@@ -47,6 +70,14 @@ export class ClaudeAgent
       abortController: this.abortController,
       // Enable streaming events for progressive UI updates
       includePartialMessages: true,
+      // Tell SDK where to find the claude binary (critical inside compiled Bun binaries)
+      ...(claudePath ? { pathToClaudeCodeExecutable: claudePath } : {}),
+      // Capture SDK stderr for debugging
+      stderr: (data: string) => {
+        process.stderr.write(`[claude-sdk-stderr] ${data}\n`);
+      },
+      // Load user's Claude settings
+      settingSources: ["local", "project", "user"],
       // Permission callback — auto-allow safe operations, ask for others
       canUseTool: async (
         toolName: string,
@@ -168,7 +199,22 @@ export class ClaudeAgent
       if (this.abortController?.signal.aborted) {
         this.emit("stopped");
       } else {
-        const message = err instanceof Error ? err.message : String(err);
+        // Extract as much detail as possible from the error
+        let message = err instanceof Error ? err.message : String(err);
+        const errObj = err as Record<string, unknown>;
+
+        // Agent SDK subprocess errors may have stderr/stdout/exitCode
+        if (errObj.stderr) message += `\nstderr: ${errObj.stderr}`;
+        if (errObj.stdout) message += `\nstdout: ${errObj.stdout}`;
+        if (errObj.exitCode !== undefined) message += `\nexitCode: ${errObj.exitCode}`;
+        if (errObj.cause) message += `\ncause: ${errObj.cause}`;
+
+        // Log full error to sidecar stderr (captured by Rust)
+        process.stderr.write(`[agent-error] ${message}\n`);
+        if (err instanceof Error && err.stack) {
+          process.stderr.write(`[agent-stack] ${err.stack}\n`);
+        }
+
         this.emit("failed", { message });
       }
     }

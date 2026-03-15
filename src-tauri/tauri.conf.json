@@ -36,7 +36,6 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/bd",
       "binaries/agent"
     ]
   }

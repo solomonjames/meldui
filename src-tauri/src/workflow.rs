@@ -163,19 +163,15 @@ pub fn get_workflow(project_dir: &str, workflow_id: &str) -> Option<WorkflowDefi
 const WORKFLOW_STATE_KEY: &str = "workflow";
 
 /// Read workflow state from ticket metadata
-fn read_workflow_state(metadata: &Option<serde_json::Value>) -> Option<WorkflowState> {
+fn read_workflow_state(metadata: &serde_json::Value) -> Option<WorkflowState> {
     metadata
-        .as_ref()
-        .and_then(|m| m.get(WORKFLOW_STATE_KEY))
+        .get(WORKFLOW_STATE_KEY)
         .and_then(|v| serde_json::from_value(v.clone()).ok())
 }
 
 /// Merge workflow state into existing metadata (read-merge-write)
-fn merge_workflow_state(
-    metadata: &Option<serde_json::Value>,
-    state: &WorkflowState,
-) -> serde_json::Value {
-    let mut meta = metadata.clone().unwrap_or_else(|| serde_json::json!({}));
+fn merge_workflow_state(metadata: &serde_json::Value, state: &WorkflowState) -> serde_json::Value {
+    let mut meta = metadata.clone();
 
     if let Ok(state_value) = serde_json::to_value(state) {
         meta[WORKFLOW_STATE_KEY] = state_value;
@@ -185,9 +181,9 @@ fn merge_workflow_state(
 }
 
 /// Assign a workflow to a ticket. Returns the initial workflow state.
-pub async fn assign_workflow(
+pub fn assign_workflow(
     project_dir: &str,
-    issue_id: &str,
+    ticket_id: &str,
     workflow_id: &str,
 ) -> Result<WorkflowState, String> {
     let wf = get_workflow(project_dir, workflow_id)
@@ -207,17 +203,15 @@ pub async fn assign_workflow(
     };
 
     // Read current ticket metadata
-    let issues: Vec<crate::beads::BeadsIssue> =
-        crate::beads::show_issue(project_dir, issue_id).await?;
-    let issue = issues.first().ok_or("Issue not found")?;
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
 
-    let merged = merge_workflow_state(&issue.metadata, &state);
+    let merged = merge_workflow_state(&ticket.metadata, &state);
     let meta_str = serde_json::to_string(&merged)
         .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
 
-    crate::beads::update_issue(
+    crate::tickets::update_ticket(
         project_dir,
-        issue_id,
+        ticket_id,
         None,
         None,
         None,
@@ -226,20 +220,17 @@ pub async fn assign_workflow(
         None,
         None,
         Some(&meta_str),
-    )
-    .await?;
+    )?;
 
     Ok(state)
 }
 
 /// Advance to the next step in the workflow
-pub async fn advance_step(project_dir: &str, issue_id: &str) -> Result<WorkflowState, String> {
-    let issues: Vec<crate::beads::BeadsIssue> =
-        crate::beads::show_issue(project_dir, issue_id).await?;
-    let issue = issues.first().ok_or("Issue not found")?;
+pub fn advance_step(project_dir: &str, ticket_id: &str) -> Result<WorkflowState, String> {
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
 
     let mut state =
-        read_workflow_state(&issue.metadata).ok_or("No workflow assigned to this issue")?;
+        read_workflow_state(&ticket.metadata).ok_or("No workflow assigned to this ticket")?;
 
     let wf = get_workflow(project_dir, &state.workflow_id)
         .ok_or_else(|| format!("Workflow '{}' not found", state.workflow_id))?;
@@ -274,13 +265,13 @@ pub async fn advance_step(project_dir: &str, issue_id: &str) -> Result<WorkflowS
         state.step_status = StepStatus::Completed;
     }
 
-    let merged = merge_workflow_state(&issue.metadata, &state);
+    let merged = merge_workflow_state(&ticket.metadata, &state);
     let meta_str = serde_json::to_string(&merged)
         .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
 
-    crate::beads::update_issue(
+    crate::tickets::update_ticket(
         project_dir,
-        issue_id,
+        ticket_id,
         None,
         None,
         None,
@@ -289,45 +280,40 @@ pub async fn advance_step(project_dir: &str, issue_id: &str) -> Result<WorkflowS
         None,
         None,
         Some(&meta_str),
-    )
-    .await?;
+    )?;
 
     Ok(state)
 }
 
 /// Get the current workflow state for a ticket
-pub async fn get_workflow_state(
+pub fn get_workflow_state(
     project_dir: &str,
-    issue_id: &str,
+    ticket_id: &str,
 ) -> Result<Option<WorkflowState>, String> {
-    let issues: Vec<crate::beads::BeadsIssue> =
-        crate::beads::show_issue(project_dir, issue_id).await?;
-    let issue = issues.first().ok_or("Issue not found")?;
-    Ok(read_workflow_state(&issue.metadata))
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
+    Ok(read_workflow_state(&ticket.metadata))
 }
 
 /// Update the step status for the current step
-pub async fn update_step_status(
+pub fn update_step_status(
     project_dir: &str,
-    issue_id: &str,
+    ticket_id: &str,
     status: StepStatus,
 ) -> Result<WorkflowState, String> {
-    let issues: Vec<crate::beads::BeadsIssue> =
-        crate::beads::show_issue(project_dir, issue_id).await?;
-    let issue = issues.first().ok_or("Issue not found")?;
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
 
     let mut state =
-        read_workflow_state(&issue.metadata).ok_or("No workflow assigned to this issue")?;
+        read_workflow_state(&ticket.metadata).ok_or("No workflow assigned to this ticket")?;
 
     state.step_status = status;
 
-    let merged = merge_workflow_state(&issue.metadata, &state);
+    let merged = merge_workflow_state(&ticket.metadata, &state);
     let meta_str = serde_json::to_string(&merged)
         .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
 
-    crate::beads::update_issue(
+    crate::tickets::update_ticket(
         project_dir,
-        issue_id,
+        ticket_id,
         None,
         None,
         None,
@@ -336,8 +322,7 @@ pub async fn update_step_status(
         None,
         None,
         Some(&meta_str),
-    )
-    .await?;
+    )?;
 
     Ok(state)
 }
@@ -347,7 +332,7 @@ pub async fn update_step_status(
 /// Build the full prompt for a step by combining instructions with ticket context
 fn build_step_prompt(
     step: &WorkflowStep,
-    issue: &crate::beads::BeadsIssue,
+    ticket: &crate::tickets::Ticket,
     state: &WorkflowState,
 ) -> Result<String, String> {
     let instructions = match &step.instructions {
@@ -360,26 +345,26 @@ fn build_step_prompt(
 
     // Append ticket context
     prompt.push_str("\n\n## Ticket Context\n\n");
-    prompt.push_str(&format!("**ID:** {}\n", issue.id));
-    prompt.push_str(&format!("**Title:** {}\n", issue.title));
-    prompt.push_str(&format!("**Status:** {}\n", issue.status));
+    prompt.push_str(&format!("**ID:** {}\n", ticket.id));
+    prompt.push_str(&format!("**Title:** {}\n", ticket.title));
+    prompt.push_str(&format!("**Status:** {}\n", ticket.status));
 
-    if let Some(desc) = &issue.description {
+    if let Some(desc) = &ticket.description {
         if !desc.is_empty() {
             prompt.push_str(&format!("\n**Description:**\n{}\n", desc));
         }
     }
-    if let Some(notes) = &issue.notes {
+    if let Some(notes) = &ticket.notes {
         if !notes.is_empty() {
             prompt.push_str(&format!("\n**Notes:**\n{}\n", notes));
         }
     }
-    if let Some(design) = &issue.design {
+    if let Some(design) = &ticket.design {
         if !design.is_empty() {
             prompt.push_str(&format!("\n**Design:**\n{}\n", design));
         }
     }
-    if let Some(acceptance) = &issue.acceptance {
+    if let Some(acceptance) = &ticket.acceptance_criteria {
         if !acceptance.is_empty() {
             prompt.push_str(&format!("\n**Acceptance Criteria:**\n{}\n", acceptance));
         }
@@ -413,15 +398,14 @@ fn build_step_prompt(
 /// Execute the current step: send instructions to Claude, store response, handle gates
 pub async fn execute_step(
     project_dir: &str,
-    issue_id: &str,
+    ticket_id: &str,
     app_handle: tauri::AppHandle,
 ) -> Result<StepExecutionResult, String> {
     // 1. Load workflow state
-    let issues: Vec<crate::beads::BeadsIssue> =
-        crate::beads::show_issue(project_dir, issue_id).await?;
-    let issue = issues.first().ok_or("Issue not found")?;
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
 
-    let state = read_workflow_state(&issue.metadata).ok_or("No workflow assigned to this issue")?;
+    let state =
+        read_workflow_state(&ticket.metadata).ok_or("No workflow assigned to this ticket")?;
 
     let current_step_id = state
         .current_step_id
@@ -439,10 +423,10 @@ pub async fn execute_step(
         .ok_or_else(|| format!("Step '{}' not found in workflow", current_step_id))?;
 
     // 3. Set status to InProgress
-    update_step_status(project_dir, issue_id, StepStatus::InProgress).await?;
+    update_step_status(project_dir, ticket_id, StepStatus::InProgress)?;
 
     // 4. Build prompt
-    let prompt = build_step_prompt(step, issue, &state)?;
+    let prompt = build_step_prompt(step, &ticket, &state)?;
 
     // 5. Determine allowed tools based on step view type
     let view_str = match &step.view {
@@ -454,17 +438,16 @@ pub async fn execute_step(
     let allowed_tools = crate::agent::tools_for_view(view_str);
 
     // 6. Get session_id from workflow state metadata for continuity
-    let session_id = issue
+    let session_id = ticket
         .metadata
-        .as_ref()
-        .and_then(|m| m.get("agent_session_id"))
+        .get("agent_session_id")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
     // 7. Call agent sidecar with streaming events
     let (response_text, new_session_id) = crate::agent::execute_step(
         project_dir,
-        issue_id,
+        ticket_id,
         &prompt,
         session_id.as_deref(),
         Some(allowed_tools),
@@ -474,52 +457,43 @@ pub async fn execute_step(
 
     // 8. Store session_id back into metadata for next step
     if !new_session_id.is_empty() {
-        let fresh_issues2: Vec<crate::beads::BeadsIssue> =
-            crate::beads::show_issue(project_dir, issue_id).await?;
-        if let Some(fresh_issue2) = fresh_issues2.first() {
-            let mut meta = fresh_issue2
-                .metadata
-                .clone()
-                .unwrap_or_else(|| serde_json::json!({}));
-            meta["agent_session_id"] = serde_json::Value::String(new_session_id);
-            let meta_str = serde_json::to_string(&meta)
-                .map_err(|e| format!("Failed to serialize session metadata: {}", e))?;
-            crate::beads::update_issue(
-                project_dir,
-                issue_id,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                Some(&meta_str),
-            )
-            .await?;
-        }
+        let fresh_ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
+        let mut meta = fresh_ticket.metadata.clone();
+        meta["agent_session_id"] = serde_json::Value::String(new_session_id);
+        let meta_str = serde_json::to_string(&meta)
+            .map_err(|e| format!("Failed to serialize session metadata: {}", e))?;
+        crate::tickets::update_ticket(
+            project_dir,
+            ticket_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&meta_str),
+        )?;
     }
 
-    // 6. Write response to ticket fields specified by writes_to (APPEND semantics)
+    // 9. Write response to ticket fields specified by writes_to (APPEND semantics)
     if let Some(writes_to) = &step.writes_to {
-        // Re-fetch the issue to get current field values for appending
-        let fresh_issues: Vec<crate::beads::BeadsIssue> =
-            crate::beads::show_issue(project_dir, issue_id).await?;
-        let fresh_issue = fresh_issues.first().ok_or("Issue not found")?;
+        // Re-fetch the ticket to get current field values for appending
+        let fresh_ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
 
         for field in writes_to {
             let separator = "\n\n---\n\n";
             match field.as_str() {
                 "notes" => {
-                    let existing = fresh_issue.notes.as_deref().unwrap_or("");
+                    let existing = fresh_ticket.notes.as_deref().unwrap_or("");
                     let new_value = if existing.is_empty() {
                         response_text.clone()
                     } else {
                         format!("{}{}{}", existing, separator, response_text)
                     };
-                    crate::beads::update_issue(
+                    crate::tickets::update_ticket(
                         project_dir,
-                        issue_id,
+                        ticket_id,
                         None,
                         None,
                         None,
@@ -528,19 +502,18 @@ pub async fn execute_step(
                         None,
                         None,
                         None,
-                    )
-                    .await?;
+                    )?;
                 }
                 "design" => {
-                    let existing = fresh_issue.design.as_deref().unwrap_or("");
+                    let existing = fresh_ticket.design.as_deref().unwrap_or("");
                     let new_value = if existing.is_empty() {
                         response_text.clone()
                     } else {
                         format!("{}{}{}", existing, separator, response_text)
                     };
-                    crate::beads::update_issue(
+                    crate::tickets::update_ticket(
                         project_dir,
-                        issue_id,
+                        ticket_id,
                         None,
                         None,
                         None,
@@ -549,19 +522,18 @@ pub async fn execute_step(
                         Some(&new_value),
                         None,
                         None,
-                    )
-                    .await?;
+                    )?;
                 }
-                "acceptance" => {
-                    let existing = fresh_issue.acceptance.as_deref().unwrap_or("");
+                "acceptance_criteria" => {
+                    let existing = fresh_ticket.acceptance_criteria.as_deref().unwrap_or("");
                     let new_value = if existing.is_empty() {
                         response_text.clone()
                     } else {
                         format!("{}{}{}", existing, separator, response_text)
                     };
-                    crate::beads::update_issue(
+                    crate::tickets::update_ticket(
                         project_dir,
-                        issue_id,
+                        ticket_id,
                         None,
                         None,
                         None,
@@ -570,8 +542,7 @@ pub async fn execute_step(
                         None,
                         Some(&new_value),
                         None,
-                    )
-                    .await?;
+                    )?;
                 }
                 _ => {
                     eprintln!("Unknown writes_to field: {}", field);
@@ -580,9 +551,9 @@ pub async fn execute_step(
         }
     }
 
-    // 7. Handle gate or auto-advance
+    // 10. Handle gate or auto-advance
     if step.human_gate {
-        update_step_status(project_dir, issue_id, StepStatus::AwaitingGate).await?;
+        update_step_status(project_dir, ticket_id, StepStatus::AwaitingGate)?;
         Ok(StepExecutionResult {
             step_id: current_step_id.clone(),
             response: response_text,
@@ -590,7 +561,7 @@ pub async fn execute_step(
             workflow_completed: false,
         })
     } else {
-        update_step_status(project_dir, issue_id, StepStatus::Completed).await?;
+        update_step_status(project_dir, ticket_id, StepStatus::Completed)?;
         Ok(StepExecutionResult {
             step_id: current_step_id.clone(),
             response: response_text,
@@ -619,13 +590,11 @@ pub struct WorkflowSuggestion {
 /// Suggest a workflow for a ticket based on complexity analysis
 pub async fn suggest_workflow(
     project_dir: &str,
-    issue_id: &str,
+    ticket_id: &str,
     app_handle: tauri::AppHandle,
 ) -> Result<WorkflowSuggestion, String> {
     // Load the ticket
-    let issues: Vec<crate::beads::BeadsIssue> =
-        crate::beads::show_issue(project_dir, issue_id).await?;
-    let issue = issues.first().ok_or("Issue not found")?;
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
 
     // Load available workflows
     let workflows = list_workflows(project_dir);
@@ -644,15 +613,15 @@ pub async fn suggest_workflow(
         {}\n\n\
         Respond with ONLY a JSON object (no markdown, no code fences):\n\
         {{\"workflow_id\": \"the-id\", \"reasoning\": \"brief explanation\"}}\n",
-        issue.title,
-        issue.description.as_deref().unwrap_or("(none)"),
-        issue.acceptance.as_deref().unwrap_or("(none)"),
+        ticket.title,
+        ticket.description.as_deref().unwrap_or("(none)"),
+        ticket.acceptance_criteria.as_deref().unwrap_or("(none)"),
         workflow_list.join("\n"),
     );
 
     let (response, _session_id) = crate::agent::execute_step(
         project_dir,
-        issue_id,
+        ticket_id,
         &prompt,
         None,
         Some(vec!["Read".into(), "Glob".into(), "Grep".into()]),

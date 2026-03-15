@@ -16,40 +16,37 @@ import { KanbanCard } from "./kanban-card";
 import { TicketDetailDialog } from "./ticket-detail-dialog";
 import { WorkflowSelector } from "@/components/workflow/workflow-selector";
 import type {
-  BeadsIssue,
-  BeadsStatus,
+  Ticket,
   WorkflowDefinition,
   WorkflowState,
   WorkflowSuggestion,
 } from "@/types";
 
 interface BacklogPageProps {
-  issues: BeadsIssue[];
-  beadsStatus: BeadsStatus | null;
+  tickets: Ticket[];
   loading: boolean;
   error: string | null;
-  onUpdateIssue: (
+  onUpdateTicket: (
     id: string,
     updates: { status?: string; priority?: string; description?: string }
   ) => Promise<void>;
-  onCloseIssue: (id: string, reason?: string) => Promise<void>;
-  onDeleteIssue: (id: string) => Promise<void>;
-  onShowIssue: (id: string) => Promise<BeadsIssue | null>;
+  onCloseTicket: (id: string, reason?: string) => Promise<void>;
+  onDeleteTicket: (id: string) => Promise<void>;
+  onShowTicket: (id: string) => Promise<Ticket | null>;
   onAddComment: (id: string, text: string) => Promise<void>;
   onRefresh: () => Promise<void>;
-  onInitBeads: () => Promise<void>;
-  onAutoStart?: (issue: BeadsIssue) => Promise<void>;
+  onAutoStart?: (ticket: Ticket) => Promise<void>;
   workflows?: WorkflowDefinition[];
   onAssignWorkflow?: (issueId: string, workflowId: string) => Promise<WorkflowState | null>;
   onSuggestWorkflow?: (issueId: string) => Promise<WorkflowSuggestion | null>;
   onGetWorkflowState?: (issueId: string) => Promise<WorkflowState | null>;
-  onStartWorkflow?: (issue: BeadsIssue) => Promise<void>;
+  onStartWorkflow?: (ticket: Ticket) => Promise<void>;
 }
 
 type SortMode = "priority" | "date";
 type TypeFilter = string | null;
 
-const ISSUE_TYPES = ["feature", "task", "bug", "chore", "epic"] as const;
+const TICKET_TYPES = ["feature", "task", "bug", "chore", "epic"] as const;
 
 const COLUMNS = [
   { key: "open", title: "Open" },
@@ -62,17 +59,15 @@ const COLUMNS = [
 const COLUMN_KEYS = new Set(COLUMNS.map((c) => c.key));
 
 export function BacklogPage({
-  issues,
-  beadsStatus,
+  tickets,
   loading,
   error,
-  onUpdateIssue,
-  onCloseIssue,
-  onDeleteIssue,
-  onShowIssue,
+  onUpdateTicket,
+  onCloseTicket,
+  onDeleteTicket,
+  onShowTicket,
   onAddComment,
   onRefresh,
-  onInitBeads,
   onAutoStart,
   workflows = [],
   onAssignWorkflow,
@@ -81,25 +76,25 @@ export function BacklogPage({
   const [sortMode, setSortMode] = useState<SortMode>("priority");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [selectedIssue, setSelectedIssue] = useState<BeadsIssue | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor)
   );
 
-  const filteredIssues = useMemo(() => {
-    let filtered = issues.filter((i) => !i.parent_id);
+  const filteredTickets = useMemo(() => {
+    let filtered = tickets.filter((t) => !t.parent_id);
     if (typeFilter) {
-      filtered = filtered.filter((i) => i.issue_type === typeFilter);
+      filtered = filtered.filter((t) => t.ticket_type === typeFilter);
     }
     return filtered.sort((a, b) => {
       if (sortMode === "priority") return a.priority - b.priority;
       return (b.created_at ?? "").localeCompare(a.created_at ?? "");
     });
-  }, [issues, sortMode, typeFilter]);
+  }, [tickets, sortMode, typeFilter]);
 
-  const activeIssue = activeId ? issues.find((i) => i.id === activeId) ?? null : null;
+  const activeTicket = activeId ? tickets.find((t) => t.id === activeId) ?? null : null;
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(String(event.active.id));
@@ -111,63 +106,35 @@ export function BacklogPage({
       const { active, over } = event;
       if (!over) return;
 
-      const issueId = String(active.id);
+      const ticketId = String(active.id);
       const targetColumn = String(over.id);
 
       if (!COLUMN_KEYS.has(targetColumn)) return;
 
-      const issue = issues.find((i) => i.id === issueId);
-      if (!issue) return;
+      const ticket = tickets.find((t) => t.id === ticketId);
+      if (!ticket) return;
 
-      if (issue.status === targetColumn) return;
+      if (ticket.status === targetColumn) return;
 
       if (targetColumn === "closed") {
-        await onCloseIssue(issueId);
+        await onCloseTicket(ticketId);
       } else {
-        await onUpdateIssue(issueId, { status: targetColumn });
+        await onUpdateTicket(ticketId, { status: targetColumn });
 
         // Auto-start workflow when dragging to In Progress
         if (targetColumn === "in_progress" && onAutoStart) {
-          await onAutoStart(issue);
+          await onAutoStart(ticket);
         }
       }
     },
-    [issues, onUpdateIssue, onCloseIssue, onAutoStart]
+    [tickets, onUpdateTicket, onCloseTicket, onAutoStart]
   );
 
   const handleDragCancel = useCallback(() => {
     setActiveId(null);
   }, []);
 
-  if (!beadsStatus?.installed) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center bg-zinc-100 dark:bg-zinc-950">
-        <h3 className="text-lg font-medium">Beads Not Found</h3>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          MeldUI uses Beads for issue tracking. Install it from{" "}
-          <span className="font-mono text-emerald">
-            github.com/steveyegge/beads
-          </span>
-        </p>
-      </div>
-    );
-  }
-
-  if (!beadsStatus?.initialized) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center bg-zinc-100 dark:bg-zinc-950">
-        <h3 className="text-lg font-medium">Beads Not Initialized</h3>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          Initialize beads in this project to start tracking issues.
-        </p>
-        <Button onClick={onInitBeads} className="bg-emerald hover:bg-emerald/90 text-white">
-          Initialize Beads
-        </Button>
-      </div>
-    );
-  }
-
-  const activeCount = issues.filter((i) => i.status !== "closed").length;
+  const activeCount = tickets.filter((t) => t.status !== "closed").length;
 
   return (
     <div className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
@@ -233,7 +200,7 @@ export function BacklogPage({
           >
             All
           </button>
-          {ISSUE_TYPES.map((type) => (
+          {TICKET_TYPES.map((type) => (
             <button
               key={type}
               onClick={() => setTypeFilter(typeFilter === type ? null : type)}
@@ -259,31 +226,31 @@ export function BacklogPage({
         >
           <div className="flex gap-5 h-full overflow-x-auto">
             {COLUMNS.map((col) => {
-              const columnIssues = filteredIssues.filter(
-                (i) => i.status === col.key
+              const columnTickets = filteredTickets.filter(
+                (t) => t.status === col.key
               );
               return (
                 <div key={col.key} className="min-w-[280px] w-[280px] shrink-0 h-full">
                   <KanbanColumn
                     title={col.title}
                     variant={col.key}
-                    count={columnIssues.length}
-                    issues={columnIssues}
-                    onUpdate={onUpdateIssue}
-                    onClose={onCloseIssue}
-                    onCardClick={setSelectedIssue}
+                    count={columnTickets.length}
+                    tickets={columnTickets}
+                    onUpdate={onUpdateTicket}
+                    onClose={onCloseTicket}
+                    onCardClick={setSelectedTicket}
                   />
                 </div>
               );
             })}
           </div>
           <DragOverlay dropAnimation={null}>
-            {activeIssue ? (
+            {activeTicket ? (
               <KanbanCard
-                issue={activeIssue}
-                variant={activeIssue.status}
-                onUpdate={onUpdateIssue}
-                onClose={onCloseIssue}
+                ticket={activeTicket}
+                variant={activeTicket.status}
+                onUpdate={onUpdateTicket}
+                onClose={onCloseTicket}
                 isOverlay
               />
             ) : null}
@@ -291,40 +258,40 @@ export function BacklogPage({
         </DndContext>
       </div>
       <TicketDetailDialog
-        issue={selectedIssue}
-        allIssues={issues}
-        open={!!selectedIssue}
+        ticket={selectedTicket}
+        allTickets={tickets}
+        open={!!selectedTicket}
         onOpenChange={(open) => {
-          if (!open) setSelectedIssue(null);
+          if (!open) setSelectedTicket(null);
         }}
-        onDelete={onDeleteIssue}
+        onDelete={onDeleteTicket}
         onSave={async (id, updates) => {
-          await onUpdateIssue(id, updates);
+          await onUpdateTicket(id, updates);
         }}
-        onShowIssue={onShowIssue}
+        onShowTicket={onShowTicket}
         onAddComment={onAddComment}
         workflowSelector={
-          selectedIssue && onAssignWorkflow && onSuggestWorkflow ? (
+          selectedTicket && onAssignWorkflow && onSuggestWorkflow ? (
             <WorkflowSelector
               currentWorkflowId={
-                ((issues.find((i) => i.id === selectedIssue.id) ?? selectedIssue)
+                ((tickets.find((t) => t.id === selectedTicket.id) ?? selectedTicket)
                   .metadata?.workflow as { workflow_id?: string })
                   ?.workflow_id
               }
               workflows={workflows}
               onAssign={async (workflowId) => {
-                await onAssignWorkflow(selectedIssue.id, workflowId);
+                await onAssignWorkflow(selectedTicket.id, workflowId);
                 await onRefresh();
               }}
               onSuggest={async () => {
-                return onSuggestWorkflow(selectedIssue.id);
+                return onSuggestWorkflow(selectedTicket.id);
               }}
             />
           ) : undefined
         }
         hasWorkflowAssigned={
           !!(
-            (issues.find((i) => i.id === selectedIssue?.id) ?? selectedIssue)
+            (tickets.find((t) => t.id === selectedTicket?.id) ?? selectedTicket)
               ?.metadata?.workflow as { workflow_id?: string } | undefined
           )?.workflow_id
         }

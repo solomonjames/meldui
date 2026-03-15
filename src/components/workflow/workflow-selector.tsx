@@ -127,7 +127,7 @@ export function WorkflowSelector({
       <div className="flex items-center gap-2">
         <Select
           value={selectedId}
-          onValueChange={handleSelect}
+          onValueChange={(v) => v && handleSelect(v)}
           disabled={loading}
           items={workflows.map((wf) => ({ value: wf.id, label: wf.name }))}
         >

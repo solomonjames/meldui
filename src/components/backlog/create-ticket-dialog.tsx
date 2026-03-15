@@ -20,10 +20,10 @@ import { TYPE_CONFIG, PRIORITY_CONFIG } from "./kanban-card";
 interface CreateTicketDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreateIssue: (
+  onCreateTicket: (
     title: string,
     description?: string,
-    issueType?: string,
+    ticketType?: string,
     priority?: string
   ) => Promise<unknown>;
 }
@@ -31,19 +31,19 @@ interface CreateTicketDialogProps {
 export function CreateTicketDialog({
   open,
   onOpenChange,
-  onCreateIssue,
+  onCreateTicket,
 }: CreateTicketDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [issueType, setIssueType] = useState("task");
+  const [ticketType, setTicketType] = useState("task");
   const [priority, setPriority] = useState("2");
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
-    await onCreateIssue(title.trim(), description.trim() || undefined, issueType, priority);
+    await onCreateTicket(title.trim(), description.trim() || undefined, ticketType, priority);
     setTitle("");
     setDescription("");
-    setIssueType("task");
+    setTicketType("task");
     setPriority("2");
     onOpenChange(false);
   };
@@ -52,11 +52,11 @@ export function CreateTicketDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New Issue</DialogTitle>
+          <DialogTitle>New Ticket</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <Input
-            placeholder="Issue title"
+            placeholder="Ticket title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
@@ -69,7 +69,7 @@ export function CreateTicketDialog({
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="text-sm font-medium mb-1 block">Type</label>
-              <Select value={issueType} onValueChange={setIssueType}>
+              <Select value={ticketType} onValueChange={(v) => v && setTicketType(v)}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -90,7 +90,7 @@ export function CreateTicketDialog({
             </div>
             <div className="flex-1">
               <label className="text-sm font-medium mb-1 block">Priority</label>
-              <Select value={priority} onValueChange={setPriority}>
+              <Select value={priority} onValueChange={(v) => v && setPriority(v)}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -114,7 +114,7 @@ export function CreateTicketDialog({
             className="w-full bg-emerald hover:bg-emerald/90 text-white"
             disabled={!title.trim()}
           >
-            Create Issue
+            Create Ticket
           </Button>
         </div>
       </DialogContent>

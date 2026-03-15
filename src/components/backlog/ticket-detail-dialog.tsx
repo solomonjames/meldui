@@ -21,11 +21,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TYPE_CONFIG, PRIORITY_CONFIG } from "./kanban-card";
-import type { BeadsIssue, BeadsComment } from "@/types";
+import type { Ticket, TicketComment } from "@/types";
 
 interface TicketDetailDialogProps {
-  issue: BeadsIssue | null;
-  allIssues: BeadsIssue[];
+  ticket: Ticket | null;
+  allTickets: Ticket[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete?: (id: string) => Promise<void>;
@@ -35,13 +35,13 @@ interface TicketDetailDialogProps {
       description?: string;
       notes?: string;
       design?: string;
-      acceptance?: string;
+      acceptance_criteria?: string;
     }
   ) => Promise<void>;
-  onShowIssue?: (id: string) => Promise<BeadsIssue | null>;
+  onShowTicket?: (id: string) => Promise<Ticket | null>;
   onAddComment?: (id: string, text: string) => Promise<void>;
   workflowSelector?: React.ReactNode;
-  onStartWorkflow?: (issue: BeadsIssue) => void;
+  onStartWorkflow?: (ticket: Ticket) => void;
   hasWorkflowAssigned?: boolean;
 }
 
@@ -171,20 +171,20 @@ function getInitials(name: string) {
 }
 
 export function TicketDetailDialog({
-  issue,
-  allIssues,
+  ticket,
+  allTickets,
   open,
   onOpenChange,
   onDelete,
   onSave,
-  onShowIssue,
+  onShowTicket,
   onAddComment,
   workflowSelector,
   onStartWorkflow,
   hasWorkflowAssigned,
 }: TicketDetailDialogProps) {
-  const [issueStack, setIssueStack] = useState<BeadsIssue[]>([]);
-  const [comments, setComments] = useState<BeadsComment[]>([]);
+  const [ticketStack, setTicketStack] = useState<Ticket[]>([]);
+  const [comments, setComments] = useState<TicketComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -193,45 +193,45 @@ export function TicketDetailDialog({
   const setField = (field: string, value: string) =>
     setEdits((prev) => ({ ...prev, [field]: value }));
 
-  // Reset stack when the root issue changes or dialog closes
+  // Reset stack when the root ticket changes or dialog closes
   useEffect(() => {
-    if (issue && open) {
-      setIssueStack([issue]);
+    if (ticket && open) {
+      setTicketStack([ticket]);
       setEdits({});
     } else {
-      setIssueStack([]);
+      setTicketStack([]);
       setComments([]);
       setEdits({});
     }
-  }, [issue, open]);
+  }, [ticket, open]);
 
-  const currentIssue = issueStack[issueStack.length - 1];
+  const currentTicket = ticketStack[ticketStack.length - 1];
 
-  // Fetch full issue with comments when current issue changes
+  // Fetch full ticket with comments when current ticket changes
   const fetchComments = useCallback(async () => {
-    if (!currentIssue || !onShowIssue) return;
+    if (!currentTicket || !onShowTicket) return;
     setCommentsLoading(true);
     try {
-      const full = await onShowIssue(currentIssue.id);
+      const full = await onShowTicket(currentTicket.id);
       setComments(full?.comments ?? []);
     } catch {
       setComments([]);
     } finally {
       setCommentsLoading(false);
     }
-  }, [currentIssue?.id, onShowIssue]);
+  }, [currentTicket?.id, onShowTicket]);
 
   useEffect(() => {
-    if (currentIssue && open) {
+    if (currentTicket && open) {
       fetchComments();
     }
-  }, [currentIssue?.id, open, fetchComments]);
+  }, [currentTicket?.id, open, fetchComments]);
 
   const hasChanges =
-    currentIssue != null &&
+    currentTicket != null &&
     Object.entries(edits).some(
       ([field, value]) =>
-        value !== ((currentIssue as Record<string, unknown>)[field] ?? "")
+        value !== ((currentTicket as unknown as Record<string, unknown>)[field] ?? "")
     );
 
   // Keyboard shortcut: Cmd+S to save
@@ -245,31 +245,31 @@ export function TicketDetailDialog({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, currentIssue, edits]);
+  }, [open, currentTicket, edits]);
 
-  if (!currentIssue) return null;
+  if (!currentTicket) return null;
 
-  const typeInfo = TYPE_CONFIG[currentIssue.issue_type] ?? TYPE_CONFIG.task;
-  const priorityInfo = PRIORITY_CONFIG[currentIssue.priority] ?? PRIORITY_CONFIG[2];
-  const statusInfo = STATUS_CONFIG[currentIssue.status] ?? STATUS_CONFIG.open;
+  const typeInfo = TYPE_CONFIG[currentTicket.ticket_type] ?? TYPE_CONFIG.task;
+  const priorityInfo = PRIORITY_CONFIG[currentTicket.priority] ?? PRIORITY_CONFIG[2];
+  const statusInfo = STATUS_CONFIG[currentTicket.status] ?? STATUS_CONFIG.open;
   const TypeIcon = typeInfo.icon;
 
-  const subTickets = allIssues.filter((i) => i.parent_id === currentIssue.id);
-  const canGoBack = issueStack.length > 1;
+  const subTickets = allTickets.filter((t) => t.parent_id === currentTicket.id);
+  const canGoBack = ticketStack.length > 1;
 
   const handleBack = () => {
-    setIssueStack((stack) => stack.slice(0, -1));
+    setTicketStack((stack) => stack.slice(0, -1));
     setEdits({});
   };
 
-  const handleSubTicketClick = (subTicket: BeadsIssue) => {
-    setIssueStack((stack) => [...stack, subTicket]);
+  const handleSubTicketClick = (subTicket: Ticket) => {
+    setTicketStack((stack) => [...stack, subTicket]);
     setEdits({});
   };
 
   const handleDelete = async () => {
     if (!onDelete) return;
-    await onDelete(currentIssue.id);
+    await onDelete(currentTicket.id);
     onOpenChange(false);
   };
 
@@ -279,11 +279,11 @@ export function TicketDetailDialog({
     try {
       const updates: Record<string, string> = {};
       for (const [field, value] of Object.entries(edits)) {
-        if (value !== ((currentIssue as Record<string, unknown>)[field] ?? "")) {
+        if (value !== ((currentTicket as unknown as Record<string, unknown>)[field] ?? "")) {
           updates[field] = value;
         }
       }
-      await onSave(currentIssue.id, updates);
+      await onSave(currentTicket.id, updates);
       setEdits({});
     } finally {
       setIsSaving(false);
@@ -292,7 +292,7 @@ export function TicketDetailDialog({
 
   const handleAddComment = async () => {
     if (!onAddComment || !commentText.trim()) return;
-    await onAddComment(currentIssue.id, commentText.trim());
+    await onAddComment(currentTicket.id, commentText.trim());
     setCommentText("");
     await fetchComments();
   };
@@ -324,12 +324,12 @@ export function TicketDetailDialog({
               )}
               <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono text-muted-foreground">
                 <Hash className="w-3 h-3" />
-                {currentIssue.id}
+                {currentTicket.id}
               </span>
             </div>
             {/* Title */}
             <DialogTitle className="text-lg font-semibold leading-snug pr-8">
-              {currentIssue.title}
+              {currentTicket.title}
             </DialogTitle>
           </DialogHeader>
 
@@ -352,7 +352,7 @@ export function TicketDetailDialog({
               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${typeInfo.bg} ${typeInfo.color}`}
             >
               <TypeIcon className="w-3 h-3" />
-              {currentIssue.issue_type}
+              {currentTicket.ticket_type}
             </span>
           </div>
 
@@ -360,12 +360,12 @@ export function TicketDetailDialog({
           {workflowSelector && (
             <div className="pt-2 space-y-2">
               {workflowSelector}
-              {hasWorkflowAssigned && onStartWorkflow && currentIssue && (
+              {hasWorkflowAssigned && onStartWorkflow && currentTicket && (
                 <Button
                   size="sm"
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                   onClick={() => {
-                    onStartWorkflow(currentIssue);
+                    onStartWorkflow(currentTicket);
                     onOpenChange(false);
                   }}
                 >
@@ -382,29 +382,29 @@ export function TicketDetailDialog({
           <div className="space-y-4">
             <EditableSection
               label="Description"
-              value={edits.description ?? currentIssue.description ?? ""}
+              value={edits.description ?? currentTicket.description ?? ""}
               onChange={(v) => setField("description", v)}
             />
 
-            {(currentIssue.design || edits.design !== undefined) && (
+            {(currentTicket.design || edits.design !== undefined) && (
               <EditableSection
                 label="Design"
-                value={edits.design ?? currentIssue.design ?? ""}
+                value={edits.design ?? currentTicket.design ?? ""}
                 onChange={(v) => setField("design", v)}
               />
             )}
-            {(currentIssue.notes || edits.notes !== undefined) && (
+            {(currentTicket.notes || edits.notes !== undefined) && (
               <EditableSection
                 label="Notes"
-                value={edits.notes ?? currentIssue.notes ?? ""}
+                value={edits.notes ?? currentTicket.notes ?? ""}
                 onChange={(v) => setField("notes", v)}
               />
             )}
-            {(currentIssue.acceptance || edits.acceptance !== undefined) && (
+            {(currentTicket.acceptance_criteria || edits.acceptance_criteria !== undefined) && (
               <EditableSection
                 label="Acceptance Criteria"
-                value={edits.acceptance ?? currentIssue.acceptance ?? ""}
-                onChange={(v) => setField("acceptance", v)}
+                value={edits.acceptance_criteria ?? currentTicket.acceptance_criteria ?? ""}
+                onChange={(v) => setField("acceptance_criteria", v)}
               />
             )}
           </div>
@@ -418,7 +418,7 @@ export function TicketDetailDialog({
               <div className="space-y-1">
                 {subTickets.map((sub) => {
                   const subStatus = STATUS_CONFIG[sub.status] ?? STATUS_CONFIG.open;
-                  const subType = TYPE_CONFIG[sub.issue_type] ?? TYPE_CONFIG.task;
+                  const subType = TYPE_CONFIG[sub.ticket_type] ?? TYPE_CONFIG.task;
                   const subPriority = PRIORITY_CONFIG[sub.priority] ?? PRIORITY_CONFIG[2];
                   const SubTypeIcon = subType.icon;
                   return (
@@ -440,7 +440,7 @@ export function TicketDetailDialog({
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${subType.bg} ${subType.color}`}
                       >
                         <SubTypeIcon className="w-3 h-3" />
-                        {sub.issue_type}
+                        {sub.ticket_type}
                       </span>
                     </button>
                   );
@@ -450,9 +450,9 @@ export function TicketDetailDialog({
           )}
 
           {/* Labels */}
-          {currentIssue.labels && currentIssue.labels.length > 0 && (
+          {currentTicket.labels && currentTicket.labels.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              {currentIssue.labels.map((label) => (
+              {currentTicket.labels.map((label) => (
                 <Badge key={label} variant="secondary" className="text-xs">
                   {label}
                 </Badge>
@@ -464,9 +464,9 @@ export function TicketDetailDialog({
           <div className="space-y-3">
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Activity
-              {currentIssue.comment_count != null && currentIssue.comment_count > 0 && (
+              {comments.length > 0 && (
                 <span className="ml-1.5 text-muted-foreground">
-                  ({currentIssue.comment_count})
+                  ({comments.length})
                 </span>
               )}
             </h3>
@@ -526,24 +526,24 @@ export function TicketDetailDialog({
 
           {/* Footer metadata */}
           <div className="border-t pt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-            {currentIssue.created_by && (
+            {currentTicket.created_by && (
               <span className="inline-flex items-center gap-1">
                 <User className="w-3 h-3" />
-                {currentIssue.created_by}
+                {currentTicket.created_by}
               </span>
             )}
-            {currentIssue.created_at && (
+            {currentTicket.created_at && (
               <span className="inline-flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
-                Created {formatDate(currentIssue.created_at)}
+                Created {formatDate(currentTicket.created_at)}
               </span>
             )}
-            {currentIssue.updated_at && (
-              <span>Updated {formatDate(currentIssue.updated_at)}</span>
+            {currentTicket.updated_at && (
+              <span>Updated {formatDate(currentTicket.updated_at)}</span>
             )}
-            {(currentIssue.owner || currentIssue.assignee) && (
+            {currentTicket.assignee && (
               <span>
-                Assigned to {currentIssue.assignee ?? currentIssue.owner}
+                Assigned to {currentTicket.assignee}
               </span>
             )}
           </div>

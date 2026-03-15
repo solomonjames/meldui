@@ -29,5 +29,5 @@
     }
   },
   "include": ["src"],
-  "exclude": ["src/agent"]
+  "exclude": ["src/agent", "src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
 }

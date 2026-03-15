@@ -2,17 +2,17 @@ import { useState, useEffect } from "react";
 import { FileCode, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { BeadsIssue, DiffFile } from "@/types";
+import type { Ticket, DiffFile } from "@/types";
 
 interface DiffReviewViewProps {
-  issue: BeadsIssue;
+  ticket: Ticket;
   isAwaitingGate: boolean;
   onApprove: () => void;
   onGetDiff: () => Promise<DiffFile[]>;
 }
 
 export function DiffReviewView({
-  issue,
+  ticket,
   isAwaitingGate,
   onApprove,
   onGetDiff,
@@ -78,7 +78,7 @@ export function DiffReviewView({
             <h3 className="text-sm font-medium">
               {selectedFile ?? "Diff Review"}
             </h3>
-            <p className="text-xs text-muted-foreground">{issue.title}</p>
+            <p className="text-xs text-muted-foreground">{ticket.title}</p>
           </div>
           {isAwaitingGate && (
             <Button

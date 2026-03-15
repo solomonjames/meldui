@@ -27,7 +27,7 @@ struct SidecarConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    bd_binary_path: Option<String>,
+    tickets_dir: Option<String>,
 }
 
 /// Execute command sent on stdin first line.
@@ -180,35 +180,6 @@ fn find_agent_binary() -> Option<PathBuf> {
     None
 }
 
-/// Find the bd binary path to pass to the sidecar.
-fn find_bd_path() -> Option<String> {
-    // Reuse the same search logic as beads.rs
-    let home = env::var("HOME").unwrap_or_default();
-    let candidates = [
-        "/opt/homebrew/bin/bd".to_string(),
-        "/usr/local/bin/bd".to_string(),
-        format!("{}/.local/bin/bd", home),
-        format!("{}/go/bin/bd", home),
-    ];
-
-    for path in &candidates {
-        if PathBuf::from(path).exists() {
-            return Some(path.clone());
-        }
-    }
-
-    if let Ok(output) = std::process::Command::new("which").arg("bd").output() {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Some(path);
-            }
-        }
-    }
-
-    None
-}
-
 /// Build augmented PATH that includes common binary locations.
 fn augmented_path() -> String {
     let home = env::var("HOME").unwrap_or_default();
@@ -241,7 +212,7 @@ fn augmented_path() -> String {
 pub fn tools_for_view(view: &str) -> Vec<String> {
     match view {
         "progress" => vec![
-            "mcp__beads".into(),
+            "mcp__tickets".into(),
             "Read".into(),
             "Write".into(),
             "Edit".into(),
@@ -250,7 +221,7 @@ pub fn tools_for_view(view: &str) -> Vec<String> {
             "Grep".into(),
         ],
         "chat" => vec![
-            "mcp__beads".into(),
+            "mcp__tickets".into(),
             "Read".into(),
             "Glob".into(),
             "Grep".into(),
@@ -258,13 +229,13 @@ pub fn tools_for_view(view: &str) -> Vec<String> {
             "WebFetch".into(),
         ],
         "review" => vec![
-            "mcp__beads".into(),
+            "mcp__tickets".into(),
             "Read".into(),
             "Glob".into(),
             "Grep".into(),
         ],
         _ => vec![
-            "mcp__beads".into(),
+            "mcp__tickets".into(),
             "Read".into(),
             "Write".into(),
             "Edit".into(),
@@ -298,7 +269,7 @@ pub async fn execute_step(
         session_id: session_id.map(|s| s.to_string()),
         max_turns: Some(200),
         model: None,
-        bd_binary_path: find_bd_path(),
+        tickets_dir: Some(format!("{}/.meldui/tickets", project_dir)),
     };
 
     let execute_cmd = ExecuteCommand {
@@ -382,6 +353,9 @@ pub async fn execute_step(
     let mut response_text = String::new();
     let mut final_session_id = String::new();
 
+    let read_result = tokio::time::timeout(
+        std::time::Duration::from_secs(300),
+        async {
     while let Some(line) = lines
         .next_line()
         .await
@@ -393,7 +367,17 @@ pub async fn execute_step(
 
         let json: serde_json::Value = match serde_json::from_str(&line) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(e) => {
+                let _ = app_handle.emit(
+                    "workflow-step-output",
+                    StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "stderr".to_string(),
+                        content: format!("Malformed JSON from sidecar: {} (line: {})", e, &line[..line.len().min(200)]),
+                    },
+                );
+                continue;
+            }
         };
 
         let msg_type = json
@@ -535,6 +519,27 @@ pub async fn execute_step(
             _ => {}
         }
     }
+    Ok::<(), String>(())
+        }
+    ).await;
+
+    if read_result.is_err() {
+        let _ = app_handle.emit(
+            "workflow-step-output",
+            StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "error".to_string(),
+                content: "Agent sidecar timed out after 5 minutes".to_string(),
+            },
+        );
+        // Kill the child process
+        let _ = child.kill().await;
+        return Err("Agent sidecar timed out after 5 minutes".to_string());
+    }
+
+    if let Err(e) = read_result.unwrap() {
+        return Err(e);
+    }
 
     // Wait for stderr reader
     let _ = stderr_handle.await;
@@ -551,9 +556,16 @@ pub async fn execute_step(
         *handle_guard = None;
     }
 
-    if response_text.is_empty() && !status.success() {
-        return Err("Agent sidecar failed with no output".to_string());
+    if !status.success() {
+        return Err(format!(
+            "Agent sidecar exited with status {}{}",
+            status,
+            if response_text.is_empty() { " and no output" } else { "" }
+        ));
     }
+
+    // Empty result on success exit is OK if errors were already emitted via events.
+    // The sidecar now properly handles SDKResultError and emits error events before exiting.
 
     Ok((response_text, final_session_id))
 }

@@ -1,27 +1,29 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowRight, Send } from "lucide-react";
+import { ArrowRight, Play, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { BeadsIssue } from "@/types";
+import type { Ticket, StepStatus } from "@/types";
 
 interface ChatViewProps {
-  issue: BeadsIssue;
+  ticket: Ticket;
   stepName: string;
   response: string;
   isExecuting: boolean;
   isAwaitingGate: boolean;
+  stepStatus: StepStatus;
   onApprove: () => void;
   onExecute: () => void;
 }
 
 export function ChatView({
-  issue,
+  ticket,
   stepName,
   response,
   isExecuting,
   isAwaitingGate,
+  stepStatus,
   onApprove,
   onExecute,
 }: ChatViewProps) {
@@ -49,9 +51,9 @@ export function ChatView({
 
   // Build spec content from issue fields
   const specContent = [
-    issue.design && `## Design\n${issue.design}`,
-    issue.notes && `## Notes\n${issue.notes}`,
-    issue.acceptance && `## Acceptance Criteria\n${issue.acceptance}`,
+    ticket.design && `## Design\n${ticket.design}`,
+    ticket.notes && `## Notes\n${ticket.notes}`,
+    ticket.acceptance_criteria && `## Acceptance Criteria\n${ticket.acceptance_criteria}`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -108,10 +110,34 @@ export function ChatView({
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               Processing...
             </div>
+          ) : stepStatus === "pending" ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-8">
+              <p className="text-sm text-muted-foreground">
+                Starting execution...
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onExecute}
+              >
+                <Play className="w-3.5 h-3.5 mr-1.5" />
+                Run manually
+              </Button>
+            </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Waiting for execution...
-            </p>
+            <div className="flex flex-col items-center justify-center gap-3 py-8">
+              <p className="text-sm text-muted-foreground">
+                No response received
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onExecute}
+              >
+                <Play className="w-3.5 h-3.5 mr-1.5" />
+                Retry
+              </Button>
+            </div>
           )}
           <div ref={scrollEndRef} />
         </div>

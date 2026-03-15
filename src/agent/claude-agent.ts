@@ -7,7 +7,7 @@
 
 import EventEmitter from "eventemitter3";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { createBeadsMcpServer } from "./mcp/beads-server.js";
+import { createTicketMcpServer } from "./mcp/ticket-server.js";
 import { buildSystemPromptAppend } from "./config.js";
 import type { AgentConfig, MeldAgentEvents, MeldAgent } from "./types.js";
 import { resolve, isAbsolute } from "path";
@@ -22,10 +22,7 @@ export class ClaudeAgent
   async execute(prompt: string, config: AgentConfig): Promise<void> {
     this.abortController = new AbortController();
 
-    const beadsMcpServer = createBeadsMcpServer(
-      config.projectDir,
-      config.bdBinaryPath
-    );
+    const ticketMcpServer = createTicketMcpServer(config.projectDir);
 
     const systemPromptAppend = buildSystemPromptAppend(config);
 
@@ -34,15 +31,18 @@ export class ClaudeAgent
       cwd: config.projectDir,
       model: config.model,
       maxTurns: config.maxTurns,
-      allowedTools: config.allowedTools,
+      tools: config.allowedTools,           // Restrict available tool set
+      allowedTools: config.allowedTools,    // Auto-allow them for permissions
       disallowedTools: config.disallowedTools,
+      permissionMode: "bypassPermissions",  // Sidecar is headless; we handle via canUseTool
+      allowDangerouslySkipPermissions: true,
       systemPrompt: {
         type: "preset",
         preset: "claude_code",
         append: systemPromptAppend,
       },
       mcpServers: {
-        beads: beadsMcpServer,
+        tickets: ticketMcpServer,
       },
       abortController: this.abortController,
       // Enable streaming events for progressive UI updates
@@ -64,6 +64,7 @@ export class ClaudeAgent
 
     let sessionId = "";
     let resultText = "";
+    let emittedFailure = false;
 
     try {
       this.agentQuery = query({ prompt, options: options as never });
@@ -74,10 +75,27 @@ export class ClaudeAgent
         // Handle different message types
         const msg = message as Record<string, unknown>;
 
-        // Final result
-        if ("result" in msg) {
-          resultText = msg.result as string;
-          sessionId = (msg as Record<string, unknown>).session_id as string ?? sessionId;
+        // Final result — handles both SDKResultSuccess and SDKResultError
+        if (msg.type === "result") {
+          const resultMsg = msg as {
+            type: "result";
+            subtype?: string;
+            result?: string;
+            errors?: string[];
+            session_id?: string;
+          };
+          if (resultMsg.subtype === "success") {
+            resultText = resultMsg.result ?? "";
+          } else {
+            // SDKResultError — extract error info
+            const errors = resultMsg.errors ?? [];
+            resultText = "";
+            emittedFailure = true;
+            this.emit("failed", {
+              message: `Agent ended with ${resultMsg.subtype ?? "error"}: ${errors.join(", ") || "unknown error"}`,
+            });
+          }
+          sessionId = resultMsg.session_id ?? sessionId;
           continue;
         }
 
@@ -143,7 +161,9 @@ export class ClaudeAgent
         }
       }
 
-      this.emit("completed", { response: resultText, sessionId });
+      if (!emittedFailure) {
+        this.emit("completed", { response: resultText, sessionId });
+      }
     } catch (err) {
       if (this.abortController?.signal.aborted) {
         this.emit("stopped");
@@ -220,8 +240,8 @@ export class ClaudeAgent
     _toolOptions: Record<string, unknown>,
     config: AgentConfig
   ): Promise<Record<string, unknown>> {
-    // Auto-allow: all mcp__beads tools
-    if (toolName.startsWith("mcp__beads")) {
+    // Auto-allow: all mcp__tickets tools
+    if (toolName.startsWith("mcp__tickets")) {
       return { behavior: "allow", updatedInput: input };
     }
 

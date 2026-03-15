@@ -3,10 +3,10 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { BeadsIssue, StepRecord } from "@/types";
+import type { Ticket, StepRecord } from "@/types";
 
 interface ReviewViewProps {
-  issue: BeadsIssue;
+  ticket: Ticket;
   stepName: string;
   response: string;
   stepHistory: StepRecord[];
@@ -16,7 +16,7 @@ interface ReviewViewProps {
 }
 
 export function ReviewView({
-  issue,
+  ticket,
   stepName,
   response,
   stepHistory,
@@ -59,7 +59,7 @@ export function ReviewView({
         <div className="px-6 py-3 border-b bg-white dark:bg-zinc-900 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-medium">{stepName}</h3>
-            <p className="text-xs text-muted-foreground">{issue.title}</p>
+            <p className="text-xs text-muted-foreground">{ticket.title}</p>
           </div>
           {isAwaitingGate && (
             <Button

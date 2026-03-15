@@ -174,7 +174,10 @@ async function main(): Promise<void> {
     send({ type: "error", message });
   }
 
-  // Clean up
+  // Ensure all stdout is flushed before exiting
+  if (process.stdout.writableNeedDrain) {
+    await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
+  }
   process.exit(0);
 }
 

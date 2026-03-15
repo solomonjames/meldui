@@ -17,13 +17,13 @@ export function parseAgentConfig(config: SidecarConfig): AgentConfig {
     sessionId: config.session_id,
     maxTurns: config.max_turns ?? 200,
     model: config.model,
-    bdBinaryPath: config.bd_binary_path,
+    ticketsDir: config.tickets_dir,
   };
 }
 
 function getDefaultAllowedTools(): string[] {
   return [
-    "mcp__beads",
+    "mcp__tickets",
     "Read",
     "Write",
     "Edit",
@@ -49,8 +49,8 @@ export function buildSystemPromptAppend(config: AgentConfig): string {
   parts.push(`\n## MeldUI Context\n`);
   parts.push(`You are operating inside MeldUI, a visual workflow tool for software development.`);
   parts.push(`Working directory: ${config.projectDir}`);
-  parts.push(`You have access to Beads issue tracking via MCP tools (mcp__beads__*).`);
-  parts.push(`Use beads tools to read and update ticket fields as you work.`);
+  parts.push(`You have access to ticket management via MCP tools (mcp__tickets__*).`);
+  parts.push(`Use ticket tools to read and update ticket fields as you work.`);
 
   return parts.join("\n");
 }

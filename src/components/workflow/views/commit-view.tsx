@@ -5,10 +5,10 @@ import { GitCommit, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { BeadsIssue } from "@/types";
+import type { Ticket } from "@/types";
 
 interface CommitViewProps {
-  issue: BeadsIssue;
+  ticket: Ticket;
   response: string;
   isAwaitingGate: boolean;
   onApprove: () => void;
@@ -16,13 +16,13 @@ interface CommitViewProps {
 }
 
 export function CommitView({
-  issue,
+  ticket,
   response,
   isAwaitingGate,
   onApprove,
   onBack,
 }: CommitViewProps) {
-  const fallbackMessage = `feat: ${issue.title.toLowerCase()}`;
+  const fallbackMessage = `feat: ${ticket.title.toLowerCase()}`;
   // User override: once edited, the local value takes precedence over response
   const [userOverride, setUserOverride] = useState<string | null>(null);
   const commitMessage = userOverride ?? (response || fallbackMessage);
@@ -35,7 +35,7 @@ export function CommitView({
           <GitCommit className="w-5 h-5 text-muted-foreground" />
           <div>
             <h3 className="text-sm font-medium">Commit & Complete</h3>
-            <p className="text-xs text-muted-foreground">{issue.title}</p>
+            <p className="text-xs text-muted-foreground">{ticket.title}</p>
           </div>
         </div>
       </div>

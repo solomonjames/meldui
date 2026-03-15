@@ -1,10 +1,14 @@
 mod agent;
+#[allow(dead_code)]
 mod beads;
 mod claude;
+mod settings;
+mod sync;
+mod tickets;
 mod workflow;
 
 use agent::AgentState;
-use beads::BeadsIssue;
+use tickets::Ticket;
 use workflow::{
     DiffFile, StepExecutionResult, WorkflowDefinition, WorkflowState, WorkflowSuggestion,
 };
@@ -48,106 +52,121 @@ async fn agent_permission_respond(
     }
 }
 
-// ── Beads commands ──
+// ── Ticket commands ──
 
 #[tauri::command]
-async fn beads_status(project_dir: String) -> Result<String, String> {
-    beads::get_status(&project_dir).await
-}
-
-#[tauri::command]
-async fn beads_init(project_dir: String) -> Result<String, String> {
-    beads::init(&project_dir).await
-}
-
-#[tauri::command]
-async fn beads_list(
+async fn ticket_list(
     project_dir: String,
     status: Option<String>,
-    issue_type: Option<String>,
+    ticket_type: Option<String>,
     show_all: Option<bool>,
-) -> Result<Vec<BeadsIssue>, String> {
-    beads::list_issues(
+) -> Result<Vec<Ticket>, String> {
+    tickets::list_tickets(
         &project_dir,
         status.as_deref(),
-        issue_type.as_deref(),
-        show_all.unwrap_or(false),
+        ticket_type.as_deref(),
+        show_all.unwrap_or(true),
     )
-    .await
 }
 
 #[tauri::command]
-async fn beads_create(
+async fn ticket_create(
     project_dir: String,
     title: String,
     description: Option<String>,
-    issue_type: Option<String>,
-    priority: Option<String>,
-) -> Result<BeadsIssue, String> {
-    beads::create_issue(
+    ticket_type: Option<String>,
+    priority: Option<i32>,
+) -> Result<Ticket, String> {
+    tickets::create_ticket(
         &project_dir,
         &title,
         description.as_deref(),
-        issue_type.as_deref().unwrap_or("task"),
-        priority.as_deref().unwrap_or("2"),
+        ticket_type.as_deref().unwrap_or("task"),
+        priority.unwrap_or(2),
     )
-    .await
 }
 
 #[tauri::command]
-async fn beads_update(
+async fn ticket_update(
     project_dir: String,
     id: String,
     title: Option<String>,
     status: Option<String>,
-    priority: Option<String>,
+    priority: Option<i32>,
     description: Option<String>,
     notes: Option<String>,
     design: Option<String>,
-    acceptance: Option<String>,
+    acceptance_criteria: Option<String>,
     metadata: Option<String>,
-) -> Result<serde_json::Value, String> {
-    beads::update_issue(
+) -> Result<Ticket, String> {
+    tickets::update_ticket(
         &project_dir,
         &id,
         title.as_deref(),
         status.as_deref(),
-        priority.as_deref(),
+        priority,
         description.as_deref(),
         notes.as_deref(),
         design.as_deref(),
-        acceptance.as_deref(),
+        acceptance_criteria.as_deref(),
         metadata.as_deref(),
     )
-    .await
 }
 
 #[tauri::command]
-async fn beads_close(
+async fn ticket_close(
     project_dir: String,
     id: String,
     reason: Option<String>,
-) -> Result<serde_json::Value, String> {
-    beads::close_issue(&project_dir, &id, reason.as_deref()).await
+) -> Result<Ticket, String> {
+    tickets::close_ticket(&project_dir, &id, reason.as_deref())
 }
 
 #[tauri::command]
-async fn beads_show(project_dir: String, id: String) -> Result<Vec<BeadsIssue>, String> {
-    beads::show_issue(&project_dir, &id).await
+async fn ticket_show(project_dir: String, id: String) -> Result<Ticket, String> {
+    tickets::show_ticket(&project_dir, &id)
 }
 
 #[tauri::command]
-async fn beads_delete(project_dir: String, id: String) -> Result<serde_json::Value, String> {
-    beads::delete_issue(&project_dir, &id).await
+async fn ticket_delete(project_dir: String, id: String) -> Result<(), String> {
+    tickets::delete_ticket(&project_dir, &id)
 }
 
 #[tauri::command]
-async fn beads_add_comment(
+async fn ticket_add_comment(
     project_dir: String,
     id: String,
     text: String,
-) -> Result<serde_json::Value, String> {
-    beads::add_comment(&project_dir, &id, &text).await
+) -> Result<Ticket, String> {
+    tickets::add_comment(&project_dir, &id, "user", &text)
+}
+
+// ── Settings commands ──
+
+#[tauri::command]
+async fn settings_get(project_dir: String) -> Result<settings::ProjectSettings, String> {
+    settings::get_settings(&project_dir)
+}
+
+#[tauri::command]
+async fn settings_update(
+    project_dir: String,
+    settings: settings::ProjectSettings,
+) -> Result<(), String> {
+    settings::update_settings(&project_dir, &settings)
+}
+
+// ── Sync commands ──
+
+#[tauri::command]
+async fn sync_pull_all(project_dir: String) -> Result<Vec<Ticket>, String> {
+    sync::pull_all(&project_dir).await
+}
+
+#[tauri::command]
+async fn sync_push_ticket(project_dir: String, id: String) -> Result<String, String> {
+    let ticket = tickets::show_ticket(&project_dir, &id)?;
+    sync::push_ticket(&project_dir, &ticket).await
 }
 
 // ── Workflow commands ──
@@ -172,12 +191,12 @@ async fn workflow_assign(
     issue_id: String,
     workflow_id: String,
 ) -> Result<WorkflowState, String> {
-    workflow::assign_workflow(&project_dir, &issue_id, &workflow_id).await
+    workflow::assign_workflow(&project_dir, &issue_id, &workflow_id)
 }
 
 #[tauri::command]
 async fn workflow_advance(project_dir: String, issue_id: String) -> Result<WorkflowState, String> {
-    workflow::advance_step(&project_dir, &issue_id).await
+    workflow::advance_step(&project_dir, &issue_id)
 }
 
 #[tauri::command]
@@ -185,7 +204,7 @@ async fn workflow_state(
     project_dir: String,
     issue_id: String,
 ) -> Result<Option<WorkflowState>, String> {
-    workflow::get_workflow_state(&project_dir, &issue_id).await
+    workflow::get_workflow_state(&project_dir, &issue_id)
 }
 
 #[tauri::command]
@@ -235,15 +254,17 @@ pub fn run() {
             claude_status,
             claude_login,
             agent_permission_respond,
-            beads_status,
-            beads_init,
-            beads_list,
-            beads_create,
-            beads_update,
-            beads_close,
-            beads_show,
-            beads_delete,
-            beads_add_comment,
+            ticket_list,
+            ticket_create,
+            ticket_update,
+            ticket_close,
+            ticket_show,
+            ticket_delete,
+            ticket_add_comment,
+            settings_get,
+            settings_update,
+            sync_pull_all,
+            sync_push_ticket,
             workflow_list,
             workflow_get,
             workflow_assign,

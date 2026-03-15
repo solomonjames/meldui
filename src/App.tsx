@@ -7,27 +7,25 @@ import { CreateTicketDialog } from "@/components/backlog/create-ticket-dialog";
 import { WelcomeScreen } from "@/components/welcome/welcome-screen";
 import { WorkflowShell } from "@/components/workflow/workflow-shell";
 import { useClaude } from "@/hooks/use-claude";
-import { useBeads } from "@/hooks/use-tasks";
+import { useTickets } from "@/hooks/use-tickets";
 import { useWorkflow } from "@/hooks/use-workflow";
 import { useProjectDir } from "@/hooks/use-project-dir";
-import type { BeadsIssue } from "@/types";
+import type { Ticket } from "@/types";
 
 function App() {
   const { projectDir, folderName, loading: dirLoading, openFolderDialog } = useProjectDir();
   const claude = useClaude();
-  const beads = useBeads(projectDir ?? "");
+  const ticketStore = useTickets(projectDir ?? "");
   const workflow = useWorkflow(projectDir ?? "");
   const [activePage, setActivePage] = useState("backlog");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [activeWorkflowTicket, setActiveWorkflowTicket] = useState<BeadsIssue | null>(null);
+  const [activeWorkflowTicket, setActiveWorkflowTicket] = useState<Ticket | null>(null);
   const [workflowDef, setWorkflowDef] = useState<Awaited<ReturnType<typeof workflow.getWorkflow>>>(null);
 
   useEffect(() => {
     if (!projectDir) return;
     claude.checkStatus();
-    beads.checkStatus().then(() => {
-      beads.refreshIssues();
-    });
+    ticketStore.refreshTickets();
     workflow.listWorkflows();
   }, [projectDir]);
 
@@ -67,11 +65,11 @@ function App() {
   const { setActiveTicketId } = workflow;
 
   const handleStartWorkflow = useCallback(
-    async (issue: BeadsIssue) => {
-      const state = await getWorkflowState(issue.id);
+    async (ticket: Ticket) => {
+      const state = await getWorkflowState(ticket.id);
       if (state) {
-        setActiveWorkflowTicket(issue);
-        setActiveTicketId(issue.id);
+        setActiveWorkflowTicket(ticket);
+        setActiveTicketId(ticket.id);
         setActivePage("workflow");
       }
     },
@@ -79,34 +77,34 @@ function App() {
   );
 
   const handleAutoStart = useCallback(
-    async (issue: BeadsIssue) => {
-      let state = await getWorkflowState(issue.id);
+    async (ticket: Ticket) => {
+      let state = await getWorkflowState(ticket.id);
 
       if (!state) {
-        const suggestion = await suggestWf(issue.id);
+        const suggestion = await suggestWf(ticket.id);
         if (suggestion) {
-          await assignWf(issue.id, suggestion.workflow_id);
-          state = await getWorkflowState(issue.id);
+          await assignWf(ticket.id, suggestion.workflow_id);
+          state = await getWorkflowState(ticket.id);
         }
       }
 
       if (state) {
-        setActiveWorkflowTicket(issue);
-        setActiveTicketId(issue.id);
+        setActiveWorkflowTicket(ticket);
+        setActiveTicketId(ticket.id);
         setActivePage("workflow");
       }
     },
     [getWorkflowState, suggestWf, assignWf, setActiveTicketId]
   );
 
-  const { refreshIssues } = beads;
+  const { refreshTickets } = ticketStore;
 
   const handleBackToBoard = useCallback(() => {
     setActiveWorkflowTicket(null);
     setActiveTicketId(null);
     setActivePage("backlog");
-    refreshIssues();
-  }, [refreshIssues, setActiveTicketId]);
+    refreshTickets();
+  }, [refreshTickets, setActiveTicketId]);
 
   const handleSidebarNavigate = useCallback(
     (page: string) => {
@@ -120,11 +118,11 @@ function App() {
   );
 
   const handleSidebarTicketClick = useCallback(
-    async (issue: BeadsIssue) => {
-      const state = await getWorkflowState(issue.id);
+    async (ticket: Ticket) => {
+      const state = await getWorkflowState(ticket.id);
       if (state) {
-        setActiveWorkflowTicket(issue);
-        setActiveTicketId(issue.id);
+        setActiveWorkflowTicket(ticket);
+        setActiveTicketId(ticket.id);
         setActivePage("workflow");
       }
     },
@@ -143,7 +141,7 @@ function App() {
         <AppSidebar
           activePage={activePage}
           onNavigate={handleSidebarNavigate}
-          issues={beads.issues}
+          tickets={ticketStore.tickets}
           onCreateTicket={() => setCreateDialogOpen(true)}
           folderName={folderName}
           onOpenFolder={openFolderDialog}
@@ -153,7 +151,6 @@ function App() {
       }
       statusBar={
         <StatusBar
-          beadsConnected={beads.status?.initialized ?? false}
           branch="main"
           version="v0.1.0"
         />
@@ -161,13 +158,14 @@ function App() {
     >
       {activePage === "workflow" && activeWorkflowTicket && workflow.currentState ? (
         <WorkflowShell
-          issue={activeWorkflowTicket}
+          ticket={activeWorkflowTicket}
           projectDir={projectDir}
           workflowState={workflow.currentState}
           workflowDefinition={workflowDef}
           stepOutputs={workflow.stepOutputs}
           loading={workflow.loading}
           error={workflow.error}
+          listenersReady={workflow.listenersReady}
           pendingPermission={workflow.pendingPermission}
           onRespondToPermission={workflow.respondToPermission}
           onExecuteStep={workflow.executeStep}
@@ -177,17 +175,15 @@ function App() {
         />
       ) : (
         <BacklogPage
-          issues={beads.issues}
-          beadsStatus={beads.status}
-          loading={beads.loading}
-          error={beads.error}
-          onUpdateIssue={beads.updateIssue}
-          onCloseIssue={beads.closeIssue}
-          onDeleteIssue={beads.deleteIssue}
-          onShowIssue={beads.showIssue}
-          onAddComment={beads.addComment}
-          onRefresh={beads.refreshIssues}
-          onInitBeads={beads.initBeads}
+          tickets={ticketStore.tickets}
+          loading={ticketStore.loading}
+          error={ticketStore.error}
+          onUpdateTicket={ticketStore.updateTicket}
+          onCloseTicket={ticketStore.closeTicket}
+          onDeleteTicket={ticketStore.deleteTicket}
+          onShowTicket={ticketStore.showTicket}
+          onAddComment={ticketStore.addComment}
+          onRefresh={ticketStore.refreshTickets}
           onAutoStart={handleAutoStart}
           workflows={workflow.workflows}
           onAssignWorkflow={workflow.assignWorkflow}
@@ -199,7 +195,7 @@ function App() {
       <CreateTicketDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        onCreateIssue={beads.createIssue}
+        onCreateTicket={ticketStore.createTicket}
       />
     </AppLayout>
   );

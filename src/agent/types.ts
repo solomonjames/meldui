@@ -13,7 +13,7 @@ export interface AgentConfig {
   sessionId?: string;
   projectDir: string;
   maxTurns?: number;
-  bdBinaryPath?: string;
+  ticketsDir?: string;
 }
 
 export interface PermissionRequestEvent {

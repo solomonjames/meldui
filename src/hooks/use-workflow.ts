@@ -31,6 +31,7 @@ export function useWorkflow(projectDir: string) {
   const [stepOutputs, setStepOutputs] = useState<Record<string, StepOutputStream>>({});
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
+  const [listenersReady, setListenersReady] = useState(false);
   const unlistenRef = useRef<UnlistenFn | null>(null);
   const permissionUnlistenRef = useRef<UnlistenFn | null>(null);
   const currentStepRef = useRef<string | null>(null);
@@ -43,6 +44,7 @@ export function useWorkflow(projectDir: string) {
   // Subscribe to streaming events
   useEffect(() => {
     let cancelled = false;
+    setListenersReady(false);
 
     const setup = async () => {
       // Clean up previous listener
@@ -128,6 +130,9 @@ export function useWorkflow(projectDir: string) {
               case "result":
                 updated.resultContent = chunk.content;
                 break;
+              case "error":
+                updated.stderrLines = [...current.stderrLines, `[error] ${chunk.content}`];
+                break;
               default:
                 return prev;
             }
@@ -155,6 +160,7 @@ export function useWorkflow(projectDir: string) {
 
       if (!cancelled) {
         permissionUnlistenRef.current = permUnlisten;
+        setListenersReady(true);
       } else {
         permUnlisten();
       }
@@ -366,6 +372,7 @@ export function useWorkflow(projectDir: string) {
     currentState,
     loading,
     error,
+    listenersReady,
     stepOutputs,
     activeTicketId,
     setActiveTicketId,

@@ -1,12 +1,14 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { StageBar } from "./stage-bar";
+import { DebugPanel } from "./debug-panel";
 import { ChatView } from "./views/chat-view";
 import { ReviewView } from "./views/review-view";
 import { ProgressView } from "./views/progress-view";
 import { DiffReviewView } from "./views/diff-review-view";
 import { CommitView } from "./views/commit-view";
+import { useDebugLog } from "@/hooks/use-debug-log";
 import type {
-  BeadsIssue,
+  Ticket,
   WorkflowDefinition,
   WorkflowState,
   StepExecutionResult,
@@ -16,13 +18,14 @@ import type {
 } from "@/types";
 
 interface WorkflowShellProps {
-  issue: BeadsIssue;
+  ticket: Ticket;
   projectDir: string;
   workflowState: WorkflowState;
   workflowDefinition: WorkflowDefinition | null;
   stepOutputs: Record<string, StepOutputStream>;
   loading: boolean;
   error: string | null;
+  listenersReady: boolean;
   pendingPermission: PermissionRequest | null;
   onRespondToPermission: (requestId: string, allowed: boolean) => void;
   onExecuteStep: (issueId: string) => Promise<StepExecutionResult | null>;
@@ -32,12 +35,13 @@ interface WorkflowShellProps {
 }
 
 export function WorkflowShell({
-  issue,
+  ticket,
   workflowState,
   workflowDefinition,
   stepOutputs,
   loading,
   error,
+  listenersReady,
   pendingPermission,
   onRespondToPermission,
   onExecuteStep,
@@ -46,46 +50,69 @@ export function WorkflowShell({
   onBack,
 }: WorkflowShellProps) {
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
+  const executingRef = useRef<string | null>(null);
+  const debug = useDebugLog();
 
   const currentStep = workflowDefinition?.steps.find(
     (s) => s.id === workflowState.current_step_id
   );
 
+  // Reset executingRef when step changes
+  useEffect(() => {
+    executingRef.current = null;
+  }, [workflowState.current_step_id]);
+
   const handleExecute = useCallback(async () => {
-    const result = await onExecuteStep(issue.id);
+    const result = await onExecuteStep(ticket.id);
     if (result) {
       setLastResult(result);
     }
-  }, [issue.id, onExecuteStep]);
+  }, [ticket.id, onExecuteStep]);
 
-  // Auto-execute on pending steps — subscribe to step output events
+  // Auto-execute on pending steps
   useEffect(() => {
+    const guards = { status: workflowState.step_status, loading, listenersReady, hasStep: !!currentStep };
+
     if (
       workflowState.step_status !== "pending" ||
       !currentStep ||
-      loading
+      loading ||
+      !listenersReady
     ) {
+      debug.log("lifecycle", `auto-execute skipped: ${JSON.stringify(guards)}`);
       return;
     }
 
+    // Prevent double execution
+    if (executingRef.current === currentStep.id) {
+      debug.log("lifecycle", `auto-execute skipped: already executing ${currentStep.id}`);
+      return;
+    }
+    executingRef.current = currentStep.id;
+
+    debug.log("lifecycle", `auto-execute fired for step ${currentStep.id}`);
+
     let cancelled = false;
-    onExecuteStep(issue.id)
+    onExecuteStep(ticket.id)
       .then((result) => {
-        if (!cancelled && result) setLastResult(result);
+        if (!cancelled && result) {
+          debug.log("lifecycle", `auto-execute completed for step ${currentStep.id}`);
+          setLastResult(result);
+        }
       })
-      .catch(() => {
-        // Error is already handled by the hook's setError
+      .catch((err) => {
+        debug.log("error", `auto-execute failed: ${err}`);
+        // Reset executingRef so retry is possible
+        executingRef.current = null;
       });
 
     return () => { cancelled = true; };
-    // Only trigger on step changes, not on every render
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflowState.current_step_id]);
+  }, [workflowState.current_step_id, workflowState.step_status, loading, listenersReady, currentStep, onExecuteStep, ticket.id, debug]);
 
   const handleApprove = useCallback(async () => {
-    await onApproveGate(issue.id);
+    await onApproveGate(ticket.id);
     setLastResult(null);
-  }, [issue.id, onApproveGate]);
+  }, [ticket.id, onApproveGate]);
 
   if (!workflowDefinition) {
     return (
@@ -108,7 +135,7 @@ export function WorkflowShell({
           <div className="text-center space-y-3">
             <h2 className="text-xl font-semibold">Workflow Complete</h2>
             <p className="text-muted-foreground">
-              All steps have been completed for {issue.title}
+              All steps have been completed for {ticket.title}
             </p>
             <button
               onClick={onBack}
@@ -134,11 +161,12 @@ export function WorkflowShell({
       case "chat":
         return (
           <ChatView
-            issue={issue}
+            ticket={ticket}
             stepName={currentStep.name}
             response={responseText}
             isExecuting={isExecuting}
             isAwaitingGate={isAwaitingGate}
+            stepStatus={workflowState.step_status}
             onApprove={handleApprove}
             onExecute={handleExecute}
           />
@@ -146,7 +174,7 @@ export function WorkflowShell({
       case "review":
         return (
           <ReviewView
-            issue={issue}
+            ticket={ticket}
             stepName={currentStep.name}
             response={responseText}
             stepHistory={workflowState.step_history}
@@ -169,7 +197,7 @@ export function WorkflowShell({
       case "diff_review":
         return (
           <DiffReviewView
-            issue={issue}
+            ticket={ticket}
             isAwaitingGate={isAwaitingGate}
             onApprove={handleApprove}
             onGetDiff={onGetDiff}
@@ -178,7 +206,7 @@ export function WorkflowShell({
       case "commit":
         return (
           <CommitView
-            issue={issue}
+            ticket={ticket}
             response={responseText}
             isAwaitingGate={isAwaitingGate}
             onApprove={handleApprove}
@@ -222,6 +250,18 @@ export function WorkflowShell({
         </div>
       )}
       <div className="flex-1 overflow-hidden">{renderView()}</div>
+      <DebugPanel
+        entries={debug.getEntries()}
+        stateSnapshot={{
+          step_status: workflowState.step_status,
+          loading,
+          error,
+          listenersReady,
+          currentStepId: workflowState.current_step_id,
+        }}
+        onClear={debug.clear}
+        onRefresh={debug.refresh}
+      />
     </div>
   );
 }

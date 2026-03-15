@@ -8,7 +8,7 @@ import {
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
-import type { BeadsIssue } from "@/types";
+import type { Ticket } from "@/types";
 
 export const TYPE_CONFIG: Record<
   string,
@@ -57,20 +57,20 @@ const NEXT_STATUS: Record<string, string | null> = {
 };
 
 interface KanbanCardProps {
-  issue: BeadsIssue;
+  ticket: Ticket;
   variant: string;
   onUpdate: (
     id: string,
     updates: { status?: string; priority?: string }
   ) => Promise<void>;
   onClose: (id: string) => Promise<void>;
-  onClick?: (issue: BeadsIssue) => void;
+  onClick?: (ticket: Ticket) => void;
   isOverlay?: boolean;
 }
 
-export function KanbanCard({ issue, variant, onUpdate, onClose, onClick, isOverlay }: KanbanCardProps) {
-  const typeInfo = TYPE_CONFIG[issue.issue_type] ?? TYPE_CONFIG.task;
-  const priorityInfo = PRIORITY_CONFIG[issue.priority] ?? PRIORITY_CONFIG[2];
+export function KanbanCard({ ticket, variant, onUpdate, onClose, onClick, isOverlay }: KanbanCardProps) {
+  const typeInfo = TYPE_CONFIG[ticket.ticket_type] ?? TYPE_CONFIG.task;
+  const priorityInfo = PRIORITY_CONFIG[ticket.priority] ?? PRIORITY_CONFIG[2];
   const TypeIcon = typeInfo.icon;
 
   const isClosed = variant === "closed";
@@ -83,7 +83,7 @@ export function KanbanCard({ issue, variant, onUpdate, onClose, onClick, isOverl
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: issue.id, disabled: isOverlay });
+  } = useSortable({ id: ticket.id, disabled: isOverlay });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -97,7 +97,7 @@ export function KanbanCard({ issue, variant, onUpdate, onClose, onClick, isOverl
       {...attributes}
       {...listeners}
       onClick={() => {
-        if (!isDragging && onClick) onClick(issue);
+        if (!isDragging && onClick) onClick(ticket);
       }}
       className={`rounded-[10px] border p-3.5 shadow-sm transition-colors cursor-grab active:cursor-grabbing ${
         isDragging ? "opacity-40" : ""
@@ -112,11 +112,11 @@ export function KanbanCard({ issue, variant, onUpdate, onClose, onClick, isOverl
       <h4
         className={`text-sm font-medium leading-snug ${isClosed ? "text-muted-foreground" : ""}`}
       >
-        {issue.title}
+        {ticket.title}
       </h4>
-      {issue.description && (
+      {ticket.description && (
         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-          {issue.description}
+          {ticket.description}
         </p>
       )}
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -124,7 +124,7 @@ export function KanbanCard({ issue, variant, onUpdate, onClose, onClick, isOverl
           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${typeInfo.bg} ${typeInfo.color}`}
         >
           <TypeIcon className="w-3 h-3" />
-          {issue.issue_type}
+          {ticket.ticket_type}
         </span>
         <span
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${priorityInfo.bg} ${priorityInfo.color}`}
@@ -133,27 +133,27 @@ export function KanbanCard({ issue, variant, onUpdate, onClose, onClick, isOverl
         </span>
         {!isClosed && (
           <div className="ml-auto flex gap-1">
-            {NEXT_STATUS[issue.status] && (
+            {NEXT_STATUS[ticket.status] && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-5 text-[10px] px-1.5"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onUpdate(issue.id, { status: NEXT_STATUS[issue.status]! });
+                  onUpdate(ticket.id, { status: NEXT_STATUS[ticket.status]! });
                 }}
               >
-                {NEXT_STATUS[issue.status]?.replace("_", " ")} →
+                {NEXT_STATUS[ticket.status]?.replace("_", " ")} →
               </Button>
             )}
-            {issue.status === "in_progress" && (
+            {ticket.status === "in_progress" && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-5 text-[10px] px-1.5"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onClose(issue.id);
+                  onClose(ticket.id);
                 }}
               >
                 close →

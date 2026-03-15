@@ -2,16 +2,17 @@ import { FolderOpen, Layers, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { BeadsIssue } from "@/types";
+import type { Ticket } from "@/types";
 
 interface AppSidebarProps {
   activePage: string;
   onNavigate: (page: string) => void;
-  issues: BeadsIssue[];
+  tickets: Ticket[];
   onCreateTicket: () => void;
   folderName: string | null;
   onOpenFolder: () => void;
-  onTicketClick?: (issue: BeadsIssue) => void;
+  onTicketClick?: (ticket: Ticket) => void;
+  activeTicketId?: string | null;
 }
 
 const NAV_ITEMS = [
@@ -21,13 +22,14 @@ const NAV_ITEMS = [
 export function AppSidebar({
   activePage,
   onNavigate,
-  issues,
+  tickets,
   onCreateTicket,
   folderName,
   onOpenFolder,
   onTicketClick,
+  activeTicketId,
 }: AppSidebarProps) {
-  const activeTickets = issues.filter((i) => i.status === "in_progress");
+  const activeTickets = tickets.filter((t) => t.status === "in_progress");
 
   return (
     <div className="w-60 shrink-0 bg-zinc-50 dark:bg-zinc-900 border-r flex flex-col">
@@ -103,23 +105,30 @@ export function AppSidebar({
               No active tickets
             </p>
           ) : (
-            activeTickets.map((issue) => (
-              <button
-                key={issue.id}
-                onClick={() => onTicketClick?.(issue)}
-                className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">
-                    {issue.id.slice(0, 12)}
-                  </span>
-                  <span className="inline-flex items-center rounded-full bg-emerald-muted text-emerald text-[10px] px-1.5 py-0.5 font-medium">
-                    in progress
-                  </span>
-                </div>
-                <p className="text-xs mt-0.5 truncate">{issue.title}</p>
-              </button>
-            ))
+            activeTickets.map((ticket) => {
+              const isSelected = activeTicketId === ticket.id;
+              return (
+                <button
+                  key={ticket.id}
+                  onClick={() => onTicketClick?.(ticket)}
+                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
+                    isSelected
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-l-2 border-emerald"
+                      : "hover:bg-white/50 dark:hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-mono shrink-0 ${isSelected ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                      {ticket.id.slice(0, 12)}
+                    </span>
+                    <span className="inline-flex items-center rounded-full bg-emerald-muted text-emerald text-[10px] px-1.5 py-0.5 font-medium">
+                      in progress
+                    </span>
+                  </div>
+                  <p className={`text-xs mt-0.5 truncate ${isSelected ? "text-foreground" : ""}`}>{ticket.title}</p>
+                </button>
+              );
+            })
           )}
         </ScrollArea>
       </div>

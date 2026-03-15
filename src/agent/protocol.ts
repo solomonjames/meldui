@@ -34,7 +34,7 @@ export interface SidecarConfig {
   session_id?: string;
   max_turns?: number;
   model?: string;
-  bd_binary_path?: string;
+  tickets_dir?: string;
 }
 
 // ── Stdout: Sidecar → Rust ──

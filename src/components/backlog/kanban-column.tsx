@@ -5,19 +5,19 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { KanbanCard } from "./kanban-card";
-import type { BeadsIssue } from "@/types";
+import type { Ticket } from "@/types";
 
 interface KanbanColumnProps {
   title: string;
   variant: string;
   count: number;
-  issues: BeadsIssue[];
+  tickets: Ticket[];
   onUpdate: (
     id: string,
     updates: { status?: string; priority?: string }
   ) => Promise<void>;
   onClose: (id: string) => Promise<void>;
-  onCardClick?: (issue: BeadsIssue) => void;
+  onCardClick?: (ticket: Ticket) => void;
 }
 
 const COLUMN_CONFIG: Record<
@@ -56,7 +56,7 @@ export function KanbanColumn({
   title,
   variant,
   count,
-  issues,
+  tickets,
   onUpdate,
   onClose,
   onCardClick,
@@ -65,7 +65,7 @@ export function KanbanColumn({
   const Icon = config.icon;
 
   const { setNodeRef, isOver } = useDroppable({ id: variant });
-  const itemIds = useMemo(() => issues.map((i) => i.id), [issues]);
+  const itemIds = useMemo(() => tickets.map((t) => t.id), [tickets]);
 
   return (
     <div
@@ -87,10 +87,10 @@ export function KanbanColumn({
       <ScrollArea className="flex-1">
         <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-2 pr-2">
-            {issues.map((issue) => (
+            {tickets.map((ticket) => (
               <KanbanCard
-                key={issue.id}
-                issue={issue}
+                key={ticket.id}
+                ticket={ticket}
                 variant={variant}
                 onUpdate={onUpdate}
                 onClose={onClose}

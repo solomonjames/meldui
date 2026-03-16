@@ -32,6 +32,7 @@ interface WorkflowShellProps {
   onApproveGate: (issueId: string) => Promise<unknown>;
   onGetDiff: () => Promise<DiffFile[]>;
   onBack: () => void;
+  onRefreshTicket: () => Promise<void>;
 }
 
 export function WorkflowShell({
@@ -48,6 +49,7 @@ export function WorkflowShell({
   onApproveGate,
   onGetDiff,
   onBack,
+  onRefreshTicket,
 }: WorkflowShellProps) {
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
   // Use a ref with a monotonic counter to prevent StrictMode double-fire
@@ -69,8 +71,9 @@ export function WorkflowShell({
     const result = await onExecuteStep(ticket.id);
     if (result) {
       setLastResult(result);
+      await onRefreshTicket();
     }
-  }, [ticket.id, onExecuteStep]);
+  }, [ticket.id, onExecuteStep, onRefreshTicket]);
 
   // Auto-execute on pending steps
   useEffect(() => {
@@ -98,10 +101,11 @@ export function WorkflowShell({
 
     let cancelled = false;
     onExecuteStep(ticket.id)
-      .then((result) => {
+      .then(async (result) => {
         if (!cancelled && result) {
           debug.log("lifecycle", `auto-execute completed for step ${currentStep.id}`);
           setLastResult(result);
+          await onRefreshTicket();
         }
       })
       .catch((err) => {
@@ -111,7 +115,7 @@ export function WorkflowShell({
       });
 
     return () => { cancelled = true; };
-  }, [workflowState.current_step_id, workflowState.step_status, loading, listenersReady, currentStep, onExecuteStep, ticket.id, debug]);
+  }, [workflowState.current_step_id, workflowState.step_status, loading, listenersReady, currentStep, onExecuteStep, onRefreshTicket, ticket.id, debug]);
 
   const handleApprove = useCallback(async () => {
     await onApproveGate(ticket.id);
@@ -158,7 +162,12 @@ export function WorkflowShell({
   const isCompleted = workflowState.step_status === "completed";
   const isFailed = typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
   const currentStepOutput = currentStep ? stepOutputs[currentStep.id] : undefined;
-  const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
+  const writesToTicket = currentStep.writes_to && currentStep.writes_to.length > 0;
+  // For writesToTicket steps, don't pass the final result as the response —
+  // it goes to Ticket Context via stepOutput.resultContent instead
+  const responseText = writesToTicket
+    ? ""
+    : (lastResult?.response ?? currentStepOutput?.textContent ?? "");
 
   const renderView = () => {
     switch (currentStep.view) {
@@ -172,6 +181,7 @@ export function WorkflowShell({
             isAwaitingGate={isAwaitingGate}
             stepStatus={workflowState.step_status}
             stepOutput={currentStepOutput}
+            writesToTicket={writesToTicket ?? false}
             onApprove={handleApprove}
             onExecute={handleExecute}
           />

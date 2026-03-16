@@ -99,6 +99,14 @@ function App() {
 
   const { refreshTickets } = ticketStore;
 
+  const handleRefreshTicket = useCallback(async () => {
+    if (!activeWorkflowTicket || !projectDir) return;
+    const updated = await ticketStore.showTicket(activeWorkflowTicket.id);
+    if (updated) {
+      setActiveWorkflowTicket(updated);
+    }
+  }, [activeWorkflowTicket, projectDir, ticketStore]);
+
   const handleBackToBoard = useCallback(() => {
     setActiveWorkflowTicket(null);
     setActiveTicketId(null);
@@ -172,6 +180,7 @@ function App() {
           onApproveGate={workflow.approveGate}
           onGetDiff={workflow.getDiff}
           onBack={handleBackToBoard}
+          onRefreshTicket={handleRefreshTicket}
         />
       ) : (
         <BacklogPage

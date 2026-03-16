@@ -20,6 +20,7 @@ function emptyStepOutput(): StepOutputStream {
     stderrLines: [],
     resultContent: null,
     thinkingContent: "",
+    lastChunkType: "",
   };
 }
 
@@ -70,7 +71,14 @@ export function useWorkflow(projectDir: string) {
 
             switch (chunk.chunk_type) {
               case "text":
-                updated.textContent = current.textContent + chunk.content;
+                // Insert paragraph break when text resumes after tool use,
+                // so each "turn" of agent text renders as a separate block
+                if (current.textContent && current.lastChunkType !== "text") {
+                  updated.textContent = current.textContent + "\n\n" + chunk.content;
+                } else {
+                  updated.textContent = current.textContent + chunk.content;
+                }
+                updated.lastChunkType = "text";
                 break;
               case "tool_start": {
                 try {
@@ -85,6 +93,7 @@ export function useWorkflow(projectDir: string) {
                 } catch {
                   // ignore malformed tool_start
                 }
+                updated.lastChunkType = "tool_start";
                 break;
               }
               case "tool_input": {
@@ -119,6 +128,7 @@ export function useWorkflow(projectDir: string) {
                 } catch {
                   // ignore malformed tool_result
                 }
+                updated.lastChunkType = "tool_result";
                 break;
               }
               case "thinking":

@@ -101,6 +101,7 @@ export interface StepOutputStream {
   stderrLines: string[];
   resultContent: string | null;
   thinkingContent: string;
+  lastChunkType: string;
 }
 
 export interface PermissionRequest {

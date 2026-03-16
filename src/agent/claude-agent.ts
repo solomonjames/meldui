@@ -152,12 +152,10 @@ export class ClaudeAgent
                     toolInput: blockObj.input as Record<string, unknown>,
                     toolUseId: blockObj.id as string,
                   });
-                } else if (blockObj.type === "text") {
-                  const text = blockObj.text as string;
-                  if (text) {
-                    this.emit("chat-agent-message", { content: text });
-                  }
                 }
+                // Note: text blocks are NOT emitted here — they arrive as
+                // stream_event content_block_delta text_delta instead.
+                // Emitting from both causes duplicate text in the UI.
               }
             }
             break;

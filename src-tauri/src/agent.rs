@@ -293,6 +293,8 @@ pub async fn execute_step(
         tickets_dir: Some(format!("{}/.meldui/tickets", project_dir)),
     };
 
+    let tools_summary = config.allowed_tools.as_ref().map(|t| t.join(","));
+
     let execute_cmd = ExecuteCommand {
         cmd_type: "execute".to_string(),
         prompt: prompt.to_string(),
@@ -302,7 +304,13 @@ pub async fn execute_step(
     let execute_json = serde_json::to_string(&execute_cmd)
         .map_err(|e| format!("Failed to serialize execute command: {}", e))?;
 
-    log::info!("agent: sending execute command for issue {}", issue_id);
+    log::info!("agent: sending execute command for issue {} (session={}, tools={:?}, prompt_len={})",
+        issue_id,
+        session_id.unwrap_or("new"),
+        tools_summary,
+        prompt.len());
+
+    let start_time = std::time::Instant::now();
 
     // Spawn the sidecar with augmented PATH + forward auth/env vars
     let mut cmd = Command::new(&agent_bin);
@@ -443,15 +451,15 @@ pub async fn execute_step(
             .and_then(|t| t.as_str())
             .unwrap_or("unknown");
 
-        // Log type + summary for debugging
+        // Log full JSON for each message (truncate large content fields)
         match msg_type {
-            "error" => log::error!("agent: NDJSON recv type=error message={}",
-                json.get("message").and_then(|m| m.as_str()).unwrap_or("(none)")),
-            "result" => log::info!("agent: NDJSON recv type=result len={}",
-                json.get("content").and_then(|c| c.as_str()).map(|s| s.len()).unwrap_or(0)),
-            "text" => log::info!("agent: NDJSON recv type=text len={}",
-                json.get("content").and_then(|c| c.as_str()).map(|s| s.len()).unwrap_or(0)),
-            _ => log::info!("agent: NDJSON recv type={}", msg_type),
+            "text" | "tool_input" | "thinking" => {
+                // High-frequency delta messages — log at debug with truncated content
+                let content_len = json.get("content").and_then(|c| c.as_str()).map(|s| s.len()).unwrap_or(0);
+                log::debug!("agent: NDJSON type={} content_len={}", msg_type, content_len);
+            }
+            "error" => log::error!("agent: NDJSON {}", line),
+            _ => log::info!("agent: NDJSON {}", &line[..line.len().min(1000)]),
         }
 
         match msg_type {
@@ -619,7 +627,9 @@ pub async fn execute_step(
         .await
         .map_err(|e| format!("Failed to wait for agent sidecar: {}", e))?;
 
-    log::info!("agent: sidecar exited with status {}", status);
+    let elapsed = start_time.elapsed();
+    log::info!("agent: sidecar exited with status {} (elapsed={:.1}s, response_len={})",
+        status, elapsed.as_secs_f64(), response_text.len());
 
     // Clear the agent handle
     if let Some(state) = app_handle.try_state::<AgentState>() {

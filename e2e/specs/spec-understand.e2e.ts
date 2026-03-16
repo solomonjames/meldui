@@ -32,12 +32,13 @@ describe("Spec Understand workflow step", () => {
       // Wait for chat view to appear (indicates a chat-type step is active)
       const chatView = await $('[data-testid="chat-view"]');
       if (await chatView.isExisting()) {
-        // Wait for response content to stream in
-        const chatResponse = await $('[data-testid="chat-response"]');
-        await chatResponse.waitForExist({ timeout: 30000 });
+        // Wait for the ticket context panel to show streamed content
+        // (spec-understand writes_to: [design], so text streams into Ticket Context)
+        const ticketContext = await chatView.$(".w-1\\/2.border-r .prose");
+        await ticketContext.waitForExist({ timeout: 30000 });
 
-        // Verify the fixture content appeared
-        const responseText = await chatResponse.getText();
+        // Verify the fixture content appeared in Ticket Context
+        const responseText = await ticketContext.getText();
         expect(responseText).toContain("Problem Statement");
 
         // Check for the approve gate button

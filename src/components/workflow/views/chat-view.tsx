@@ -4,7 +4,95 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Play, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { Ticket, StepStatus, StepOutputStream } from "@/types";
+import type { Ticket, StepStatus, StepOutputStream, ToolActivity } from "@/types";
+
+const TOOL_LABELS: Record<string, string> = {
+  Write: "Writing file",
+  Read: "Reading file",
+  Edit: "Editing file",
+  Bash: "Running command",
+  Glob: "Searching files",
+  Grep: "Searching content",
+  Agent: "Running agent",
+  WebSearch: "Searching web",
+  WebFetch: "Fetching URL",
+};
+
+function ToolCard({ activity }: { activity: ToolActivity }) {
+  const [expanded, setExpanded] = useState(false);
+  const isRunning = activity.status === "running";
+  const hasInput = activity.input.length > 0;
+
+  let summary = "";
+  try {
+    const parsed = JSON.parse(activity.input);
+    if (parsed.file_path) summary = parsed.file_path;
+    else if (parsed.command) summary = parsed.command;
+    else if (parsed.pattern) summary = parsed.pattern;
+    else if (parsed.content?.slice) summary = `${parsed.content.slice(0, 60)}...`;
+  } catch {
+    if (activity.input.length > 0) {
+      summary = activity.input.slice(0, 80);
+      if (activity.input.length > 80) summary += "...";
+    }
+  }
+
+  return (
+    <div className="rounded-lg border bg-white dark:bg-zinc-900 my-2">
+      <button
+        onClick={() => hasInput && setExpanded(!expanded)}
+        className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm"
+      >
+        {isRunning ? (
+          <div className="relative w-4 h-4 shrink-0">
+            <div className="absolute inset-0 rounded-full border-2 border-emerald-200 dark:border-emerald-800" />
+            <div className="absolute inset-0 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+          </div>
+        ) : (
+          <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        )}
+        <span className="font-medium text-zinc-700 dark:text-zinc-300">
+          {TOOL_LABELS[activity.tool_name] ?? activity.tool_name}
+        </span>
+        {summary && (
+          <span className="text-xs text-muted-foreground truncate">
+            {summary}
+          </span>
+        )}
+        {hasInput && (
+          <svg
+            className={`w-3 h-3 ml-auto text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
+      </button>
+      {expanded && hasInput && (
+        <div className="px-3 pb-2 border-t">
+          <pre className="text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap mt-2 max-h-48 overflow-y-auto">
+            {activity.input}
+          </pre>
+        </div>
+      )}
+      {expanded && activity.result && (
+        <div className="px-3 pb-2 border-t">
+          <p className="text-xs font-medium text-zinc-500 mt-2 mb-1">Result{activity.is_error ? " (error)" : ""}:</p>
+          <pre className={`text-xs overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto ${activity.is_error ? "text-red-500" : "text-muted-foreground"}`}>
+            {activity.result.slice(0, 2000)}{activity.result.length > 2000 ? "..." : ""}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ChatViewProps {
   ticket: Ticket;
@@ -14,6 +102,7 @@ interface ChatViewProps {
   isAwaitingGate: boolean;
   stepStatus: StepStatus;
   stepOutput?: StepOutputStream;
+  writesToTicket: boolean;
   onApprove: () => void;
   onExecute: () => void;
 }
@@ -26,15 +115,30 @@ export function ChatView({
   isAwaitingGate,
   stepStatus,
   stepOutput,
+  writesToTicket,
   onApprove,
   onExecute,
 }: ChatViewProps) {
   const [input, setInput] = useState("");
-  const scrollEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const contextScrollRef = useRef<HTMLDivElement>(null);
 
+  // The final result from the agent (type=result) — this is what gets written to ticket fields
+  const finalResult = writesToTicket ? (stepOutput?.resultContent ?? "") : "";
+  // Intermediate text from the agent (type=text) — reasoning/conversation during multi-turn
+  const intermediateText = writesToTicket ? (stepOutput?.textContent ?? "") : "";
+
+  // Auto-scroll chat panel
   useEffect(() => {
-    scrollEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [response]);
+    chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [response, intermediateText, stepOutput?.toolActivities.length]);
+
+  // Auto-scroll ticket context panel when final result arrives
+  useEffect(() => {
+    if (writesToTicket && finalResult) {
+      contextScrollRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [writesToTicket, finalResult]);
 
   const handleSend = () => {
     if (!input.trim() || isExecuting) return;
@@ -60,20 +164,34 @@ export function ChatView({
     .filter(Boolean)
     .join("\n\n");
 
+  // When writesToTicket, show the final result in the Ticket Context panel
+  // The finalResult appears once the agent completes, then the ticket gets refreshed with the persisted value
+  const ticketContextContent = writesToTicket && finalResult
+    ? (specContent ? `${specContent}\n\n---\n\n${finalResult}` : finalResult)
+    : specContent;
+
+  // Chat panel content for writesToTicket steps: show tool activities + thinking + intermediate text
+  const hasToolActivity = (stepOutput?.toolActivities?.length ?? 0) > 0;
+  const hasIntermediateText = intermediateText.length > 0;
+  const isThinking = isExecuting && (stepOutput?.thinkingContent?.length ?? 0) > 0 && !hasIntermediateText && !hasToolActivity;
+
   return (
     <div data-testid="chat-view" className="flex h-full">
-      {/* Left: Spec content */}
+      {/* Left: Ticket Context */}
       <div className="w-1/2 border-r flex flex-col">
-        <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900">
+        <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900 flex items-center gap-2">
           <h3 className="text-sm font-medium text-muted-foreground">
             Ticket Context
           </h3>
+          {writesToTicket && isExecuting && (
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          )}
         </div>
         <div className="flex-1 overflow-y-auto p-4">
-          {specContent ? (
+          {ticketContextContent ? (
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {specContent}
+                {ticketContextContent}
               </ReactMarkdown>
             </div>
           ) : (
@@ -81,6 +199,7 @@ export function ChatView({
               No spec content available
             </p>
           )}
+          <div ref={contextScrollRef} />
         </div>
       </div>
 
@@ -102,7 +221,52 @@ export function ChatView({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          {response ? (
+          {writesToTicket ? (
+            // For writes_to steps: show thinking + tool activities + intermediate text in chat,
+            // only the final result (type=result) goes to Ticket Context
+            <div className="space-y-1">
+              {isThinking && (
+                <div className="flex items-center gap-2.5 text-sm text-muted-foreground py-1">
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                  Thinking...
+                </div>
+              )}
+              {hasToolActivity && (
+                stepOutput!.toolActivities.map((activity, i) => (
+                  <ToolCard key={`${activity.tool_id}-${i}`} activity={activity} />
+                ))
+              )}
+              {hasIntermediateText && (
+                <div className="prose prose-sm dark:prose-invert max-w-none mt-2">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {intermediateText}
+                  </ReactMarkdown>
+                </div>
+              )}
+              {!hasToolActivity && !hasIntermediateText && !isThinking && isExecuting && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Processing...
+                </div>
+              )}
+              {!isExecuting && (isAwaitingGate || stepStatus === "completed") && !hasIntermediateText && (
+                <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                  <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Step complete — output written to Ticket Context
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : response ? (
             <div data-testid="chat-response" className="prose prose-sm dark:prose-invert max-w-none">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {response}
@@ -155,7 +319,7 @@ export function ChatView({
               </Button>
             </div>
           )}
-          <div ref={scrollEndRef} />
+          <div ref={chatScrollRef} />
         </div>
 
         {/* Chat input */}

@@ -690,6 +690,23 @@ pub async fn execute_step(
                 "step_complete" => {
                     let ticket_id = json.get("ticket_id").and_then(|t| t.as_str()).unwrap_or("");
                     let summary = json.get("summary").and_then(|s| s.as_str()).unwrap_or("");
+
+                    // Advance the workflow to the next step
+                    if !ticket_id.is_empty() {
+                        match crate::workflow::advance_step(project_dir, ticket_id) {
+                            Ok(_state) => {
+                                log::info!(
+                                    "agent: workflow advanced for {} (summary: {})",
+                                    ticket_id,
+                                    summary
+                                );
+                            }
+                            Err(e) => {
+                                log::error!("agent: failed to advance workflow: {}", e);
+                            }
+                        }
+                    }
+
                     let payload = serde_json::json!({
                         "ticket_id": ticket_id,
                         "summary": summary,

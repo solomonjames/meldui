@@ -45,6 +45,11 @@ export function useWorkflow(projectDir: string) {
   const permissionUnlistenRef = useRef<UnlistenFn | null>(null);
   const melduiUnlistenRefs = useRef<UnlistenFn[]>([]);
   const currentStepRef = useRef<string | null>(null);
+  // Tracks which step is actively receiving streaming output from the sidecar.
+  // Unlike currentStepRef (which tracks workflow state), this only changes when
+  // a new executeStep call starts — preventing late-arriving output from the
+  // previous step from leaking into the next step's output.
+  const executingStepRef = useRef<string | null>(null);
   const onRefreshTicketRef = useRef<(() => Promise<void>) | null>(null);
   const getWorkflowStateRef = useRef<((issueId: string) => Promise<unknown>) | null>(null);
 
@@ -73,7 +78,10 @@ export function useWorkflow(projectDir: string) {
           // Only process chunks for the active ticket
           if (activeTicketId && chunk.issue_id !== activeTicketId) return;
 
-          const stepId = currentStepRef.current;
+          // Use executingStepRef to route output to the step that started the
+          // sidecar, not the current workflow step (which may have advanced
+          // after meldui_step_complete).
+          const stepId = executingStepRef.current;
           if (!stepId) return;
 
           setStepOutputs((prev) => {
@@ -345,6 +353,8 @@ export function useWorkflow(projectDir: string) {
       try {
         setLoading(true);
         setError(null);
+        // Lock the executing step so streaming output goes to the right place
+        executingStepRef.current = currentStepRef.current;
         // Issue 5: optimistic isExecuting update
         setCurrentState((prev) =>
           prev ? { ...prev, step_status: "in_progress" } : prev
@@ -354,17 +364,15 @@ export function useWorkflow(projectDir: string) {
           { projectDir, issueId }
         );
 
-        // Refresh state to see "completed" status
-        await getWorkflowState(issueId);
+        // Unlock executing step — sidecar is done
+        executingStepRef.current = null;
 
-        // Auto-advance: step completion is now controlled by the agent via
-        // meldui_step_complete. The frontend just needs to refresh state.
-        if (!result.workflow_completed) {
-          await getWorkflowState(issueId);
-        }
+        // Refresh state to pick up latest workflow state
+        await getWorkflowState(issueId);
 
         return result;
       } catch (err) {
+        executingStepRef.current = null;
         setError(`Step execution failed: ${err}`);
         // Revert optimistic update on error
         await getWorkflowState(issueId);

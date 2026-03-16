@@ -471,13 +471,29 @@ pub async fn execute_step(
         )?;
     }
 
-    // 9. Mark step completed — workflow advancement is controlled by the agent
-    // via meldui_step_complete, not by a human_gate flag
-    update_step_status(project_dir, ticket_id, StepStatus::Completed)?;
+    // 9. Only mark step completed if the agent didn't already advance the workflow.
+    // When the agent calls meldui_step_complete, advance_step() moves current_step_id
+    // to the next step. If we blindly call update_step_status(Completed) here, we'd
+    // mark the NEXT step as completed before it runs.
+    let fresh_state = get_workflow_state(project_dir, ticket_id)?;
+    let already_advanced = match &fresh_state {
+        Some(s) => s.current_step_id.as_deref() != Some(current_step_id),
+        None => false,
+    };
+
+    if !already_advanced {
+        update_step_status(project_dir, ticket_id, StepStatus::Completed)?;
+    }
+
+    let workflow_completed = fresh_state
+        .as_ref()
+        .map(|s| s.current_step_id.is_none())
+        .unwrap_or(false);
+
     Ok(StepExecutionResult {
         step_id: current_step_id.clone(),
         response: response_text,
-        workflow_completed: false,
+        workflow_completed,
     })
 }
 

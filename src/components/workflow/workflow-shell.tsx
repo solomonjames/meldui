@@ -78,6 +78,11 @@ export function WorkflowShell({
     executingRef.current.stepId = null;
   }
 
+  // Clear stale result from previous step so it doesn't appear in the new step's view
+  useEffect(() => {
+    setLastResult(null);
+  }, [workflowState.current_step_id]);
+
   // Show toast notifications from agent
   const lastNotifCount = useRef(0);
   useEffect(() => {

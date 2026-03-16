@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Play, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { Ticket, StepStatus } from "@/types";
+import type { Ticket, StepStatus, StepOutputStream } from "@/types";
 
 interface ChatViewProps {
   ticket: Ticket;
@@ -13,6 +13,7 @@ interface ChatViewProps {
   isExecuting: boolean;
   isAwaitingGate: boolean;
   stepStatus: StepStatus;
+  stepOutput?: StepOutputStream;
   onApprove: () => void;
   onExecute: () => void;
 }
@@ -24,6 +25,7 @@ export function ChatView({
   isExecuting,
   isAwaitingGate,
   stepStatus,
+  stepOutput,
   onApprove,
   onExecute,
 }: ChatViewProps) {
@@ -59,7 +61,7 @@ export function ChatView({
     .join("\n\n");
 
   return (
-    <div className="flex h-full">
+    <div data-testid="chat-view" className="flex h-full">
       {/* Left: Spec content */}
       <div className="w-1/2 border-r flex flex-col">
         <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900">
@@ -88,6 +90,7 @@ export function ChatView({
           <h3 className="text-sm font-medium">{stepName}</h3>
           {isAwaitingGate && (
             <Button
+              data-testid="approve-gate"
               size="sm"
               onClick={onApprove}
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -100,7 +103,7 @@ export function ChatView({
 
         <div className="flex-1 overflow-y-auto p-4">
           {response ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none">
+            <div data-testid="chat-response" className="prose prose-sm dark:prose-invert max-w-none">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {response}
               </ReactMarkdown>
@@ -126,9 +129,22 @@ export function ChatView({
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 py-8">
-              <p className="text-sm text-muted-foreground">
-                No response received
-              </p>
+              {stepOutput?.stderrLines && stepOutput.stderrLines.length > 0 ? (
+                <div className="w-full max-w-lg space-y-2">
+                  <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                    Agent returned an error:
+                  </p>
+                  <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 text-xs font-mono text-red-700 dark:text-red-300 max-h-[200px] overflow-y-auto">
+                    {stepOutput.stderrLines.map((line, i) => (
+                      <div key={i}>{line}</div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No response received
+                </p>
+              )}
               <Button
                 variant="outline"
                 size="sm"

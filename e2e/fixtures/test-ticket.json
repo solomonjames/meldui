@@ -1,0 +1,24 @@
+{
+  "id": "test-ticket-001",
+  "title": "Add user authentication flow",
+  "description": "Implement login/logout functionality with JWT-based session management",
+  "status": "in_progress",
+  "type": "feature",
+  "priority": 2,
+  "created_at": "2026-03-10T10:00:00Z",
+  "updated_at": "2026-03-10T10:00:00Z",
+  "design": "## Authentication Design\n\nToken-based auth using JWT with HTTP-only cookies.\n\n### Flow\n1. User submits credentials\n2. Server validates and issues JWT\n3. Token stored in HTTP-only cookie\n4. Subsequent requests include cookie automatically",
+  "notes": "## Technical Notes\n\n- Use bcrypt for password hashing\n- JWT expiry: 15 minutes access, 7 days refresh\n- Store refresh tokens in database for revocation",
+  "acceptance_criteria": "Given a user with valid credentials\nWhen they submit the login form\nThen they receive a JWT token and are redirected to the dashboard\n\nGiven a user with an expired token\nWhen they make an API request\nThen the token is automatically refreshed if the refresh token is valid\n\nGiven a logged-in user\nWhen they click logout\nThen their session is invalidated and they are redirected to the login page",
+  "dependencies": [],
+  "comments": [],
+  "metadata": {
+    "workflow_id": "meld-full",
+    "workflow_state": {
+      "workflow_id": "meld-full",
+      "current_step_id": "spec-understand",
+      "step_status": "pending",
+      "step_history": []
+    }
+  }
+}

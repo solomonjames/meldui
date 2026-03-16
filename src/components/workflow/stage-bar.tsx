@@ -21,14 +21,14 @@ export function StageBar({
   );
 
   return (
-    <div className="flex items-center gap-1 px-6 py-3 border-b bg-white dark:bg-zinc-900 overflow-x-auto">
+    <div data-testid="stage-bar" className="flex items-center gap-1 px-6 py-3 border-b bg-white dark:bg-zinc-900 overflow-x-auto">
       {steps.map((step, idx) => {
         const isCompleted = completedIds.has(step.id);
         const isCurrent = step.id === currentStepId;
         const isPending = !isCompleted && !isCurrent;
 
         return (
-          <div key={step.id} className="flex items-center gap-1 shrink-0">
+          <div key={step.id} data-testid={`stage-step-${step.id}`} className="flex items-center gap-1 shrink-0">
             {idx > 0 && (
               <ChevronRight className="w-3.5 h-3.5 text-zinc-300 dark:text-zinc-600 shrink-0" />
             )}

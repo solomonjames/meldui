@@ -50,17 +50,20 @@ export function WorkflowShell({
   onBack,
 }: WorkflowShellProps) {
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
-  const executingRef = useRef<string | null>(null);
+  // Use a ref with a monotonic counter to prevent StrictMode double-fire
+  const executingRef = useRef<{ stepId: string | null; generation: number }>({ stepId: null, generation: 0 });
   const debug = useDebugLog();
 
   const currentStep = workflowDefinition?.steps.find(
     (s) => s.id === workflowState.current_step_id
   );
 
-  // Reset executingRef when step changes
-  useEffect(() => {
-    executingRef.current = null;
-  }, [workflowState.current_step_id]);
+  // Reset executing guard when step changes so next step can auto-execute
+  const prevStepId = useRef(workflowState.current_step_id);
+  if (prevStepId.current !== workflowState.current_step_id) {
+    prevStepId.current = workflowState.current_step_id;
+    executingRef.current.stepId = null;
+  }
 
   const handleExecute = useCallback(async () => {
     const result = await onExecuteStep(ticket.id);
@@ -83,14 +86,15 @@ export function WorkflowShell({
       return;
     }
 
-    // Prevent double execution
-    if (executingRef.current === currentStep.id) {
+    // Prevent double execution — generation counter survives StrictMode remounts
+    const gen = ++executingRef.current.generation;
+    if (executingRef.current.stepId === currentStep.id) {
       debug.log("lifecycle", `auto-execute skipped: already executing ${currentStep.id}`);
       return;
     }
-    executingRef.current = currentStep.id;
+    executingRef.current.stepId = currentStep.id;
 
-    debug.log("lifecycle", `auto-execute fired for step ${currentStep.id}`);
+    debug.log("lifecycle", `auto-execute fired for step ${currentStep.id} (gen=${gen})`);
 
     let cancelled = false;
     onExecuteStep(ticket.id)
@@ -102,8 +106,8 @@ export function WorkflowShell({
       })
       .catch((err) => {
         debug.log("error", `auto-execute failed: ${err}`);
-        // Reset executingRef so retry is possible
-        executingRef.current = null;
+        // Reset so retry is possible
+        executingRef.current.stepId = null;
       });
 
     return () => { cancelled = true; };
@@ -167,6 +171,7 @@ export function WorkflowShell({
             isExecuting={isExecuting}
             isAwaitingGate={isAwaitingGate}
             stepStatus={workflowState.step_status}
+            stepOutput={currentStepOutput}
             onApprove={handleApprove}
             onExecute={handleExecute}
           />
@@ -225,7 +230,7 @@ export function WorkflowShell({
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
+    <div data-testid="workflow-shell" data-status={typeof workflowState.step_status === 'string' ? workflowState.step_status : 'failed'} className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
       <StageBar
         steps={workflowDefinition.steps}
         currentStepId={workflowState.current_step_id}

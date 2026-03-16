@@ -473,11 +473,23 @@ pub async fn execute_step(
     let mut response_text = String::new();
     let mut final_session_id = String::new();
 
-    let read_result = tokio::time::timeout(std::time::Duration::from_secs(300), async {
-        while let Some(line) = lines
-            .next_line()
-            .await
-            .map_err(|e| format!("Failed to read sidecar output: {}", e))?
+    // Use an idle timeout (resets on each message) rather than a hard total timeout.
+    // The sidecar emits heartbeats every 30s while waiting for user input (feedback/
+    // permissions), so the timeout only fires if the sidecar is truly unresponsive.
+    let idle_timeout = std::time::Duration::from_secs(120);
+    let mut timed_out = false;
+
+    let read_result: Result<(), String> = 'outer: loop {
+        let line_result = tokio::time::timeout(idle_timeout, lines.next_line()).await;
+        let line = match line_result {
+            Err(_) => {
+                timed_out = true;
+                break 'outer Ok(());
+            }
+            Ok(Err(e)) => break 'outer Err(format!("Failed to read sidecar output: {}", e)),
+            Ok(Ok(None)) => break 'outer Ok(()),
+            Ok(Ok(Some(line))) => line,
+        };
         {
             if line.trim().is_empty() {
                 continue;
@@ -732,28 +744,39 @@ pub async fn execute_step(
                         let _ = app_handle.emit("agent-feedback-request", feedback_req);
                     }
                 }
+                "heartbeat" => {
+                    // Heartbeat received — idle timeout was already reset by receiving this line
+                    log::debug!("agent: heartbeat received");
+                }
                 _ => {}
             }
         }
-        Ok::<(), String>(())
-    })
-    .await;
+    };
 
-    if read_result.is_err() {
+    if timed_out {
+        let timeout_msg = format!(
+            "Agent sidecar timed out after {} seconds of inactivity. The session can be resumed.",
+            idle_timeout.as_secs()
+        );
         let _ = app_handle.emit(
             "workflow-step-output",
             StreamChunk {
                 issue_id: issue_id.to_string(),
                 chunk_type: "error".to_string(),
-                content: "Agent sidecar timed out after 5 minutes".to_string(),
+                content: timeout_msg.clone(),
             },
         );
         // Kill the child process
         let _ = child.kill().await;
-        return Err("Agent sidecar timed out after 5 minutes".to_string());
+        // Clear the agent handle so stale stdin writes don't cause broken pipe
+        if let Some(state) = app_handle.try_state::<AgentState>() {
+            let mut handle_guard = state.handle.lock().await;
+            *handle_guard = None;
+        }
+        return Err(timeout_msg);
     }
 
-    if let Err(e) = read_result.unwrap() {
+    if let Err(e) = read_result {
         return Err(e);
     }
 

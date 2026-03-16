@@ -204,3 +204,164 @@ describe("WorkflowShell auto-execute", () => {
     expect(onExecuteStep).not.toHaveBeenCalled();
   });
 });
+
+describe("WorkflowShell step transition cleanup", () => {
+  let onExecuteStep: ReturnType<typeof vi.fn>;
+  let onRefreshTicket: ReturnType<typeof vi.fn>;
+  let onRespondToFeedback: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    clearTauriMocks();
+    onExecuteStep = vi.fn().mockResolvedValue({
+      step_id: "step-1",
+      response: "result from step 1",
+      workflow_completed: false,
+    });
+    onRefreshTicket = vi.fn().mockResolvedValue(undefined);
+    onRespondToFeedback = vi.fn();
+  });
+
+  const twoStepDef = (): WorkflowDefinition => ({
+    id: "wf-1",
+    name: "Test",
+    description: "test",
+    version: "1.0",
+    steps: [
+      { id: "step-1", name: "Understand", description: "First", instructions: { prompt: "p1" }, view: "chat" },
+      { id: "step-2", name: "Investigate", description: "Second", instructions: { prompt: "p2" }, view: "chat" },
+    ],
+  });
+
+  const baseProps = () => ({
+    ticket: makeTicket(),
+    projectDir: "/test",
+    workflowDefinition: twoStepDef(),
+    stepOutputs: {} as Record<string, StepOutputStream>,
+    loading: false,
+    error: null,
+    listenersReady: true,
+    pendingPermission: null,
+    onRespondToPermission: vi.fn(),
+    onExecuteStep,
+    onGetDiff: vi.fn().mockResolvedValue([]),
+    onBack: vi.fn(),
+    onRefreshTicket,
+    notifications: [],
+    onClearNotification: vi.fn(),
+    statusText: null,
+    pendingFeedback: null,
+    onRespondToFeedback,
+  });
+
+  it("clears lastResult when step changes so old response doesn't leak", async () => {
+    // Start on step-1 with completed status (not pending, so auto-execute won't fire)
+    const { rerender } = render(
+      <WorkflowShell
+        {...baseProps()}
+        workflowState={makeWorkflowState({ current_step_id: "step-1", step_status: "completed" })}
+      />
+    );
+
+    // The ChatView mock exposes response via data-response attribute
+    let chatView = screen.getByTestId("chat-view");
+    // With no output and no lastResult, response should be empty
+    expect(chatView.getAttribute("data-response")).toBe("");
+
+    // Simulate step-1 completing with a result by re-rendering with step-1 output
+    rerender(
+      <WorkflowShell
+        {...baseProps()}
+        workflowState={makeWorkflowState({ current_step_id: "step-1", step_status: "completed" })}
+        stepOutputs={{ "step-1": { textContent: "Step 1 output", toolActivities: [], stderrLines: [], resultContent: null, thinkingContent: "", lastChunkType: "" } }}
+      />
+    );
+
+    chatView = screen.getByTestId("chat-view");
+    expect(chatView.getAttribute("data-response")).toBe("Step 1 output");
+
+    // Now transition to step-2 (pending) — old output should NOT appear
+    rerender(
+      <WorkflowShell
+        {...baseProps()}
+        workflowState={makeWorkflowState({ current_step_id: "step-2", step_status: "pending" })}
+        stepOutputs={{ "step-1": { textContent: "Step 1 output", toolActivities: [], stderrLines: [], resultContent: null, thinkingContent: "", lastChunkType: "" } }}
+      />
+    );
+
+    chatView = screen.getByTestId("chat-view");
+    // step-2 has no output yet, and lastResult was cleared
+    expect(chatView.getAttribute("data-response")).toBe("");
+  });
+});
+
+describe("WorkflowShell failed step display", () => {
+  let onExecuteStep: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    clearTauriMocks();
+    onExecuteStep = vi.fn().mockResolvedValue({
+      step_id: "step-1",
+      response: "",
+      workflow_completed: false,
+    });
+  });
+
+  const failedProps = (reason: string) => ({
+    ticket: makeTicket(),
+    projectDir: "/test",
+    workflowState: makeWorkflowState({ step_status: { failed: reason } as unknown as WorkflowState["step_status"] }),
+    workflowDefinition: makeWorkflowDef(),
+    stepOutputs: {} as Record<string, StepOutputStream>,
+    loading: false,
+    error: null,
+    listenersReady: true,
+    pendingPermission: null,
+    onRespondToPermission: vi.fn(),
+    onExecuteStep,
+    onGetDiff: vi.fn().mockResolvedValue([]),
+    onBack: vi.fn(),
+    onRefreshTicket: vi.fn().mockResolvedValue(undefined),
+    notifications: [],
+    onClearNotification: vi.fn(),
+    statusText: null,
+    pendingFeedback: null,
+    onRespondToFeedback: vi.fn(),
+  });
+
+  it("shows Resume button for timeout failures", () => {
+    render(
+      <WorkflowShell
+        {...failedProps("Agent sidecar timed out after 120 seconds of inactivity. The session can be resumed.")}
+      />
+    );
+
+    expect(screen.getByText("Session timed out while waiting for input.")).toBeInTheDocument();
+    expect(screen.getByText("Resume")).toBeInTheDocument();
+  });
+
+  it("shows Retry button for non-timeout failures", () => {
+    render(
+      <WorkflowShell
+        {...failedProps("Agent sidecar exited with status 1 and no output")}
+      />
+    );
+
+    expect(screen.getByText(/Step failed:/)).toBeInTheDocument();
+    expect(screen.getByText("Retry")).toBeInTheDocument();
+  });
+
+  it("calls onExecuteStep when Resume/Retry is clicked", async () => {
+    render(
+      <WorkflowShell
+        {...failedProps("Agent sidecar timed out after 120 seconds of inactivity. The session can be resumed.")}
+      />
+    );
+
+    const resumeBtn = screen.getByText("Resume");
+    resumeBtn.click();
+
+    await waitFor(() => {
+      expect(onExecuteStep).toHaveBeenCalledWith("ticket-1");
+    });
+  });
+});

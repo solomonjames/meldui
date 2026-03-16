@@ -373,8 +373,11 @@ export function useWorkflow(projectDir: string) {
         return result;
       } catch (err) {
         executingStepRef.current = null;
+        // Clear stale pending states — the sidecar is dead
+        setPendingFeedback(null);
+        setPendingPermission(null);
         setError(`Step execution failed: ${err}`);
-        // Revert optimistic update on error
+        // Refresh state to pick up the failed status
         await getWorkflowState(issueId);
         return null;
       } finally {
@@ -390,7 +393,14 @@ export function useWorkflow(projectDir: string) {
         await invoke("agent_feedback_respond", { requestId, approved, feedback });
         setPendingFeedback(null);
       } catch (err) {
-        setError(`Failed to respond to feedback: ${err}`);
+        // Clear stale feedback — the sidecar is likely dead (broken pipe)
+        setPendingFeedback(null);
+        const errStr = String(err);
+        if (errStr.includes("Broken pipe") || errStr.includes("not available")) {
+          setError("Agent session expired. Click Resume to continue where you left off.");
+        } else {
+          setError(`Failed to respond to feedback: ${err}`);
+        }
       }
     },
     []
@@ -422,7 +432,13 @@ export function useWorkflow(projectDir: string) {
         await invoke("agent_permission_respond", { requestId, allowed });
         setPendingPermission(null);
       } catch (err) {
-        setError(`Failed to respond to permission: ${err}`);
+        setPendingPermission(null);
+        const errStr = String(err);
+        if (errStr.includes("Broken pipe") || errStr.includes("not available")) {
+          setError("Agent session expired. Click Resume to continue where you left off.");
+        } else {
+          setError(`Failed to respond to permission: ${err}`);
+        }
       }
     },
     []

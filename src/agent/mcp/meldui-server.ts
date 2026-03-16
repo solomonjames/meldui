@@ -157,11 +157,22 @@ export function createMelduiMcpServer(
       if (!emitFeedbackRequest) {
         return { content: [{ type: "text" as const, text: "Feedback request not available (no callback configured)" }], isError: true };
       }
-      const response = await emitFeedbackRequest(ticket_id, summary);
-      if (response.approved) {
-        return { content: [{ type: "text" as const, text: "User approved. You may now call meldui_step_complete to advance to the next step." }] };
+
+      // Emit heartbeats while waiting for user response to keep the
+      // idle timeout on the Rust side from firing.
+      const heartbeat = setInterval(() => {
+        send({ type: "heartbeat" });
+      }, 30_000);
+
+      try {
+        const response = await emitFeedbackRequest(ticket_id, summary);
+        if (response.approved) {
+          return { content: [{ type: "text" as const, text: "User approved. You may now call meldui_step_complete to advance to the next step." }] };
+        }
+        return { content: [{ type: "text" as const, text: `User feedback: ${response.feedback ?? "(no details provided)"}. Please address this feedback, update the ticket field using meldui_write_section, then call meldui_request_feedback again to re-confirm.` }] };
+      } finally {
+        clearInterval(heartbeat);
       }
-      return { content: [{ type: "text" as const, text: `User feedback: ${response.feedback ?? "(no details provided)"}. Please address this feedback, update the ticket field using meldui_write_section, then call meldui_request_feedback again to re-confirm.` }] };
     }
   );
 

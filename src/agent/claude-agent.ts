@@ -319,15 +319,21 @@ export class ClaudeAgent
       return { behavior: "allow", updatedInput: input };
     }
 
-    // Ask user: emit permission request and wait for response
+    // Ask user: emit permission request and wait for response.
+    // Emit heartbeats while waiting to keep the idle timeout alive.
     const requestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     return new Promise<Record<string, unknown>>((resolve) => {
+      const heartbeat = setInterval(() => {
+        this.sendFn({ type: "heartbeat" });
+      }, 30_000);
+
       this.emit("permission-request", {
         requestId,
         toolName,
         input,
         resolve: (result: "allow" | "always-allow" | "deny") => {
+          clearInterval(heartbeat);
           if (result === "allow") {
             resolve({ behavior: "allow", updatedInput: input });
           } else if (result === "always-allow") {

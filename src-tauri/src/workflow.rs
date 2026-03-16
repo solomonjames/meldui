@@ -440,7 +440,7 @@ pub async fn execute_step(
         .map(|s| s.to_string());
 
     // 7. Call agent sidecar with streaming events
-    let (response_text, new_session_id) = crate::agent::execute_step(
+    let (response_text, new_session_id) = match crate::agent::execute_step(
         project_dir,
         ticket_id,
         &prompt,
@@ -448,7 +448,17 @@ pub async fn execute_step(
         Some(allowed_tools),
         &app_handle,
     )
-    .await?;
+    .await
+    {
+        Ok(result) => result,
+        Err(e) => {
+            // Mark step as failed so it's not stuck in in_progress.
+            // The session_id is already stored in metadata, so the step
+            // can be resumed by re-executing it.
+            let _ = update_step_status(project_dir, ticket_id, StepStatus::Failed(e.clone()));
+            return Err(e);
+        }
+    };
 
     // 8. Store session_id back into metadata for next step
     if !new_session_id.is_empty() {

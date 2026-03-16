@@ -284,19 +284,25 @@ export function WorkflowShell({
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         </div>
       )}
-      {isFailed && (
-        <div className="px-6 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800">
-          <p className="text-sm text-red-600 dark:text-red-400">
-            Step failed: {(workflowState.step_status as { failed: string }).failed}
-          </p>
-          <button
-            onClick={handleExecute}
-            className="mt-1 text-xs text-red-600 underline hover:no-underline"
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {isFailed && (() => {
+        const failReason = (workflowState.step_status as { failed: string }).failed;
+        const isTimeout = failReason.includes("timed out");
+        return (
+          <div className="px-6 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800 flex items-center gap-3">
+            <div className="flex-1">
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {isTimeout ? "Session timed out while waiting for input." : `Step failed: ${failReason}`}
+              </p>
+            </div>
+            <button
+              onClick={handleExecute}
+              className="px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors"
+            >
+              {isTimeout ? "Resume" : "Retry"}
+            </button>
+          </div>
+        );
+      })()}
       <div className="flex-1 overflow-hidden">{renderView()}</div>
       <DebugPanel
         entries={debug.getEntries()}

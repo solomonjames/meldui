@@ -139,6 +139,10 @@ export interface FeedbackRequestMessage {
   summary: string;
 }
 
+export interface HeartbeatMessage {
+  type: "heartbeat";
+}
+
 export type OutboundMessage =
   | SessionMessage
   | TextMessage
@@ -154,4 +158,5 @@ export type OutboundMessage =
   | NotificationMessage
   | StepCompleteMessage
   | StatusUpdateMessage
-  | FeedbackRequestMessage;
+  | FeedbackRequestMessage
+  | HeartbeatMessage;

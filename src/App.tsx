@@ -182,14 +182,14 @@ function App() {
           pendingPermission={workflow.pendingPermission}
           onRespondToPermission={workflow.respondToPermission}
           onExecuteStep={workflow.executeStep}
-          onApproveGate={workflow.approveGate}
           onGetDiff={workflow.getDiff}
           onBack={handleBackToBoard}
           onRefreshTicket={handleRefreshTicket}
           notifications={workflow.notifications}
           onClearNotification={workflow.clearNotification}
           statusText={workflow.statusText}
-          approvalRequest={workflow.approvalRequest}
+          pendingFeedback={workflow.pendingFeedback}
+          onRespondToFeedback={workflow.respondToFeedback}
         />
       ) : (
         <BacklogPage

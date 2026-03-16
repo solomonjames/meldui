@@ -25,14 +25,13 @@ describe("useWorkflow", () => {
     mockInvoke.mockResolvedValueOnce({
       step_id: "step-1",
       response: "done",
-      awaiting_gate: true,
       workflow_completed: false,
     });
     // For getWorkflowState call inside executeStep
     mockInvoke.mockResolvedValueOnce({
       workflow_id: "wf-1",
       current_step_id: "step-1",
-      step_status: "awaiting_gate",
+      step_status: "completed",
       step_history: [],
     });
 

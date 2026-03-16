@@ -10,16 +10,12 @@ import type { Ticket } from "@/types";
 interface CommitViewProps {
   ticket: Ticket;
   response: string;
-  isAwaitingGate: boolean;
-  onApprove: () => void;
   onBack: () => void;
 }
 
 export function CommitView({
   ticket,
   response,
-  isAwaitingGate,
-  onApprove,
   onBack,
 }: CommitViewProps) {
   const fallbackMessage = `feat: ${ticket.title.toLowerCase()}`;
@@ -79,18 +75,6 @@ export function CommitView({
           <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
           Back to Board
         </Button>
-        <div className="flex-1" />
-        {isAwaitingGate && (
-          <Button
-            size="sm"
-            onClick={onApprove}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={!commitMessage.trim()}
-          >
-            <GitCommit className="w-3.5 h-3.5 mr-1.5" />
-            Commit & Complete
-          </Button>
-        )}
       </div>
     </div>
   );

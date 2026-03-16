@@ -37,7 +37,6 @@ export interface WorkflowStep {
   name: string;
   description: string;
   instructions: StepInstructions;
-  human_gate: boolean;
   view: StepViewType;
 }
 
@@ -54,7 +53,6 @@ export interface WorkflowState {
 
 export type StepStatus =
   | "pending"
-  | "awaiting_gate"
   | "in_progress"
   | "completed"
   | { failed: string };
@@ -70,7 +68,6 @@ export interface StepRecord {
 export interface StepExecutionResult {
   step_id: string;
   response: string;
-  awaiting_gate: boolean;
   workflow_completed: boolean;
 }
 
@@ -139,8 +136,8 @@ export interface StatusUpdateEvent {
   status_text: string;
 }
 
-export interface ApprovalRequestEvent {
+export interface FeedbackRequestEvent {
+  request_id: string;
   ticket_id: string;
   summary: string;
-  items: string[];
 }

@@ -28,8 +28,6 @@ pub struct WorkflowStep {
     pub name: String,
     pub description: String,
     pub instructions: StepInstructions,
-    #[serde(default)]
-    pub human_gate: bool,
     pub view: StepViewType,
 }
 
@@ -54,7 +52,6 @@ pub struct WorkflowState {
 #[serde(rename_all = "snake_case")]
 pub enum StepStatus {
     Pending,
-    AwaitingGate,
     InProgress,
     Completed,
     Failed(String),
@@ -474,31 +471,20 @@ pub async fn execute_step(
         )?;
     }
 
-    // 9. Handle gate or auto-advance
-    if step.human_gate {
-        update_step_status(project_dir, ticket_id, StepStatus::AwaitingGate)?;
-        Ok(StepExecutionResult {
-            step_id: current_step_id.clone(),
-            response: response_text,
-            awaiting_gate: true,
-            workflow_completed: false,
-        })
-    } else {
-        update_step_status(project_dir, ticket_id, StepStatus::Completed)?;
-        Ok(StepExecutionResult {
-            step_id: current_step_id.clone(),
-            response: response_text,
-            awaiting_gate: false,
-            workflow_completed: false,
-        })
-    }
+    // 9. Mark step completed — workflow advancement is controlled by the agent
+    // via meldui_step_complete, not by a human_gate flag
+    update_step_status(project_dir, ticket_id, StepStatus::Completed)?;
+    Ok(StepExecutionResult {
+        step_id: current_step_id.clone(),
+        response: response_text,
+        workflow_completed: false,
+    })
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StepExecutionResult {
     pub step_id: String,
     pub response: String,
-    pub awaiting_gate: bool,
     pub workflow_completed: bool,
 }
 

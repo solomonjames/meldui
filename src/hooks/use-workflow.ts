@@ -15,7 +15,7 @@ import type {
   NotificationEvent,
   StepCompleteEvent,
   StatusUpdateEvent,
-  ApprovalRequestEvent,
+  FeedbackRequestEvent,
 } from "@/types";
 
 function emptyStepOutput(): StepOutputStream {
@@ -39,7 +39,7 @@ export function useWorkflow(projectDir: string) {
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
   const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
   const [statusText, setStatusText] = useState<string | null>(null);
-  const [approvalRequest, setApprovalRequest] = useState<ApprovalRequestEvent | null>(null);
+  const [pendingFeedback, setPendingFeedback] = useState<FeedbackRequestEvent | null>(null);
   const [listenersReady, setListenersReady] = useState(false);
   const unlistenRef = useRef<UnlistenFn | null>(null);
   const permissionUnlistenRef = useRef<UnlistenFn | null>(null);
@@ -232,15 +232,15 @@ export function useWorkflow(projectDir: string) {
       );
       melduiUnlistens.push(statusUnlisten);
 
-      const approvalUnlisten = await listen<ApprovalRequestEvent>(
-        "meldui-approval-request",
+      const feedbackUnlisten = await listen<FeedbackRequestEvent>(
+        "agent-feedback-request",
         (event) => {
           if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
-            setApprovalRequest(event.payload);
+            setPendingFeedback(event.payload);
           }
         }
       );
-      melduiUnlistens.push(approvalUnlisten);
+      melduiUnlistens.push(feedbackUnlisten);
 
       if (!cancelled) {
         melduiUnlistenRefs.current = melduiUnlistens;
@@ -357,22 +357,9 @@ export function useWorkflow(projectDir: string) {
         // Refresh state to see "completed" status
         await getWorkflowState(issueId);
 
-        // Issue 2: frontend-controlled advance with delay for non-gated steps
-        if (!result.awaiting_gate && !result.workflow_completed) {
-          setLoading(false);
-          // Give user 2s to see the completed output
-          await new Promise<void>((resolve, reject) => {
-            const timer = setTimeout(() => resolve(), 2000);
-            // If component unmounts, the cleanup in the calling effect
-            // will handle cancellation via its own cancelled flag
-            void timer;
-            void reject; // keep linter happy
-          });
-          setLoading(true);
-          await invoke<WorkflowState>("workflow_advance", {
-            projectDir,
-            issueId,
-          });
+        // Auto-advance: step completion is now controlled by the agent via
+        // meldui_step_complete. The frontend just needs to refresh state.
+        if (!result.workflow_completed) {
           await getWorkflowState(issueId);
         }
 
@@ -389,24 +376,16 @@ export function useWorkflow(projectDir: string) {
     [projectDir, getWorkflowState]
   );
 
-  const approveGate = useCallback(
-    async (issueId: string) => {
+  const respondToFeedback = useCallback(
+    async (requestId: string, approved: boolean, feedback?: string) => {
       try {
-        setLoading(true);
-        const state = await invoke<WorkflowState>("workflow_advance", {
-          projectDir,
-          issueId,
-        });
-        setCurrentState(state);
-        return state;
+        await invoke("agent_feedback_respond", { requestId, approved, feedback });
+        setPendingFeedback(null);
       } catch (err) {
-        setError(`Failed to advance workflow: ${err}`);
-        return null;
-      } finally {
-        setLoading(false);
+        setError(`Failed to respond to feedback: ${err}`);
       }
     },
-    [projectDir]
+    []
   );
 
   const suggestWorkflow = useCallback(
@@ -479,14 +458,14 @@ export function useWorkflow(projectDir: string) {
     notifications,
     clearNotification,
     statusText,
-    approvalRequest,
+    pendingFeedback,
+    respondToFeedback,
     setOnRefreshTicket,
     listWorkflows,
     getWorkflow,
     assignWorkflow,
     getWorkflowState,
     executeStep,
-    approveGate,
     suggestWorkflow,
     getDiff,
     getStepOutput,

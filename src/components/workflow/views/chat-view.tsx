@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowRight, Play, Send, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Play, Send, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { Ticket, StepStatus, StepOutputStream, ToolActivity, ApprovalRequestEvent } from "@/types";
+import type { Ticket, StepStatus, StepOutputStream, ToolActivity, FeedbackRequestEvent } from "@/types";
 
 const TOOL_LABELS: Record<string, string> = {
   Write: "Writing file",
@@ -97,33 +97,100 @@ function ToolCard({ activity }: { activity: ToolActivity }) {
   );
 }
 
-function ApprovalCard({ request, onApprove }: { request: ApprovalRequestEvent; onApprove: () => void }) {
+function FeedbackCard({
+  request,
+  onRespond,
+}: {
+  request: FeedbackRequestEvent;
+  onRespond: (requestId: string, approved: boolean, feedback?: string) => void;
+}) {
+  const [showInput, setShowInput] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (showInput) {
+      inputRef.current?.focus();
+    }
+  }, [showInput]);
+
+  const handleSubmitFeedback = () => {
+    if (!feedbackText.trim()) return;
+    onRespond(request.request_id, false, feedbackText.trim());
+    setFeedbackText("");
+    setShowInput(false);
+  };
+
   return (
-    <div className="rounded-lg border-2 border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30 p-4 my-3">
+    <div className="rounded-lg border-2 border-emerald-300 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 p-4 my-3">
       <div className="flex items-start gap-3">
-        <CheckCircle2 className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-        <div className="flex-1 space-y-2">
-          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-            Review Requested
+        <MessageSquare className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+        <div className="flex-1 space-y-3">
+          <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">
+            Ready for Review
           </p>
-          <p className="text-sm text-amber-800 dark:text-amber-300">
+          <p className="text-sm text-emerald-800 dark:text-emerald-300">
             {request.summary}
           </p>
-          {request.items.length > 0 && (
-            <ul className="text-sm text-amber-700 dark:text-amber-400 list-disc list-inside space-y-1">
-              {request.items.map((item, i) => (
-                <li key={i}>{item}</li>
-              ))}
-            </ul>
+
+          {!showInput ? (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => onRespond(request.request_id, true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                Approve & Continue
+                <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowInput(true)}
+                className="border-emerald-300 dark:border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+              >
+                Give Feedback
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Textarea
+                ref={inputRef}
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmitFeedback();
+                  }
+                }}
+                placeholder="What would you like to change?"
+                className="min-h-[60px] max-h-[120px] resize-none text-sm"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleSubmitFeedback}
+                  disabled={!feedbackText.trim()}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <Send className="w-3.5 h-3.5 mr-1.5" />
+                  Send Feedback
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setShowInput(false);
+                    setFeedbackText("");
+                  }}
+                  className="text-muted-foreground"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
           )}
-          <Button
-            size="sm"
-            onClick={onApprove}
-            className="bg-amber-600 hover:bg-amber-700 text-white mt-2"
-          >
-            Approve & Continue
-            <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-          </Button>
         </div>
       </div>
     </div>
@@ -135,12 +202,11 @@ interface ChatViewProps {
   stepName: string;
   response: string;
   isExecuting: boolean;
-  isAwaitingGate: boolean;
   stepStatus: StepStatus;
   stepOutput?: StepOutputStream;
   statusText?: string | null;
-  approvalRequest?: ApprovalRequestEvent | null;
-  onApprove: () => void;
+  pendingFeedback?: FeedbackRequestEvent | null;
+  onRespondToFeedback?: (requestId: string, approved: boolean, feedback?: string) => void;
   onExecute: () => void;
 }
 
@@ -149,12 +215,11 @@ export function ChatView({
   stepName,
   response,
   isExecuting,
-  isAwaitingGate,
   stepStatus,
   stepOutput,
   statusText,
-  approvalRequest,
-  onApprove,
+  pendingFeedback,
+  onRespondToFeedback,
   onExecute,
 }: ChatViewProps) {
   const [input, setInput] = useState("");
@@ -168,7 +233,7 @@ export function ChatView({
   // Auto-scroll chat panel
   useEffect(() => {
     chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [response, stepOutput?.toolActivities.length]);
+  }, [response, stepOutput?.toolActivities.length, pendingFeedback]);
 
   const handleSend = () => {
     if (!input.trim() || isExecuting) return;
@@ -231,17 +296,6 @@ export function ChatView({
               </span>
             )}
           </div>
-          {isAwaitingGate && (
-            <Button
-              data-testid="approve-gate"
-              size="sm"
-              onClick={onApprove}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              Continue to Next Step
-              <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-            </Button>
-          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
@@ -268,8 +322,8 @@ export function ChatView({
                 </ReactMarkdown>
               </div>
             )}
-            {approvalRequest && (
-              <ApprovalCard request={approvalRequest} onApprove={onApprove} />
+            {pendingFeedback && onRespondToFeedback && (
+              <FeedbackCard request={pendingFeedback} onRespond={onRespondToFeedback} />
             )}
             {!hasToolActivity && !hasText && !isThinking && isExecuting && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

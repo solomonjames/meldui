@@ -32,7 +32,6 @@ steps:
         ### Tests Added
         ### Test Results
         ### Notes
-    human_gate: false
 
   - id: verify
     name: Verify
@@ -64,8 +63,8 @@ steps:
 
         When verification is complete:
         1. Use meldui_write_section to write the verification report to the "notes" field
-        2. Use meldui_step_complete to signal you're done
-    human_gate: true
+        2. Use meldui_request_feedback to ask the user to review
+        3. Once approved, use meldui_step_complete to advance
 
   - id: commit
     name: Commit
@@ -75,4 +74,4 @@ steps:
       prompt: |
         Generate a concise commit message summarizing all changes made during this workflow.
         Format: conventional commit style (feat:, fix:, refactor:, etc.)
-    human_gate: true
+        When done, use meldui_step_complete to advance.

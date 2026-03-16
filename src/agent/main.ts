@@ -16,7 +16,7 @@ import type {
   OutboundMessage,
   ExecuteCommand,
 } from "./protocol.js";
-import type { PermissionRequestEvent } from "./types.js";
+import type { PermissionRequestEvent, FeedbackRequestEvent } from "./types.js";
 
 // ── Output ──
 
@@ -29,6 +29,13 @@ function send(msg: OutboundMessage): void {
 const pendingPermissions = new Map<
   string,
   (result: "allow" | "always-allow" | "deny") => void
+>();
+
+// ── Feedback tracking ──
+
+const pendingFeedback = new Map<
+  string,
+  (response: { approved: boolean; feedback?: string }) => void
 >();
 
 // ── Stdin reader ──
@@ -125,6 +132,16 @@ async function main(): Promise<void> {
     });
   });
 
+  agent.on("feedback-request", (event: FeedbackRequestEvent) => {
+    pendingFeedback.set(event.requestId, event.resolve);
+    send({
+      type: "feedback_request",
+      request_id: event.requestId,
+      ticket_id: event.ticketId,
+      summary: event.summary,
+    });
+  });
+
   agent.on("completed", ({ response, sessionId }) => {
     send({ type: "result", content: response, session_id: sessionId });
   });
@@ -151,6 +168,14 @@ async function main(): Promise<void> {
             if (resolve) {
               resolve(msg.allowed ? "allow" : "deny");
               pendingPermissions.delete(msg.request_id);
+            }
+            break;
+          }
+          case "feedback_response": {
+            const resolve = pendingFeedback.get(msg.request_id);
+            if (resolve) {
+              resolve({ approved: msg.approved, feedback: msg.feedback });
+              pendingFeedback.delete(msg.request_id);
             }
             break;
           }

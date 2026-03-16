@@ -17,7 +17,6 @@ const makeTicket = (): Ticket => ({
 const defaultProps = {
   ticket: makeTicket(),
   stepName: "Understand",
-  onApprove: vi.fn(),
   onExecute: vi.fn(),
 };
 
@@ -28,7 +27,6 @@ describe("ChatView display states", () => {
         {...defaultProps}
         response="Here is the analysis"
         isExecuting={false}
-        isAwaitingGate={false}
         stepStatus={"completed" as StepStatus}
       />
     );
@@ -42,7 +40,6 @@ describe("ChatView display states", () => {
         {...defaultProps}
         response=""
         isExecuting={true}
-        isAwaitingGate={false}
         stepStatus={"in_progress" as StepStatus}
       />
     );
@@ -56,7 +53,6 @@ describe("ChatView display states", () => {
         {...defaultProps}
         response=""
         isExecuting={false}
-        isAwaitingGate={false}
         stepStatus={"pending" as StepStatus}
       />
     );
@@ -71,7 +67,6 @@ describe("ChatView display states", () => {
         {...defaultProps}
         response=""
         isExecuting={false}
-        isAwaitingGate={false}
         stepStatus={"completed" as StepStatus}
         stepOutput={{
           textContent: "",
@@ -88,17 +83,25 @@ describe("ChatView display states", () => {
     expect(screen.getByText("Retry")).toBeInTheDocument();
   });
 
-  it("shows Continue to Next Step button when isAwaitingGate is true", () => {
+  it("shows FeedbackCard when pendingFeedback is set", () => {
     render(
       <ChatView
         {...defaultProps}
         response="Some response"
-        isExecuting={false}
-        isAwaitingGate={true}
-        stepStatus={"awaiting_gate" as StepStatus}
+        isExecuting={true}
+        stepStatus={"in_progress" as StepStatus}
+        pendingFeedback={{
+          request_id: "feedback-123",
+          ticket_id: "ticket-1",
+          summary: "Captured problem statement and scope",
+        }}
+        onRespondToFeedback={vi.fn()}
       />
     );
 
-    expect(screen.getByText("Continue to Next Step")).toBeInTheDocument();
+    expect(screen.getByText("Ready for Review")).toBeInTheDocument();
+    expect(screen.getByText("Captured problem statement and scope")).toBeInTheDocument();
+    expect(screen.getByText("Approve & Continue")).toBeInTheDocument();
+    expect(screen.getByText("Give Feedback")).toBeInTheDocument();
   });
 });

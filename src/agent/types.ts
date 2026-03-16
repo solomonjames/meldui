@@ -35,6 +35,13 @@ export interface ToolResultEvent {
   isError: boolean;
 }
 
+export interface FeedbackRequestEvent {
+  requestId: string;
+  ticketId: string;
+  summary: string;
+  resolve: (response: { approved: boolean; feedback?: string }) => void;
+}
+
 export interface MeldAgentEvents {
   "chat-session": (event: { sessionId: string }) => void;
   "chat-agent-message": (event: { content: string }) => void;
@@ -44,6 +51,7 @@ export interface MeldAgentEvents {
   "tool-input-delta": (event: { id: string; partialJson: string }) => void;
   "tool-use-end": (event: { id: string }) => void;
   "permission-request": (event: PermissionRequestEvent) => void;
+  "feedback-request": (event: FeedbackRequestEvent) => void;
   "thinking-update": (event: { text: string }) => void;
   completed: (event: { response: string; sessionId: string }) => void;
   failed: (event: { message: string }) => void;

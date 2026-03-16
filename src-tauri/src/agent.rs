@@ -64,6 +64,25 @@ pub struct AgentPermissionRequest {
     pub input: serde_json::Value,
 }
 
+/// Feedback request received from the sidecar on stdout.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct AgentFeedbackRequest {
+    pub request_id: String,
+    pub ticket_id: String,
+    pub summary: String,
+}
+
+/// Feedback response sent on stdin.
+#[derive(Debug, Serialize)]
+struct FeedbackResponse {
+    #[serde(rename = "type")]
+    cmd_type: String,
+    request_id: String,
+    approved: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    feedback: Option<String>,
+}
+
 /// Active agent handle — holds the child process stdin for sending commands.
 pub struct AgentHandle {
     stdin: Arc<Mutex<Option<tokio::process::ChildStdin>>>,
@@ -80,6 +99,39 @@ impl AgentHandle {
             cmd_type: "permission_response".to_string(),
             request_id: request_id.to_string(),
             allowed,
+        };
+        let json =
+            serde_json::to_string(&response).map_err(|e| format!("Serialize error: {}", e))?;
+
+        let mut stdin_guard = self.stdin.lock().await;
+        if let Some(stdin) = stdin_guard.as_mut() {
+            stdin
+                .write_all(format!("{}\n", json).as_bytes())
+                .await
+                .map_err(|e| format!("Failed to write to sidecar stdin: {}", e))?;
+            stdin
+                .flush()
+                .await
+                .map_err(|e| format!("Failed to flush sidecar stdin: {}", e))?;
+        } else {
+            return Err("Agent sidecar stdin not available".to_string());
+        }
+
+        Ok(())
+    }
+
+    /// Send a feedback response to the sidecar.
+    pub async fn respond_to_feedback(
+        &self,
+        request_id: &str,
+        approved: bool,
+        feedback: Option<String>,
+    ) -> Result<(), String> {
+        let response = FeedbackResponse {
+            cmd_type: "feedback_response".to_string(),
+            request_id: request_id.to_string(),
+            approved,
+            feedback,
         };
         let json =
             serde_json::to_string(&response).map_err(|e| format!("Serialize error: {}", e))?;
@@ -656,24 +708,12 @@ pub async fn execute_step(
                     });
                     let _ = app_handle.emit("meldui-status-update", payload);
                 }
-                "approval_request" => {
-                    let ticket_id = json.get("ticket_id").and_then(|t| t.as_str()).unwrap_or("");
-                    let summary = json.get("summary").and_then(|s| s.as_str()).unwrap_or("");
-                    let items: Vec<String> = json
-                        .get("items")
-                        .and_then(|i| i.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(String::from))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    let payload = serde_json::json!({
-                        "ticket_id": ticket_id,
-                        "summary": summary,
-                        "items": items,
-                    });
-                    let _ = app_handle.emit("meldui-approval-request", payload);
+                "feedback_request" => {
+                    if let Ok(feedback_req) =
+                        serde_json::from_value::<AgentFeedbackRequest>(json.clone())
+                    {
+                        let _ = app_handle.emit("agent-feedback-request", feedback_req);
+                    }
                 }
                 _ => {}
             }

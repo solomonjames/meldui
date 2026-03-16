@@ -21,9 +21,17 @@ export interface CancelCommand {
   type: "cancel";
 }
 
+export interface FeedbackResponseCommand {
+  type: "feedback_response";
+  request_id: string;
+  approved: boolean;
+  feedback?: string;
+}
+
 export type InboundMessage =
   | ExecuteCommand
   | PermissionResponseCommand
+  | FeedbackResponseCommand
   | CancelCommand;
 
 export interface SidecarConfig {
@@ -124,11 +132,11 @@ export interface StatusUpdateMessage {
   status_text: string;
 }
 
-export interface ApprovalRequestMessage {
-  type: "approval_request";
+export interface FeedbackRequestMessage {
+  type: "feedback_request";
+  request_id: string;
   ticket_id: string;
   summary: string;
-  items: string[];
 }
 
 export type OutboundMessage =
@@ -146,4 +154,4 @@ export type OutboundMessage =
   | NotificationMessage
   | StepCompleteMessage
   | StatusUpdateMessage
-  | ApprovalRequestMessage;
+  | FeedbackRequestMessage;

@@ -63,7 +63,6 @@ const makeWorkflowDef = (): WorkflowDefinition => ({
       name: "Understand",
       description: "Chat step",
       instructions: { prompt: "Analyze the ticket" },
-      human_gate: true,
       view: "chat",
     },
   ],
@@ -79,27 +78,26 @@ const makeWorkflowState = (overrides: Partial<WorkflowState> = {}): WorkflowStat
 
 describe("WorkflowShell auto-execute", () => {
   let onExecuteStep: ReturnType<typeof vi.fn>;
-  let onApproveGate: ReturnType<typeof vi.fn>;
   let onGetDiff: ReturnType<typeof vi.fn>;
   let onBack: ReturnType<typeof vi.fn>;
   let onRespondToPermission: ReturnType<typeof vi.fn>;
   let onRefreshTicket: ReturnType<typeof vi.fn>;
   let onClearNotification: ReturnType<typeof vi.fn>;
+  let onRespondToFeedback: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     clearTauriMocks();
     onExecuteStep = vi.fn().mockResolvedValue({
       step_id: "step-1",
       response: "result",
-      awaiting_gate: true,
       workflow_completed: false,
     });
-    onApproveGate = vi.fn().mockResolvedValue(null);
     onGetDiff = vi.fn().mockResolvedValue([]);
     onBack = vi.fn();
     onRespondToPermission = vi.fn();
     onRefreshTicket = vi.fn().mockResolvedValue(undefined);
     onClearNotification = vi.fn();
+    onRespondToFeedback = vi.fn();
   });
 
   const defaultProps = () => ({
@@ -114,14 +112,14 @@ describe("WorkflowShell auto-execute", () => {
     pendingPermission: null,
     onRespondToPermission,
     onExecuteStep,
-    onApproveGate,
     onGetDiff,
     onBack,
     onRefreshTicket,
     notifications: [],
     onClearNotification,
     statusText: null,
-    approvalRequest: null,
+    pendingFeedback: null,
+    onRespondToFeedback,
   });
 
   const renderShell = (overrides: {

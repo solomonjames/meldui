@@ -59,9 +59,12 @@ function isValidSection(s: string): s is Section {
   return (VALID_SECTIONS as readonly string[]).includes(s);
 }
 
+export type FeedbackResponse = { approved: boolean; feedback?: string };
+
 export function createMelduiMcpServer(
   projectDir: string,
   send: (msg: OutboundMessage) => void,
+  emitFeedbackRequest?: (ticketId: string, summary: string) => Promise<FeedbackResponse>,
 ) {
   // ── Ticket tools ──
 
@@ -143,17 +146,22 @@ export function createMelduiMcpServer(
     }
   );
 
-  const requestApproval = tool(
-    "meldui_request_approval",
-    "Ask the user to review your work before continuing. Renders as a structured approval card in the chat.",
+  const requestFeedback = tool(
+    "meldui_request_feedback",
+    "Ask the user to approve your work or provide feedback. BLOCKS until the user responds. Use this after writing a deliverable to a ticket field — the user can iterate until satisfied, then approve to continue.",
     {
       ticket_id: z.string().describe("The ticket ID"),
-      summary: z.string().describe("Summary of what to review"),
-      items: z.array(z.string()).describe("List of specific items for the user to review"),
+      summary: z.string().describe("Brief summary of what you produced for the user to review"),
     },
-    async ({ ticket_id, summary, items }) => {
-      send({ type: "approval_request", ticket_id, summary, items });
-      return { content: [{ type: "text" as const, text: `Approval request sent for ${ticket_id}` }] };
+    async ({ ticket_id, summary }) => {
+      if (!emitFeedbackRequest) {
+        return { content: [{ type: "text" as const, text: "Feedback request not available (no callback configured)" }], isError: true };
+      }
+      const response = await emitFeedbackRequest(ticket_id, summary);
+      if (response.approved) {
+        return { content: [{ type: "text" as const, text: "User approved. You may now call meldui_step_complete to advance to the next step." }] };
+      }
+      return { content: [{ type: "text" as const, text: `User feedback: ${response.feedback ?? "(no details provided)"}. Please address this feedback, update the ticket field using meldui_write_section, then call meldui_request_feedback again to re-confirm.` }] };
     }
   );
 
@@ -188,6 +196,6 @@ export function createMelduiMcpServer(
 
   return createSdkMcpServer({
     name: "meldui",
-    tools: [writeSection, readSection, ticketShow, stepComplete, requestApproval, notify, showStatus],
+    tools: [writeSection, readSection, ticketShow, stepComplete, requestFeedback, notify, showStatus],
   });
 }

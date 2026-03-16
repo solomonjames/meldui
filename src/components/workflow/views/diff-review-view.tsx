@@ -1,20 +1,15 @@
 import { useState, useEffect } from "react";
-import { FileCode, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { FileCode } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Ticket, DiffFile } from "@/types";
 
 interface DiffReviewViewProps {
   ticket: Ticket;
-  isAwaitingGate: boolean;
-  onApprove: () => void;
   onGetDiff: () => Promise<DiffFile[]>;
 }
 
 export function DiffReviewView({
   ticket,
-  isAwaitingGate,
-  onApprove,
   onGetDiff,
 }: DiffReviewViewProps) {
   const [files, setFiles] = useState<DiffFile[]>([]);
@@ -73,23 +68,11 @@ export function DiffReviewView({
 
       {/* Right: Diff content */}
       <div className="flex-1 flex flex-col">
-        <div className="px-6 py-3 border-b bg-white dark:bg-zinc-900 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium">
-              {selectedFile ?? "Diff Review"}
-            </h3>
-            <p className="text-xs text-muted-foreground">{ticket.title}</p>
-          </div>
-          {isAwaitingGate && (
-            <Button
-              size="sm"
-              onClick={onApprove}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              Approve Changes & Continue
-              <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-            </Button>
-          )}
+        <div className="px-6 py-3 border-b bg-white dark:bg-zinc-900">
+          <h3 className="text-sm font-medium">
+            {selectedFile ?? "Diff Review"}
+          </h3>
+          <p className="text-xs text-muted-foreground">{ticket.title}</p>
         </div>
 
         <ScrollArea className="flex-1">

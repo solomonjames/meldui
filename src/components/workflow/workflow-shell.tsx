@@ -17,7 +17,7 @@ import type {
   DiffFile,
   PermissionRequest,
   NotificationEvent,
-  ApprovalRequestEvent,
+  FeedbackRequestEvent,
 } from "@/types";
 
 interface WorkflowShellProps {
@@ -32,14 +32,14 @@ interface WorkflowShellProps {
   pendingPermission: PermissionRequest | null;
   onRespondToPermission: (requestId: string, allowed: boolean) => void;
   onExecuteStep: (issueId: string) => Promise<StepExecutionResult | null>;
-  onApproveGate: (issueId: string) => Promise<unknown>;
   onGetDiff: () => Promise<DiffFile[]>;
   onBack: () => void;
   onRefreshTicket: () => Promise<void>;
   notifications: NotificationEvent[];
   onClearNotification: (index: number) => void;
   statusText: string | null;
-  approvalRequest: ApprovalRequestEvent | null;
+  pendingFeedback: FeedbackRequestEvent | null;
+  onRespondToFeedback: (requestId: string, approved: boolean, feedback?: string) => void;
 }
 
 export function WorkflowShell({
@@ -53,14 +53,14 @@ export function WorkflowShell({
   pendingPermission,
   onRespondToPermission,
   onExecuteStep,
-  onApproveGate,
   onGetDiff,
   onBack,
   onRefreshTicket,
   notifications,
   onClearNotification,
   statusText,
-  approvalRequest,
+  pendingFeedback,
+  onRespondToFeedback,
 }: WorkflowShellProps) {
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
   // Use a ref with a monotonic counter to prevent StrictMode double-fire
@@ -161,11 +161,6 @@ export function WorkflowShell({
     return () => { cancelled = true; };
   }, [workflowState.current_step_id, workflowState.step_status, loading, listenersReady, currentStep, onExecuteStep, onRefreshTicket, ticket.id, debug]);
 
-  const handleApprove = useCallback(async () => {
-    await onApproveGate(ticket.id);
-    setLastResult(null);
-  }, [ticket.id, onApproveGate]);
-
   if (!workflowDefinition) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -201,7 +196,6 @@ export function WorkflowShell({
     );
   }
 
-  const isAwaitingGate = workflowState.step_status === "awaiting_gate";
   const isExecuting = workflowState.step_status === "in_progress" || loading;
   const isCompleted = workflowState.step_status === "completed";
   const isFailed = typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
@@ -217,12 +211,11 @@ export function WorkflowShell({
             stepName={currentStep.name}
             response={responseText}
             isExecuting={isExecuting}
-            isAwaitingGate={isAwaitingGate}
             stepStatus={workflowState.step_status}
             stepOutput={currentStepOutput}
             statusText={statusText}
-            approvalRequest={approvalRequest}
-            onApprove={handleApprove}
+            pendingFeedback={pendingFeedback}
+            onRespondToFeedback={onRespondToFeedback}
             onExecute={handleExecute}
           />
         );
@@ -234,8 +227,6 @@ export function WorkflowShell({
             response={responseText}
             stepHistory={workflowState.step_history}
             isExecuting={isExecuting}
-            isAwaitingGate={isAwaitingGate}
-            onApprove={handleApprove}
           />
         );
       case "progress":
@@ -253,8 +244,6 @@ export function WorkflowShell({
         return (
           <DiffReviewView
             ticket={ticket}
-            isAwaitingGate={isAwaitingGate}
-            onApprove={handleApprove}
             onGetDiff={onGetDiff}
           />
         );
@@ -263,8 +252,6 @@ export function WorkflowShell({
           <CommitView
             ticket={ticket}
             response={responseText}
-            isAwaitingGate={isAwaitingGate}
-            onApprove={handleApprove}
             onBack={onBack}
           />
         );

@@ -1,7 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowRight, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Check } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Ticket, StepRecord } from "@/types";
 
@@ -11,8 +10,6 @@ interface ReviewViewProps {
   response: string;
   stepHistory: StepRecord[];
   isExecuting: boolean;
-  isAwaitingGate: boolean;
-  onApprove: () => void;
 }
 
 export function ReviewView({
@@ -21,8 +18,6 @@ export function ReviewView({
   response,
   stepHistory,
   isExecuting,
-  isAwaitingGate,
-  onApprove,
 }: ReviewViewProps) {
   return (
     <div className="flex h-full">
@@ -56,21 +51,9 @@ export function ReviewView({
 
       {/* Center: Content */}
       <div className="flex-1 flex flex-col">
-        <div className="px-6 py-3 border-b bg-white dark:bg-zinc-900 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium">{stepName}</h3>
-            <p className="text-xs text-muted-foreground">{ticket.title}</p>
-          </div>
-          {isAwaitingGate && (
-            <Button
-              size="sm"
-              onClick={onApprove}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              Continue to Next Step
-              <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-            </Button>
-          )}
+        <div className="px-6 py-3 border-b bg-white dark:bg-zinc-900">
+          <h3 className="text-sm font-medium">{stepName}</h3>
+          <p className="text-xs text-muted-foreground">{ticket.title}</p>
         </div>
 
         <ScrollArea className="flex-1 p-6">

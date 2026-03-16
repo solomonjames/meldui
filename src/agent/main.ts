@@ -78,7 +78,7 @@ async function main(): Promise<void> {
   }
 
   const config = parseAgentConfig(executeCmd.config);
-  const agent = new ClaudeAgent();
+  const agent = new ClaudeAgent(send);
 
   // ── Wire agent events to stdout NDJSON ──
 

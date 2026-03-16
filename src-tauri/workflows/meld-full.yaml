@@ -17,7 +17,7 @@ steps:
         3. Define what is in scope and out of scope
         4. Ask clarifying questions if the requirement is ambiguous
 
-        Format your response as:
+        Format your deliverable as:
         ## Problem Statement
         What problem does this solve?
 
@@ -32,9 +32,12 @@ steps:
 
         ## Clarifying Questions
         - ...
+
+        When you have finalized the problem statement, solution, and scope:
+        1. Use meldui_write_section to write the result to the "design" field
+        2. Use meldui_notify to alert the user that the understanding phase is complete
+        3. Use meldui_step_complete to signal you're done
     human_gate: true
-    writes_to:
-      - design
 
   - id: spec-investigate
     name: "Spec: Investigate"
@@ -53,7 +56,7 @@ steps:
 
         Be specific — reference actual file paths, function names, and line numbers.
 
-        Format your response as:
+        Format your deliverable as:
         ## Files to Modify
         - `path/to/file.ts` — what changes are needed
 
@@ -68,9 +71,12 @@ steps:
         ## Dependencies
 
         ## Technical Constraints
+
+        When you have finalized the investigation:
+        1. Use meldui_write_section to write the result to the "notes" field
+        2. Use meldui_notify to alert the user that investigation is complete
+        3. Use meldui_step_complete to signal you're done
     human_gate: true
-    writes_to:
-      - notes
 
   - id: spec-generate
     name: "Spec: Generate Tasks & Acceptance Criteria"
@@ -109,10 +115,13 @@ steps:
         - Unit tests needed
         - Integration tests needed
         - Manual verification steps
+
+        When you have finalized the tasks and acceptance criteria:
+        1. Use meldui_write_section to write acceptance criteria to the "acceptance_criteria" field
+        2. Use meldui_write_section to append implementation tasks and testing strategy to the "notes" field
+        3. Use meldui_notify to alert the user that the spec is ready for review
+        4. Use meldui_step_complete to signal you're done
     human_gate: true
-    writes_to:
-      - acceptance
-      - notes
 
   - id: spec-review
     name: "Spec: Review"
@@ -143,9 +152,11 @@ steps:
         - Tasks: N total, all actionable? yes/no
         - ACs: N total, all testable? yes/no
         - Coverage: Any gaps?
+
+        When the review is complete:
+        1. Use meldui_write_section to write the review summary to the "design" field (append to existing)
+        2. Use meldui_step_complete to signal you're done
     human_gate: true
-    writes_to:
-      - design
 
   - id: implement
     name: Implement
@@ -167,15 +178,17 @@ steps:
         - Run tests after every change
         - If no test framework exists, implement directly
 
-        After completing all tasks, provide a summary:
+        When implementation is complete:
+        1. Use meldui_write_section to write an implementation report to the "notes" field
+        2. Use meldui_step_complete to signal you're done
+
+        Format the implementation report as:
         ## Implementation Report
         ### Files Changed
         ### Tests Added
         ### Test Results
         ### Notes
     human_gate: false
-    writes_to:
-      - notes
 
   - id: verify
     name: Verify
@@ -215,9 +228,11 @@ steps:
         - Evidence: [how verified]
 
         ### Overall: PASS/FAIL
+
+        When verification is complete:
+        1. Use meldui_write_section to write the verification report to the "notes" field
+        2. Use meldui_step_complete to signal you're done
     human_gate: true
-    writes_to:
-      - notes
 
   - id: diff-review
     name: Diff Review

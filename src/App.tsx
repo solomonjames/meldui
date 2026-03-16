@@ -107,6 +107,11 @@ function App() {
     }
   }, [activeWorkflowTicket, projectDir, ticketStore]);
 
+  // Register the refresh callback so MeldUI MCP section_update events trigger it
+  useEffect(() => {
+    workflow.setOnRefreshTicket(handleRefreshTicket);
+  }, [handleRefreshTicket, workflow.setOnRefreshTicket]);
+
   const handleBackToBoard = useCallback(() => {
     setActiveWorkflowTicket(null);
     setActiveTicketId(null);
@@ -181,6 +186,10 @@ function App() {
           onGetDiff={workflow.getDiff}
           onBack={handleBackToBoard}
           onRefreshTicket={handleRefreshTicket}
+          notifications={workflow.notifications}
+          onClearNotification={workflow.clearNotification}
+          statusText={workflow.statusText}
+          approvalRequest={workflow.approvalRequest}
         />
       ) : (
         <BacklogPage

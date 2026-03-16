@@ -22,15 +22,17 @@ steps:
         - Run tests after every change
         - If no test framework exists, implement directly
 
-        After completing implementation, provide a summary:
+        When implementation is complete:
+        1. Use meldui_write_section to write an implementation report to the "notes" field
+        2. Use meldui_step_complete to signal you're done
+
+        Format the implementation report as:
         ## Implementation Report
         ### Files Changed
         ### Tests Added
         ### Test Results
         ### Notes
     human_gate: false
-    writes_to:
-      - notes
 
   - id: verify
     name: Verify
@@ -59,9 +61,11 @@ steps:
         Result: PASS/FAIL
 
         ### Overall: PASS/FAIL
+
+        When verification is complete:
+        1. Use meldui_write_section to write the verification report to the "notes" field
+        2. Use meldui_step_complete to signal you're done
     human_gate: true
-    writes_to:
-      - notes
 
   - id: commit
     name: Commit

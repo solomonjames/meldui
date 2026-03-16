@@ -11,6 +11,11 @@ import type {
   ToolActivity,
   DiffFile,
   PermissionRequest,
+  SectionUpdateEvent,
+  NotificationEvent,
+  StepCompleteEvent,
+  StatusUpdateEvent,
+  ApprovalRequestEvent,
 } from "@/types";
 
 function emptyStepOutput(): StepOutputStream {
@@ -32,10 +37,16 @@ export function useWorkflow(projectDir: string) {
   const [stepOutputs, setStepOutputs] = useState<Record<string, StepOutputStream>>({});
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
+  const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
+  const [statusText, setStatusText] = useState<string | null>(null);
+  const [approvalRequest, setApprovalRequest] = useState<ApprovalRequestEvent | null>(null);
   const [listenersReady, setListenersReady] = useState(false);
   const unlistenRef = useRef<UnlistenFn | null>(null);
   const permissionUnlistenRef = useRef<UnlistenFn | null>(null);
+  const melduiUnlistenRefs = useRef<UnlistenFn[]>([]);
   const currentStepRef = useRef<string | null>(null);
+  const onRefreshTicketRef = useRef<(() => Promise<void>) | null>(null);
+  const getWorkflowStateRef = useRef<((issueId: string) => Promise<unknown>) | null>(null);
 
   // Keep currentStepRef in sync
   useEffect(() => {
@@ -170,9 +181,72 @@ export function useWorkflow(projectDir: string) {
 
       if (!cancelled) {
         permissionUnlistenRef.current = permUnlisten;
-        setListenersReady(true);
       } else {
         permUnlisten();
+      }
+
+      // Listen for MeldUI MCP events
+      const melduiUnlistens: UnlistenFn[] = [];
+
+      const sectionUnlisten = await listen<SectionUpdateEvent>(
+        "meldui-section-update",
+        (event) => {
+          if (cancelled) return;
+          // Trigger ticket refresh so the ticket context panel updates live
+          if (activeTicketId && event.payload.ticket_id === activeTicketId) {
+            onRefreshTicketRef.current?.();
+          }
+        }
+      );
+      melduiUnlistens.push(sectionUnlisten);
+
+      const notifyUnlisten = await listen<NotificationEvent>(
+        "meldui-notification",
+        (event) => {
+          if (!cancelled) {
+            setNotifications((prev) => [...prev, event.payload]);
+          }
+        }
+      );
+      melduiUnlistens.push(notifyUnlisten);
+
+      const stepCompleteUnlisten = await listen<StepCompleteEvent>(
+        "meldui-step-complete",
+        (event) => {
+          if (cancelled) return;
+          if (activeTicketId && event.payload.ticket_id === activeTicketId) {
+            // Refresh workflow state — this triggers re-render and gate/advance logic
+            getWorkflowStateRef.current?.(activeTicketId);
+          }
+        }
+      );
+      melduiUnlistens.push(stepCompleteUnlisten);
+
+      const statusUnlisten = await listen<StatusUpdateEvent>(
+        "meldui-status-update",
+        (event) => {
+          if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
+            setStatusText(event.payload.status_text);
+          }
+        }
+      );
+      melduiUnlistens.push(statusUnlisten);
+
+      const approvalUnlisten = await listen<ApprovalRequestEvent>(
+        "meldui-approval-request",
+        (event) => {
+          if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
+            setApprovalRequest(event.payload);
+          }
+        }
+      );
+      melduiUnlistens.push(approvalUnlisten);
+
+      if (!cancelled) {
+        melduiUnlistenRefs.current = melduiUnlistens;
+        setListenersReady(true);
+      } else {
+        melduiUnlistens.forEach((fn) => fn());
       }
     };
 
@@ -188,6 +262,8 @@ export function useWorkflow(projectDir: string) {
         permissionUnlistenRef.current();
         permissionUnlistenRef.current = null;
       }
+      melduiUnlistenRefs.current.forEach((fn) => fn());
+      melduiUnlistenRefs.current = [];
     };
   }, [activeTicketId]);
 
@@ -259,6 +335,10 @@ export function useWorkflow(projectDir: string) {
     },
     [projectDir]
   );
+
+  // Keep ref in sync so event listeners can call getWorkflowState without
+  // needing it in the useEffect dependency array (avoids TDZ errors)
+  getWorkflowStateRef.current = getWorkflowState;
 
   const executeStep = useCallback(
     async (issueId: string) => {
@@ -377,6 +457,14 @@ export function useWorkflow(projectDir: string) {
     [stepOutputs]
   );
 
+  const clearNotification = useCallback((index: number) => {
+    setNotifications((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const setOnRefreshTicket = useCallback((fn: () => Promise<void>) => {
+    onRefreshTicketRef.current = fn;
+  }, []);
+
   return {
     workflows,
     currentState,
@@ -388,6 +476,11 @@ export function useWorkflow(projectDir: string) {
     setActiveTicketId,
     pendingPermission,
     respondToPermission,
+    notifications,
+    clearNotification,
+    statusText,
+    approvalRequest,
+    setOnRefreshTicket,
     listWorkflows,
     getWorkflow,
     assignWorkflow,

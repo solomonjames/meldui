@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from "react";
+import { Toaster, toast } from "sonner";
 import { StageBar } from "./stage-bar";
 import { DebugPanel } from "./debug-panel";
 import { ChatView } from "./views/chat-view";
@@ -15,6 +16,8 @@ import type {
   StepOutputStream,
   DiffFile,
   PermissionRequest,
+  NotificationEvent,
+  ApprovalRequestEvent,
 } from "@/types";
 
 interface WorkflowShellProps {
@@ -33,6 +36,10 @@ interface WorkflowShellProps {
   onGetDiff: () => Promise<DiffFile[]>;
   onBack: () => void;
   onRefreshTicket: () => Promise<void>;
+  notifications: NotificationEvent[];
+  onClearNotification: (index: number) => void;
+  statusText: string | null;
+  approvalRequest: ApprovalRequestEvent | null;
 }
 
 export function WorkflowShell({
@@ -50,6 +57,10 @@ export function WorkflowShell({
   onGetDiff,
   onBack,
   onRefreshTicket,
+  notifications,
+  onClearNotification,
+  statusText,
+  approvalRequest,
 }: WorkflowShellProps) {
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
   // Use a ref with a monotonic counter to prevent StrictMode double-fire
@@ -66,6 +77,39 @@ export function WorkflowShell({
     prevStepId.current = workflowState.current_step_id;
     executingRef.current.stepId = null;
   }
+
+  // Show toast notifications from agent
+  const lastNotifCount = useRef(0);
+  useEffect(() => {
+    if (notifications.length > lastNotifCount.current) {
+      const newNotifs = notifications.slice(lastNotifCount.current);
+      for (const notif of newNotifs) {
+        switch (notif.level) {
+          case "success":
+            toast.success(notif.title, { description: notif.message });
+            break;
+          case "warning":
+            toast.warning(notif.title, { description: notif.message });
+            break;
+          case "error":
+            toast.error(notif.title, { description: notif.message });
+            break;
+          default:
+            toast.info(notif.title, { description: notif.message });
+        }
+      }
+    }
+    lastNotifCount.current = notifications.length;
+  }, [notifications]);
+
+  // Clear notifications when consumed
+  useEffect(() => {
+    if (notifications.length > 0) {
+      for (let i = notifications.length - 1; i >= 0; i--) {
+        onClearNotification(i);
+      }
+    }
+  }, [notifications, onClearNotification]);
 
   const handleExecute = useCallback(async () => {
     const result = await onExecuteStep(ticket.id);
@@ -162,12 +206,7 @@ export function WorkflowShell({
   const isCompleted = workflowState.step_status === "completed";
   const isFailed = typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
   const currentStepOutput = currentStep ? stepOutputs[currentStep.id] : undefined;
-  const writesToTicket = currentStep.writes_to && currentStep.writes_to.length > 0;
-  // For writesToTicket steps, don't pass the final result as the response —
-  // it goes to Ticket Context via stepOutput.resultContent instead
-  const responseText = writesToTicket
-    ? ""
-    : (lastResult?.response ?? currentStepOutput?.textContent ?? "");
+  const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
 
   const renderView = () => {
     switch (currentStep.view) {
@@ -181,7 +220,8 @@ export function WorkflowShell({
             isAwaitingGate={isAwaitingGate}
             stepStatus={workflowState.step_status}
             stepOutput={currentStepOutput}
-            writesToTicket={writesToTicket ?? false}
+            statusText={statusText}
+            approvalRequest={approvalRequest}
             onApprove={handleApprove}
             onExecute={handleExecute}
           />
@@ -241,6 +281,7 @@ export function WorkflowShell({
 
   return (
     <div data-testid="workflow-shell" data-status={typeof workflowState.step_status === 'string' ? workflowState.step_status : 'failed'} className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
+      <Toaster position="top-right" richColors />
       <StageBar
         steps={workflowDefinition.steps}
         currentStepId={workflowState.current_step_id}

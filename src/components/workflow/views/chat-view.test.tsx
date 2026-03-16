@@ -65,7 +65,7 @@ describe("ChatView display states", () => {
     expect(screen.getByText("Run manually")).toBeInTheDocument();
   });
 
-  it("shows Retry button when not pending, not executing, and no response", () => {
+  it("shows Retry button when not executing and has stderr errors", () => {
     render(
       <ChatView
         {...defaultProps}
@@ -73,10 +73,18 @@ describe("ChatView display states", () => {
         isExecuting={false}
         isAwaitingGate={false}
         stepStatus={"completed" as StepStatus}
+        stepOutput={{
+          textContent: "",
+          toolActivities: [],
+          stderrLines: ["Something went wrong"],
+          resultContent: null,
+          thinkingContent: "",
+          lastChunkType: "",
+        }}
       />
     );
 
-    expect(screen.getByText("No response received")).toBeInTheDocument();
+    expect(screen.getByText("Agent returned an error:")).toBeInTheDocument();
     expect(screen.getByText("Retry")).toBeInTheDocument();
   });
 

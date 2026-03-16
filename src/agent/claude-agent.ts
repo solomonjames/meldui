@@ -7,9 +7,10 @@
 
 import EventEmitter from "eventemitter3";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { createTicketMcpServer } from "./mcp/ticket-server.js";
+import { createMelduiMcpServer } from "./mcp/meldui-server.js";
 import { buildSystemPromptAppend } from "./config.js";
 import type { AgentConfig, MeldAgentEvents, MeldAgent } from "./types.js";
+import type { OutboundMessage } from "./protocol.js";
 import { resolve, isAbsolute } from "path";
 import { existsSync } from "fs";
 
@@ -33,11 +34,17 @@ export class ClaudeAgent
 {
   private abortController: AbortController | null = null;
   private agentQuery: ReturnType<typeof query> | null = null;
+  private sendFn: (msg: OutboundMessage) => void;
+
+  constructor(send: (msg: OutboundMessage) => void) {
+    super();
+    this.sendFn = send;
+  }
 
   async execute(prompt: string, config: AgentConfig): Promise<void> {
     this.abortController = new AbortController();
 
-    const ticketMcpServer = createTicketMcpServer(config.projectDir);
+    const melduiMcpServer = createMelduiMcpServer(config.projectDir, this.sendFn);
 
     const systemPromptAppend = buildSystemPromptAppend(config);
 
@@ -65,7 +72,7 @@ export class ClaudeAgent
         append: systemPromptAppend,
       },
       mcpServers: {
-        tickets: ticketMcpServer,
+        meldui: melduiMcpServer,
       },
       abortController: this.abortController,
       // Enable streaming events for progressive UI updates
@@ -284,8 +291,8 @@ export class ClaudeAgent
     _toolOptions: Record<string, unknown>,
     config: AgentConfig
   ): Promise<Record<string, unknown>> {
-    // Auto-allow: all mcp__tickets tools
-    if (toolName.startsWith("mcp__tickets")) {
+    // Auto-allow: all mcp__meldui tools
+    if (toolName.startsWith("mcp__meldui")) {
       return { behavior: "allow", updatedInput: input };
     }
 

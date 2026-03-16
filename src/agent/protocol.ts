@@ -96,6 +96,41 @@ export interface ErrorMessage {
   message: string;
 }
 
+// ── MeldUI MCP → App events ──
+
+export interface SectionUpdateMessage {
+  type: "section_update";
+  ticket_id: string;
+  section: string;
+  content: string;
+}
+
+export interface NotificationMessage {
+  type: "notification";
+  title: string;
+  message: string;
+  level: string;
+}
+
+export interface StepCompleteMessage {
+  type: "step_complete";
+  ticket_id: string;
+  summary: string;
+}
+
+export interface StatusUpdateMessage {
+  type: "status_update";
+  ticket_id: string;
+  status_text: string;
+}
+
+export interface ApprovalRequestMessage {
+  type: "approval_request";
+  ticket_id: string;
+  summary: string;
+  items: string[];
+}
+
 export type OutboundMessage =
   | SessionMessage
   | TextMessage
@@ -106,4 +141,9 @@ export type OutboundMessage =
   | PermissionRequestMessage
   | ThinkingMessage
   | ResultMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | SectionUpdateMessage
+  | NotificationMessage
+  | StepCompleteMessage
+  | StatusUpdateMessage
+  | ApprovalRequestMessage;

@@ -31,8 +31,6 @@ pub struct WorkflowStep {
     #[serde(default)]
     pub human_gate: bool,
     pub view: StepViewType,
-    #[serde(default)]
-    pub writes_to: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -476,82 +474,7 @@ pub async fn execute_step(
         )?;
     }
 
-    // 9. Write response to ticket fields specified by writes_to (APPEND semantics)
-    if let Some(writes_to) = &step.writes_to {
-        // Re-fetch the ticket to get current field values for appending
-        let fresh_ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
-
-        for field in writes_to {
-            let separator = "\n\n---\n\n";
-            match field.as_str() {
-                "notes" => {
-                    let existing = fresh_ticket.notes.as_deref().unwrap_or("");
-                    let new_value = if existing.is_empty() {
-                        response_text.clone()
-                    } else {
-                        format!("{}{}{}", existing, separator, response_text)
-                    };
-                    crate::tickets::update_ticket(
-                        project_dir,
-                        ticket_id,
-                        None,
-                        None,
-                        None,
-                        None,
-                        Some(&new_value),
-                        None,
-                        None,
-                        None,
-                    )?;
-                }
-                "design" => {
-                    let existing = fresh_ticket.design.as_deref().unwrap_or("");
-                    let new_value = if existing.is_empty() {
-                        response_text.clone()
-                    } else {
-                        format!("{}{}{}", existing, separator, response_text)
-                    };
-                    crate::tickets::update_ticket(
-                        project_dir,
-                        ticket_id,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        Some(&new_value),
-                        None,
-                        None,
-                    )?;
-                }
-                "acceptance_criteria" => {
-                    let existing = fresh_ticket.acceptance_criteria.as_deref().unwrap_or("");
-                    let new_value = if existing.is_empty() {
-                        response_text.clone()
-                    } else {
-                        format!("{}{}{}", existing, separator, response_text)
-                    };
-                    crate::tickets::update_ticket(
-                        project_dir,
-                        ticket_id,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                        Some(&new_value),
-                        None,
-                    )?;
-                }
-                _ => {
-                    eprintln!("Unknown writes_to field: {}", field);
-                }
-            }
-        }
-    }
-
-    // 10. Handle gate or auto-advance
+    // 9. Handle gate or auto-advance
     if step.human_gate {
         update_step_status(project_dir, ticket_id, StepStatus::AwaitingGate)?;
         Ok(StepExecutionResult {

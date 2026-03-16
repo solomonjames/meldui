@@ -39,7 +39,6 @@ export interface WorkflowStep {
   instructions: StepInstructions;
   human_gate: boolean;
   view: StepViewType;
-  writes_to?: string[];
 }
 
 export type StepInstructions =
@@ -114,4 +113,34 @@ export interface DiffFile {
   path: string;
   status: string;
   content: string;
+}
+
+// ── MeldUI MCP Event Types ──
+
+export interface SectionUpdateEvent {
+  ticket_id: string;
+  section: string;
+  content: string;
+}
+
+export interface NotificationEvent {
+  title: string;
+  message: string;
+  level: "info" | "success" | "warning" | "error";
+}
+
+export interface StepCompleteEvent {
+  ticket_id: string;
+  summary: string;
+}
+
+export interface StatusUpdateEvent {
+  ticket_id: string;
+  status_text: string;
+}
+
+export interface ApprovalRequestEvent {
+  ticket_id: string;
+  summary: string;
+  items: string[];
 }

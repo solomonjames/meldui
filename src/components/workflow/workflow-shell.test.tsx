@@ -83,6 +83,8 @@ describe("WorkflowShell auto-execute", () => {
   let onGetDiff: ReturnType<typeof vi.fn>;
   let onBack: ReturnType<typeof vi.fn>;
   let onRespondToPermission: ReturnType<typeof vi.fn>;
+  let onRefreshTicket: ReturnType<typeof vi.fn>;
+  let onClearNotification: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     clearTauriMocks();
@@ -96,6 +98,30 @@ describe("WorkflowShell auto-execute", () => {
     onGetDiff = vi.fn().mockResolvedValue([]);
     onBack = vi.fn();
     onRespondToPermission = vi.fn();
+    onRefreshTicket = vi.fn().mockResolvedValue(undefined);
+    onClearNotification = vi.fn();
+  });
+
+  const defaultProps = () => ({
+    ticket: makeTicket(),
+    projectDir: "/test",
+    workflowState: makeWorkflowState(),
+    workflowDefinition: makeWorkflowDef(),
+    stepOutputs: {} as Record<string, StepOutputStream>,
+    loading: false,
+    error: null,
+    listenersReady: true,
+    pendingPermission: null,
+    onRespondToPermission,
+    onExecuteStep,
+    onApproveGate,
+    onGetDiff,
+    onBack,
+    onRefreshTicket,
+    notifications: [],
+    onClearNotification,
+    statusText: null,
+    approvalRequest: null,
   });
 
   const renderShell = (overrides: {
@@ -106,20 +132,8 @@ describe("WorkflowShell auto-execute", () => {
   } = {}) =>
     render(
       <WorkflowShell
-        ticket={makeTicket()}
-        projectDir="/test"
-        workflowState={overrides.workflowState ?? makeWorkflowState()}
-        workflowDefinition={makeWorkflowDef()}
-        stepOutputs={overrides.stepOutputs ?? {}}
-        loading={overrides.loading ?? false}
-        error={null}
-        listenersReady={overrides.listenersReady ?? true}
-        pendingPermission={null}
-        onRespondToPermission={onRespondToPermission}
-        onExecuteStep={onExecuteStep}
-        onApproveGate={onApproveGate}
-        onGetDiff={onGetDiff}
-        onBack={onBack}
+        {...defaultProps()}
+        {...overrides}
       />
     );
 
@@ -148,22 +162,7 @@ describe("WorkflowShell auto-execute", () => {
 
   it("does NOT double-execute (executingRef guard)", async () => {
     const { rerender } = render(
-      <WorkflowShell
-        ticket={makeTicket()}
-        projectDir="/test"
-        workflowState={makeWorkflowState()}
-        workflowDefinition={makeWorkflowDef()}
-        stepOutputs={{}}
-        loading={false}
-        error={null}
-        listenersReady={true}
-        pendingPermission={null}
-        onRespondToPermission={onRespondToPermission}
-        onExecuteStep={onExecuteStep}
-        onApproveGate={onApproveGate}
-        onGetDiff={onGetDiff}
-        onBack={onBack}
-      />
+      <WorkflowShell {...defaultProps()} />
     );
 
     await waitFor(() => {
@@ -172,22 +171,7 @@ describe("WorkflowShell auto-execute", () => {
 
     // Re-render with same props — should NOT trigger again
     rerender(
-      <WorkflowShell
-        ticket={makeTicket()}
-        projectDir="/test"
-        workflowState={makeWorkflowState()}
-        workflowDefinition={makeWorkflowDef()}
-        stepOutputs={{}}
-        loading={false}
-        error={null}
-        listenersReady={true}
-        pendingPermission={null}
-        onRespondToPermission={onRespondToPermission}
-        onExecuteStep={onExecuteStep}
-        onApproveGate={onApproveGate}
-        onGetDiff={onGetDiff}
-        onBack={onBack}
-      />
+      <WorkflowShell {...defaultProps()} />
     );
 
     await new Promise((r) => setTimeout(r, 50));
@@ -196,22 +180,7 @@ describe("WorkflowShell auto-execute", () => {
 
   it("re-attempts when loading transitions from true to false while step is pending", async () => {
     const { rerender } = render(
-      <WorkflowShell
-        ticket={makeTicket()}
-        projectDir="/test"
-        workflowState={makeWorkflowState()}
-        workflowDefinition={makeWorkflowDef()}
-        stepOutputs={{}}
-        loading={true}
-        error={null}
-        listenersReady={true}
-        pendingPermission={null}
-        onRespondToPermission={onRespondToPermission}
-        onExecuteStep={onExecuteStep}
-        onApproveGate={onApproveGate}
-        onGetDiff={onGetDiff}
-        onBack={onBack}
-      />
+      <WorkflowShell {...defaultProps()} loading={true} />
     );
 
     // Should not have fired while loading
@@ -220,22 +189,7 @@ describe("WorkflowShell auto-execute", () => {
 
     // Now loading becomes false
     rerender(
-      <WorkflowShell
-        ticket={makeTicket()}
-        projectDir="/test"
-        workflowState={makeWorkflowState()}
-        workflowDefinition={makeWorkflowDef()}
-        stepOutputs={{}}
-        loading={false}
-        error={null}
-        listenersReady={true}
-        pendingPermission={null}
-        onRespondToPermission={onRespondToPermission}
-        onExecuteStep={onExecuteStep}
-        onApproveGate={onApproveGate}
-        onGetDiff={onGetDiff}
-        onBack={onBack}
-      />
+      <WorkflowShell {...defaultProps()} />
     );
 
     await waitFor(() => {

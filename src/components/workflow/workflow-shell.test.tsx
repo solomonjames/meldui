@@ -335,11 +335,22 @@ describe("WorkflowShell failed step display", () => {
       />
     );
 
-    expect(screen.getByText("Session timed out while waiting for input.")).toBeInTheDocument();
+    expect(screen.getByText("Session interrupted — your progress is saved.")).toBeInTheDocument();
     expect(screen.getByText("Resume")).toBeInTheDocument();
   });
 
-  it("shows Retry button for non-timeout failures", () => {
+  it("shows Resume button for session-interrupted failures (app restart)", () => {
+    render(
+      <WorkflowShell
+        {...failedProps("Session interrupted — click Resume to continue")}
+      />
+    );
+
+    expect(screen.getByText("Session interrupted — your progress is saved.")).toBeInTheDocument();
+    expect(screen.getByText("Resume")).toBeInTheDocument();
+  });
+
+  it("shows Retry button for non-resumable failures", () => {
     render(
       <WorkflowShell
         {...failedProps("Agent sidecar exited with status 1 and no output")}
@@ -350,10 +361,10 @@ describe("WorkflowShell failed step display", () => {
     expect(screen.getByText("Retry")).toBeInTheDocument();
   });
 
-  it("calls onExecuteStep when Resume/Retry is clicked", async () => {
+  it("calls onExecuteStep when Resume is clicked", async () => {
     render(
       <WorkflowShell
-        {...failedProps("Agent sidecar timed out after 120 seconds of inactivity. The session can be resumed.")}
+        {...failedProps("Session interrupted — click Resume to continue")}
       />
     );
 

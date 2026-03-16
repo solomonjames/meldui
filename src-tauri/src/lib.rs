@@ -220,8 +220,31 @@ async fn workflow_advance(project_dir: String, issue_id: String) -> Result<Workf
 async fn workflow_state(
     project_dir: String,
     issue_id: String,
+    state: tauri::State<'_, AgentState>,
 ) -> Result<Option<WorkflowState>, String> {
-    workflow::get_workflow_state(&project_dir, &issue_id)
+    let wf_state = workflow::get_workflow_state(&project_dir, &issue_id)?;
+
+    // Detect stale in-progress steps: if step_status is "in_progress" but no
+    // sidecar is running, the app was closed/restarted mid-step. Reset to
+    // failed so the user sees a Resume button instead of a stuck spinner.
+    if let Some(ref ws) = wf_state {
+        if ws.step_status == workflow::StepStatus::InProgress {
+            let handle_guard = state.handle.lock().await;
+            if handle_guard.is_none() {
+                // No active sidecar — step is stale
+                let failed_state = workflow::update_step_status(
+                    &project_dir,
+                    &issue_id,
+                    workflow::StepStatus::Failed(
+                        "Session interrupted — click Resume to continue".to_string(),
+                    ),
+                )?;
+                return Ok(Some(failed_state));
+            }
+        }
+    }
+
+    Ok(wf_state)
 }
 
 #[tauri::command]

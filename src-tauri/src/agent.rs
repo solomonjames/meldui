@@ -376,6 +376,8 @@ pub async fn execute_step(
     session_id: Option<&str>,
     allowed_tools: Option<Vec<String>>,
     app_handle: &tauri::AppHandle,
+    tickets_dir_override: Option<&str>,
+    canonical_project_dir: Option<&str>,
 ) -> Result<(String, String), String> {
     let agent_bin = find_agent_binary().ok_or_else(|| {
         "Agent sidecar binary not found. Run 'bun run agent:build' first.".to_string()
@@ -397,7 +399,11 @@ pub async fn execute_step(
         session_id: session_id.map(|s| s.to_string()),
         max_turns: Some(200),
         model: None,
-        tickets_dir: Some(format!("{}/.meldui/tickets", project_dir)),
+        tickets_dir: Some(
+            tickets_dir_override
+                .map(|d| d.to_string())
+                .unwrap_or_else(|| format!("{}/.meldui/tickets", project_dir)),
+        ),
     };
 
     let tools_summary = config.allowed_tools.as_ref().map(|t| t.join(","));
@@ -758,7 +764,7 @@ pub async fn execute_step(
 
                     // Advance the workflow to the next step
                     if !ticket_id.is_empty() {
-                        match crate::workflow::advance_step(project_dir, ticket_id) {
+                        match crate::workflow::advance_step(canonical_project_dir.unwrap_or(project_dir), ticket_id) {
                             Ok(_state) => {
                                 log::info!(
                                     "agent: workflow advanced for {} (summary: {})",

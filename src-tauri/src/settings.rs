@@ -14,9 +14,18 @@ pub struct SyncSettings {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct WorktreeSettings {
+    /// Optional shell command to run after worktree creation (e.g., "bun install")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setup_command: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ProjectSettings {
     #[serde(default)]
     pub sync: Option<SyncSettings>,
+    #[serde(default)]
+    pub worktree: Option<WorktreeSettings>,
 }
 
 fn settings_path(project_dir: &str) -> PathBuf {

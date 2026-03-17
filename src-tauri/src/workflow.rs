@@ -1,6 +1,231 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// ── Worktree Management ──
+
+#[derive(Debug, Serialize, Clone)]
+pub struct WorktreeInfo {
+    pub path: String,
+    pub branch: String,
+}
+
+/// Create a git worktree for a ticket workflow.
+///
+/// Creates the worktree at `.meldui/worktrees/{ticket_id}/` on branch `meld/{ticket_id}`.
+/// If a `worktree.setup_command` is configured in project settings, runs it in the worktree.
+pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<WorktreeInfo, String> {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    let branch_name = format!("meld/{}", ticket_id);
+    let worktree_path = PathBuf::from(project_dir)
+        .join(".meldui")
+        .join("worktrees")
+        .join(ticket_id);
+    let worktree_str = worktree_path
+        .to_str()
+        .ok_or("Invalid worktree path")?
+        .to_string();
+
+    // Ensure parent directory exists
+    if let Some(parent) = worktree_path.parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create worktrees directory: {}", e))?;
+        }
+    }
+
+    // Create the worktree
+    let output = Command::new("git")
+        .args(["worktree", "add", &worktree_str, "-b", &branch_name])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to create worktree: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // If the branch already exists, try adding worktree with existing branch
+        if stderr.contains("already exists") {
+            let output2 = Command::new("git")
+                .args(["worktree", "add", &worktree_str, &branch_name])
+                .current_dir(project_dir)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+                .await
+                .map_err(|e| format!("Failed to create worktree: {}", e))?;
+
+            if !output2.status.success() {
+                let stderr2 = String::from_utf8_lossy(&output2.stderr);
+                return Err(format!("Failed to create worktree: {}", stderr2));
+            }
+        } else {
+            return Err(format!("Failed to create worktree: {}", stderr));
+        }
+    }
+
+    log::info!(
+        "worktree: created at {} on branch {}",
+        worktree_str,
+        branch_name
+    );
+
+    // Run setup command if configured
+    let settings = crate::settings::get_settings(project_dir).unwrap_or_default();
+    if let Some(ref wt_settings) = settings.worktree {
+        if let Some(ref setup_cmd) = wt_settings.setup_command {
+            if !setup_cmd.trim().is_empty() {
+                log::info!("worktree: running setup command: {}", setup_cmd);
+                let setup_output = Command::new("sh")
+                    .args(["-c", setup_cmd])
+                    .current_dir(&worktree_str)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .output()
+                    .await
+                    .map_err(|e| format!("Failed to run worktree setup command: {}", e))?;
+
+                if !setup_output.status.success() {
+                    let stderr = String::from_utf8_lossy(&setup_output.stderr);
+                    return Err(format!("Worktree setup command failed: {}", stderr.trim()));
+                }
+                log::info!("worktree: setup command completed successfully");
+            }
+        }
+    }
+
+    // Store worktree info in ticket metadata
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
+    let mut meta = ticket.metadata.clone();
+    meta["worktree_path"] = serde_json::Value::String(worktree_str.clone());
+    meta["worktree_branch"] = serde_json::Value::String(branch_name.clone());
+    let meta_str = serde_json::to_string(&meta)
+        .map_err(|e| format!("Failed to serialize worktree metadata: {}", e))?;
+    crate::tickets::update_ticket(
+        project_dir,
+        ticket_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(&meta_str),
+    )?;
+
+    Ok(WorktreeInfo {
+        path: worktree_str,
+        branch: branch_name,
+    })
+}
+
+/// Remove a git worktree for a ticket.
+pub async fn remove_worktree(project_dir: &str, ticket_id: &str) -> Result<(), String> {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    let worktree_path = PathBuf::from(project_dir)
+        .join(".meldui")
+        .join("worktrees")
+        .join(ticket_id);
+    let worktree_str = worktree_path
+        .to_str()
+        .ok_or("Invalid worktree path")?
+        .to_string();
+
+    if !worktree_path.exists() {
+        // Already gone — just clean up metadata
+        clear_worktree_metadata(project_dir, ticket_id)?;
+        return Ok(());
+    }
+
+    // Remove the worktree
+    let output = Command::new("git")
+        .args(["worktree", "remove", &worktree_str, "--force"])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to remove worktree: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log::warn!("worktree: git worktree remove failed: {}", stderr);
+        // Fall back to manual removal
+        if worktree_path.exists() {
+            std::fs::remove_dir_all(&worktree_path)
+                .map_err(|e| format!("Failed to remove worktree directory: {}", e))?;
+        }
+        // Prune stale worktree references
+        let _ = Command::new("git")
+            .args(["worktree", "prune"])
+            .current_dir(project_dir)
+            .output()
+            .await;
+    }
+
+    log::info!("worktree: removed {}", worktree_str);
+
+    // Delete the branch
+    let branch_name = format!("meld/{}", ticket_id);
+    let _ = Command::new("git")
+        .args(["branch", "-D", &branch_name])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await;
+
+    clear_worktree_metadata(project_dir, ticket_id)?;
+    Ok(())
+}
+
+fn clear_worktree_metadata(project_dir: &str, ticket_id: &str) -> Result<(), String> {
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
+    let mut meta = ticket.metadata.clone();
+    if let Some(obj) = meta.as_object_mut() {
+        obj.remove("worktree_path");
+        obj.remove("worktree_branch");
+    }
+    let meta_str =
+        serde_json::to_string(&meta).map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+    crate::tickets::update_ticket(
+        project_dir,
+        ticket_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(&meta_str),
+    )?;
+    Ok(())
+}
+
+/// Get the effective project_dir for agent execution.
+/// Returns the worktree path if one exists, otherwise the original project_dir.
+fn effective_project_dir(project_dir: &str, ticket_id: &str) -> String {
+    if let Ok(ticket) = crate::tickets::show_ticket(project_dir, ticket_id) {
+        if let Some(wt_path) = ticket
+            .metadata
+            .get("worktree_path")
+            .and_then(|v| v.as_str())
+        {
+            if PathBuf::from(wt_path).exists() {
+                return wt_path.to_string();
+            }
+        }
+    }
+    project_dir.to_string()
+}
+
 // ── Workflow Definition (parsed from YAML) ──
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -417,13 +642,41 @@ pub async fn execute_step(
         .find(|s| &s.id == current_step_id)
         .ok_or_else(|| format!("Step '{}' not found in workflow", current_step_id))?;
 
-    // 3. Set status to InProgress
+    // 3. Create worktree if this is the first step (no worktree_path in metadata yet)
+    let has_worktree = ticket
+        .metadata
+        .get("worktree_path")
+        .and_then(|v| v.as_str())
+        .is_some();
+
+    if !has_worktree {
+        match create_worktree(project_dir, ticket_id).await {
+            Ok(info) => {
+                log::info!(
+                    "worktree: created for ticket {} at {} (branch {})",
+                    ticket_id,
+                    info.path,
+                    info.branch
+                );
+            }
+            Err(e) => {
+                log::error!("worktree: failed to create for ticket {}: {}", ticket_id, e);
+                let _ = update_step_status(project_dir, ticket_id, StepStatus::Failed(e.clone()));
+                return Err(format!("Failed to create worktree: {}", e));
+            }
+        }
+    }
+
+    // Resolve the effective project dir (worktree path if available)
+    let agent_project_dir = effective_project_dir(project_dir, ticket_id);
+
+    // 4. Set status to InProgress
     update_step_status(project_dir, ticket_id, StepStatus::InProgress)?;
 
-    // 4. Build prompt
+    // 5. Build prompt
     let prompt = build_step_prompt(step, &ticket, &state)?;
 
-    // 5. Determine allowed tools based on step view type
+    // 6. Determine allowed tools based on step view type
     let view_str = match &step.view {
         StepViewType::Progress => "progress",
         StepViewType::Chat => "chat",
@@ -432,21 +685,25 @@ pub async fn execute_step(
     };
     let allowed_tools = crate::agent::tools_for_view(view_str);
 
-    // 6. Get session_id from workflow state metadata for continuity
+    // 7. Get session_id from workflow state metadata for continuity
     let session_id = ticket
         .metadata
         .get("agent_session_id")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    // 7. Call agent sidecar with streaming events
+    // 8. Call agent sidecar with the worktree path as project_dir
+    //    but keep original project_dir for tickets_dir so ticket reads/writes work
+    let tickets_dir = format!("{}/.meldui/tickets", project_dir);
     let (response_text, new_session_id) = match crate::agent::execute_step(
-        project_dir,
+        &agent_project_dir,
         ticket_id,
         &prompt,
         session_id.as_deref(),
         Some(allowed_tools),
         &app_handle,
+        Some(&tickets_dir),
+        Some(project_dir),
     )
     .await
     {
@@ -561,6 +818,8 @@ pub async fn suggest_workflow(
         None,
         Some(vec!["Read".into(), "Glob".into(), "Grep".into()]),
         &app_handle,
+        None,
+        None,
     )
     .await?;
 
@@ -622,6 +881,163 @@ pub struct DiffFile {
     pub additions: usize,
     pub deletions: usize,
     pub hunks: Vec<DiffHunk>,
+}
+
+/// Branch information for the commit view.
+#[derive(Debug, Serialize, Clone)]
+pub struct BranchInfo {
+    pub branch: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_tracking: Option<String>,
+}
+
+/// Get the current git branch and its remote tracking branch.
+pub async fn get_branch_info(project_dir: &str) -> Result<BranchInfo, String> {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    let branch_output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to get branch: {}", e))?;
+
+    let branch = String::from_utf8_lossy(&branch_output.stdout)
+        .trim()
+        .to_string();
+
+    if branch.is_empty() {
+        return Err("Not in a git repository or no commits yet".to_string());
+    }
+
+    // Try to get the remote tracking branch (may not exist)
+    let upstream_output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "@{upstream}"])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to check upstream: {}", e))?;
+
+    let remote_tracking = if upstream_output.status.success() {
+        let upstream = String::from_utf8_lossy(&upstream_output.stdout)
+            .trim()
+            .to_string();
+        if upstream.is_empty() {
+            None
+        } else {
+            Some(upstream)
+        }
+    } else {
+        None
+    };
+
+    Ok(BranchInfo {
+        branch,
+        remote_tracking,
+    })
+}
+
+/// Result of a commit action executed via the agent sidecar.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CommitActionResult {
+    pub success: bool,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pr_url: Option<String>,
+}
+
+/// Execute a commit action (commit or commit+PR) via the agent sidecar.
+pub async fn execute_commit_action(
+    project_dir: &str,
+    issue_id: &str,
+    action: &str,
+    commit_message: &str,
+    app_handle: tauri::AppHandle,
+) -> Result<CommitActionResult, String> {
+    let prompt = if action == "commit_and_pr" {
+        format!(
+            "You must commit the current changes and create a pull request. Follow these exact steps:\n\
+            1. Run `git add -A` to stage all changes\n\
+            2. Run `git commit` with the EXACT commit message below — do NOT modify it, do NOT add co-author lines or any other text:\n\
+            ```\n{}\n```\n\
+            3. Push the current branch to origin\n\
+            4. Create a pull request using `gh pr create` with an appropriate title and body based on the commit message\n\n\
+            After completing, report the commit hash and PR URL.",
+            commit_message
+        )
+    } else {
+        format!(
+            "You must commit the current changes. Follow these exact steps:\n\
+            1. Run `git add -A` to stage all changes\n\
+            2. Run `git commit` with the EXACT commit message below — do NOT modify it, do NOT add co-author lines or any other text:\n\
+            ```\n{}\n```\n\n\
+            After completing, report the commit hash.",
+            commit_message
+        )
+    };
+
+    let allowed_tools = vec!["Bash".into(), "Read".into(), "Glob".into()];
+
+    // Use the worktree path if available — that's where the changes live
+    let agent_project_dir = effective_project_dir(project_dir, issue_id);
+
+    let tickets_dir = format!("{}/.meldui/tickets", project_dir);
+    let (response_text, _session_id) = crate::agent::execute_step(
+        &agent_project_dir,
+        issue_id,
+        &prompt,
+        None,
+        Some(allowed_tools),
+        &app_handle,
+        Some(&tickets_dir),
+        Some(project_dir),
+    )
+    .await?;
+
+    // Parse the response to extract commit hash and PR URL
+    let commit_hash = extract_commit_hash(&response_text);
+    let pr_url = if action == "commit_and_pr" {
+        extract_pr_url(&response_text)
+    } else {
+        None
+    };
+
+    Ok(CommitActionResult {
+        success: true,
+        message: response_text,
+        commit_hash,
+        pr_url,
+    })
+}
+
+fn extract_commit_hash(text: &str) -> Option<String> {
+    // Look for a 7-40 char hex string that looks like a commit hash
+    for word in text.split_whitespace() {
+        let clean = word.trim_matches(|c: char| !c.is_ascii_hexdigit());
+        if clean.len() >= 7 && clean.len() <= 40 && clean.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Some(clean.to_string());
+        }
+    }
+    None
+}
+
+fn extract_pr_url(text: &str) -> Option<String> {
+    for word in text.split_whitespace() {
+        if word.contains("github.com") && word.contains("/pull/") {
+            return Some(
+                word.trim_matches(|c: char| c == '(' || c == ')' || c == '[' || c == ']')
+                    .to_string(),
+            );
+        }
+    }
+    None
 }
 
 /// Get the git diff for the current project (for diff-review view)

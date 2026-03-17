@@ -10,7 +10,8 @@ mod workflow;
 use agent::AgentState;
 use tickets::Ticket;
 use workflow::{
-    DiffFile, StepExecutionResult, WorkflowDefinition, WorkflowState, WorkflowSuggestion,
+    BranchInfo, CommitActionResult, DiffFile, StepExecutionResult, WorkflowDefinition,
+    WorkflowState, WorkflowSuggestion,
 };
 // ── Folder dialog command ──
 
@@ -21,7 +22,17 @@ async fn open_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, Str
     app.dialog().file().pick_folder(move |folder| {
         let _ = tx.send(folder.map(|p| p.to_string()));
     });
-    rx.await.map_err(|e| e.to_string())
+    let selected = rx.await.map_err(|e| e.to_string())?;
+
+    // Guard: reject worktree directories — they are not valid project roots
+    if let Some(ref path) = selected {
+        if path.contains("/.meldui/worktrees/") {
+            log::warn!("open_folder_dialog: rejected worktree path: {}", path);
+            return Ok(None); // treat as cancelled
+        }
+    }
+
+    Ok(selected)
 }
 
 // ── Claude commands ──
@@ -284,6 +295,27 @@ async fn workflow_get_diff(project_dir: String) -> Result<Vec<DiffFile>, String>
     workflow::get_diff(&project_dir).await
 }
 
+#[tauri::command]
+async fn workflow_get_branch_info(project_dir: String) -> Result<BranchInfo, String> {
+    workflow::get_branch_info(&project_dir).await
+}
+
+#[tauri::command]
+async fn workflow_execute_commit_action(
+    project_dir: String,
+    issue_id: String,
+    action: String,
+    commit_message: String,
+    app: tauri::AppHandle,
+) -> Result<CommitActionResult, String> {
+    workflow::execute_commit_action(&project_dir, &issue_id, &action, &commit_message, app).await
+}
+
+#[tauri::command]
+async fn workflow_cleanup_worktree(project_dir: String, issue_id: String) -> Result<(), String> {
+    workflow::remove_worktree(&project_dir, &issue_id).await
+}
+
 // ── App setup ──
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -329,6 +361,9 @@ pub fn run() {
             workflow_execute_step,
             workflow_suggest,
             workflow_get_diff,
+            workflow_get_branch_info,
+            workflow_execute_commit_action,
+            workflow_cleanup_worktree,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -120,6 +120,12 @@ describe("WorkflowShell auto-execute", () => {
     statusText: null,
     pendingFeedback: null,
     onRespondToFeedback,
+    reviewFindings: [],
+    reviewComments: [],
+    onAddReviewComment: vi.fn(),
+    onDeleteReviewComment: vi.fn(),
+    onSubmitReview: vi.fn(),
+    reviewDisabled: true,
   });
 
   const renderShell = (overrides: {
@@ -251,6 +257,12 @@ describe("WorkflowShell step transition cleanup", () => {
     statusText: null,
     pendingFeedback: null,
     onRespondToFeedback,
+    reviewFindings: [],
+    reviewComments: [],
+    onAddReviewComment: vi.fn(),
+    onDeleteReviewComment: vi.fn(),
+    onSubmitReview: vi.fn(),
+    reviewDisabled: true,
   });
 
   it("clears lastResult when step changes so old response doesn't leak", async () => {
@@ -326,6 +338,12 @@ describe("WorkflowShell failed step display", () => {
     statusText: null,
     pendingFeedback: null,
     onRespondToFeedback: vi.fn(),
+    reviewFindings: [],
+    reviewComments: [],
+    onAddReviewComment: vi.fn(),
+    onDeleteReviewComment: vi.fn(),
+    onSubmitReview: vi.fn(),
+    reviewDisabled: true,
   });
 
   it("shows Resume button for timeout failures", () => {

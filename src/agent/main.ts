@@ -16,7 +16,7 @@ import type {
   OutboundMessage,
   ExecuteCommand,
 } from "./protocol.js";
-import type { PermissionRequestEvent, FeedbackRequestEvent } from "./types.js";
+import type { PermissionRequestEvent, FeedbackRequestEvent, ReviewRequestEvent, ReviewSubmissionData } from "./types.js";
 
 // ── Output ──
 
@@ -36,6 +36,13 @@ const pendingPermissions = new Map<
 const pendingFeedback = new Map<
   string,
   (response: { approved: boolean; feedback?: string }) => void
+>();
+
+// ── Review tracking ──
+
+const pendingReviews = new Map<
+  string,
+  (submission: ReviewSubmissionData) => void
 >();
 
 // ── Stdin reader ──
@@ -142,6 +149,17 @@ async function main(): Promise<void> {
     });
   });
 
+  agent.on("review-request", (event: ReviewRequestEvent) => {
+    pendingReviews.set(event.requestId, event.resolve);
+    send({
+      type: "review_findings",
+      request_id: event.requestId,
+      ticket_id: event.ticketId,
+      findings: event.findings,
+      summary: event.summary,
+    });
+  });
+
   agent.on("completed", ({ response, sessionId }) => {
     send({ type: "result", content: response, session_id: sessionId });
   });
@@ -176,6 +194,14 @@ async function main(): Promise<void> {
             if (resolve) {
               resolve({ approved: msg.approved, feedback: msg.feedback });
               pendingFeedback.delete(msg.request_id);
+            }
+            break;
+          }
+          case "review_response": {
+            const resolve = pendingReviews.get(msg.request_id);
+            if (resolve) {
+              resolve(msg.submission);
+              pendingReviews.delete(msg.request_id);
             }
             break;
           }

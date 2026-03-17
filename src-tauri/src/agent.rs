@@ -83,6 +83,24 @@ struct FeedbackResponse {
     feedback: Option<String>,
 }
 
+/// Review response sent on stdin.
+#[derive(Debug, Serialize)]
+struct ReviewResponse {
+    #[serde(rename = "type")]
+    cmd_type: String,
+    request_id: String,
+    submission: serde_json::Value,
+}
+
+/// Review findings request received from the sidecar on stdout.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct AgentReviewFindingsRequest {
+    pub request_id: String,
+    pub ticket_id: String,
+    pub findings: serde_json::Value,
+    pub summary: String,
+}
+
 /// Active agent handle — holds the child process stdin for sending commands.
 pub struct AgentHandle {
     stdin: Arc<Mutex<Option<tokio::process::ChildStdin>>>,
@@ -132,6 +150,37 @@ impl AgentHandle {
             request_id: request_id.to_string(),
             approved,
             feedback,
+        };
+        let json =
+            serde_json::to_string(&response).map_err(|e| format!("Serialize error: {}", e))?;
+
+        let mut stdin_guard = self.stdin.lock().await;
+        if let Some(stdin) = stdin_guard.as_mut() {
+            stdin
+                .write_all(format!("{}\n", json).as_bytes())
+                .await
+                .map_err(|e| format!("Failed to write to sidecar stdin: {}", e))?;
+            stdin
+                .flush()
+                .await
+                .map_err(|e| format!("Failed to flush sidecar stdin: {}", e))?;
+        } else {
+            return Err("Agent sidecar stdin not available".to_string());
+        }
+
+        Ok(())
+    }
+
+    /// Send a review response to the sidecar.
+    pub async fn respond_to_review(
+        &self,
+        request_id: &str,
+        submission: serde_json::Value,
+    ) -> Result<(), String> {
+        let response = ReviewResponse {
+            cmd_type: "review_response".to_string(),
+            request_id: request_id.to_string(),
+            submission,
         };
         let json =
             serde_json::to_string(&response).map_err(|e| format!("Serialize error: {}", e))?;
@@ -541,7 +590,11 @@ pub async fn execute_step(
                     );
                 }
                 "error" => log::error!("agent: NDJSON {}", line),
-                _ => log::info!("agent: NDJSON {}", &line[..line.len().min(1000)]),
+                _ => {
+                    let max = line.len().min(1000);
+                    let end = line.floor_char_boundary(max);
+                    log::info!("agent: NDJSON {}", &line[..end]);
+                }
             }
 
             match msg_type {
@@ -742,6 +795,13 @@ pub async fn execute_step(
                         serde_json::from_value::<AgentFeedbackRequest>(json.clone())
                     {
                         let _ = app_handle.emit("agent-feedback-request", feedback_req);
+                    }
+                }
+                "review_findings" => {
+                    if let Ok(review_req) =
+                        serde_json::from_value::<AgentReviewFindingsRequest>(json.clone())
+                    {
+                        let _ = app_handle.emit("agent-review-findings", review_req);
                     }
                 }
                 "heartbeat" => {

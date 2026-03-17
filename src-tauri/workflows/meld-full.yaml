@@ -126,7 +126,7 @@ steps:
   - id: spec-review
     name: "Spec: Review"
     description: Review the complete spec against ready-for-dev standards
-    view: review
+    view: chat
     instructions:
       prompt: |
         You are a spec reviewer. Review the complete specification in the ticket context.
@@ -192,7 +192,7 @@ steps:
   - id: verify
     name: Verify
     description: Run verification gate — fresh evidence for all completion claims
-    view: review
+    view: chat
     instructions:
       prompt: |
         You are a verification engineer. Verify the implementation is complete and correct.
@@ -235,13 +235,43 @@ steps:
 
   - id: diff-review
     name: Diff Review
-    description: Review all code changes before committing
+    description: Interactive PR-style review with findings and inline comments
     view: diff_review
     instructions:
       prompt: |
-        Review the git diff and provide feedback on the changes.
-        Flag any issues with code quality, security, or correctness.
-        When done, use meldui_step_complete to advance.
+        You are a code reviewer. Analyze the git diff for this ticket and produce structured review findings.
+
+        ## Instructions
+
+        1. Run `git diff HEAD` (or compare against the branch base) to see all changes
+        2. Analyze the diff for:
+           - Code quality issues (naming, structure, duplication)
+           - Security vulnerabilities (injection, XSS, auth gaps)
+           - Correctness bugs (off-by-one, null handling, race conditions)
+           - Missing error handling or edge cases
+           - Style inconsistencies with the existing codebase
+        3. Generate structured findings and call `meldui_submit_review` with:
+           - Each finding must have: id (F1, F2...), file_path, line_number, severity, validity, title, description
+           - Set severity: "critical" for bugs/security, "warning" for quality issues, "info" for style/suggestions
+           - Set validity: "real" if you're confident, "undecided" if you're unsure, "noise" if it's minor
+           - Include a suggestion field with the corrected code when applicable
+           - Include a summary of the overall review
+        4. `meldui_submit_review` BLOCKS until the user reviews your findings and responds
+        5. If the user approves: call `meldui_step_complete` to advance to the commit step
+        6. If the user requests changes:
+           - Read the user's inline comments and finding actions from the response
+           - Fix the issues they flagged (findings marked "fix", inline comments)
+           - Run tests to verify fixes don't break anything
+           - Call `meldui_submit_review` again with updated findings for re-review
+           - Repeat until the user approves
+
+        ## Finding Quality Guidelines
+
+        - Be specific: reference exact file paths and line numbers
+        - Be actionable: explain what's wrong AND how to fix it
+        - Don't flag pre-existing issues that aren't part of this diff
+        - Zero findings is suspicious — even good code has style suggestions
+        - Critical findings should be genuinely blocking issues
 
   - id: commit
     name: Commit

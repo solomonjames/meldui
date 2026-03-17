@@ -588,10 +588,40 @@ pub async fn suggest_workflow(
 // ── Diff for Review ──
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum DiffLineType {
+    Added,
+    Removed,
+    Context,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DiffLine {
+    pub line_type: DiffLineType,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_line_no: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_line_no: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DiffHunk {
+    pub header: String,
+    pub old_start: usize,
+    pub old_count: usize,
+    pub new_start: usize,
+    pub new_count: usize,
+    pub lines: Vec<DiffLine>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiffFile {
     pub path: String,
     pub status: String,
-    pub content: String,
+    pub additions: usize,
+    pub deletions: usize,
+    pub hunks: Vec<DiffHunk>,
 }
 
 /// Get the git diff for the current project (for diff-review view)
@@ -609,7 +639,7 @@ pub async fn get_diff(project_dir: &str) -> Result<Vec<DiffFile>, String> {
         .await
         .map_err(|e| format!("Failed to run git diff: {}", e))?;
 
-    if !output.status.success() {
+    let diff_text = if !output.status.success() {
         // Might be a fresh repo with no commits — try just `git diff`
         let output2 = Command::new("git")
             .arg("diff")
@@ -619,46 +649,129 @@ pub async fn get_diff(project_dir: &str) -> Result<Vec<DiffFile>, String> {
             .output()
             .await
             .map_err(|e| format!("Failed to run git diff: {}", e))?;
+        String::from_utf8_lossy(&output2.stdout).to_string()
+    } else {
+        String::from_utf8_lossy(&output.stdout).to_string()
+    };
 
-        let diff_text = String::from_utf8_lossy(&output2.stdout).to_string();
-        return Ok(parse_diff(&diff_text));
-    }
-
-    let diff_text = String::from_utf8_lossy(&output.stdout).to_string();
     Ok(parse_diff(&diff_text))
 }
 
 fn parse_diff(diff_text: &str) -> Vec<DiffFile> {
-    let mut files: Vec<DiffFile> = Vec::new();
-    let mut current_path = String::new();
-    let mut current_content = String::new();
+    use unidiff::PatchSet;
 
-    for line in diff_text.lines() {
-        if line.starts_with("diff --git") {
-            // Save previous file if any
-            if !current_path.is_empty() {
-                files.push(DiffFile {
-                    path: current_path.clone(),
-                    status: "modified".to_string(),
-                    content: current_content.clone(),
-                });
+    if diff_text.trim().is_empty() {
+        return Vec::new();
+    }
+
+    let mut patch = PatchSet::new();
+    if patch.parse(diff_text).is_err() {
+        return Vec::new();
+    }
+
+    patch
+        .files()
+        .iter()
+        .map(|file| {
+            let status = if file.is_added_file() {
+                "added"
+            } else if file.is_removed_file() {
+                "removed"
+            } else {
+                "modified"
+            };
+
+            let hunks: Vec<DiffHunk> = file
+                .hunks()
+                .iter()
+                .map(|hunk| {
+                    let lines: Vec<DiffLine> = hunk
+                        .lines()
+                        .iter()
+                        .map(|line| {
+                            let line_type = if line.is_added() {
+                                DiffLineType::Added
+                            } else if line.is_removed() {
+                                DiffLineType::Removed
+                            } else {
+                                DiffLineType::Context
+                            };
+                            DiffLine {
+                                line_type,
+                                content: line.value.clone(),
+                                old_line_no: line.source_line_no,
+                                new_line_no: line.target_line_no,
+                            }
+                        })
+                        .collect();
+
+                    DiffHunk {
+                        header: hunk.section_header.clone(),
+                        old_start: hunk.source_start,
+                        old_count: hunk.source_length,
+                        new_start: hunk.target_start,
+                        new_count: hunk.target_length,
+                        lines,
+                    }
+                })
+                .collect();
+
+            DiffFile {
+                path: file.path(),
+                status: status.to_string(),
+                additions: file.added(),
+                deletions: file.removed(),
+                hunks,
             }
-            // Extract file path from "diff --git a/path b/path"
-            current_path = line.split(" b/").last().unwrap_or("").to_string();
-            current_content = String::new();
-        }
-        current_content.push_str(line);
-        current_content.push('\n');
-    }
+        })
+        .collect()
+}
 
-    // Save last file
-    if !current_path.is_empty() {
-        files.push(DiffFile {
-            path: current_path,
-            status: "modified".to_string(),
-            content: current_content,
-        });
-    }
+// ── Review Types ──
+// These structs mirror the TypeScript ReviewFinding/ReviewComment/ReviewSubmission types.
+// The Rust side currently passes review data as serde_json::Value, but these are kept
+// for future use when the review flow needs Rust-side validation or persistence.
 
-    files
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct ReviewFinding {
+    pub id: String,
+    pub file_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_number: Option<usize>,
+    pub severity: String,
+    pub validity: String,
+    pub title: String,
+    pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct ReviewComment {
+    pub id: String,
+    pub file_path: String,
+    pub line_number: usize,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
+    #[serde(default)]
+    pub resolved: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct ReviewSubmission {
+    pub action: String,
+    pub summary: String,
+    pub comments: Vec<ReviewComment>,
+    pub finding_actions: Vec<FindingAction>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct FindingAction {
+    pub finding_id: String,
+    pub action: String,
 }

@@ -106,10 +106,66 @@ export interface PermissionRequest {
   input: Record<string, unknown>;
 }
 
+// ── Diff Types (structured) ──
+
+export type DiffLineType = "added" | "removed" | "context";
+
+export interface DiffLine {
+  line_type: DiffLineType;
+  content: string;
+  old_line_no?: number;
+  new_line_no?: number;
+}
+
+export interface DiffHunk {
+  header: string;
+  old_start: number;
+  old_count: number;
+  new_start: number;
+  new_count: number;
+  lines: DiffLine[];
+}
+
 export interface DiffFile {
   path: string;
   status: string;
+  additions: number;
+  deletions: number;
+  hunks: DiffHunk[];
+}
+
+// ── Review Types ──
+
+export interface ReviewFinding {
+  id: string;
+  file_path: string;
+  line_number?: number;
+  severity: "critical" | "warning" | "info";
+  validity: "real" | "noise" | "undecided";
+  title: string;
+  description: string;
+  suggestion?: string;
+}
+
+export interface ReviewComment {
+  id: string;
+  file_path: string;
+  line_number: number;
   content: string;
+  suggestion?: string;
+  resolved: boolean;
+}
+
+export interface FindingAction {
+  finding_id: string;
+  action: "fix" | "accept" | "dismiss";
+}
+
+export interface ReviewSubmission {
+  action: "approve" | "request_changes";
+  summary: string;
+  comments: ReviewComment[];
+  finding_actions: FindingAction[];
 }
 
 // ── MeldUI MCP Event Types ──

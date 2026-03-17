@@ -190,6 +190,12 @@ function App() {
           statusText={workflow.statusText}
           pendingFeedback={workflow.pendingFeedback}
           onRespondToFeedback={workflow.respondToFeedback}
+          reviewFindings={workflow.reviewFindings}
+          reviewComments={workflow.reviewComments}
+          onAddReviewComment={workflow.addReviewComment}
+          onDeleteReviewComment={workflow.deleteReviewComment}
+          onSubmitReview={workflow.submitReview}
+          reviewDisabled={!workflow.pendingReviewRequestId}
         />
       ) : (
         <BacklogPage

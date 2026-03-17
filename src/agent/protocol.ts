@@ -28,10 +28,38 @@ export interface FeedbackResponseCommand {
   feedback?: string;
 }
 
+export interface ReviewResponseCommand {
+  type: "review_response";
+  request_id: string;
+  submission: ReviewSubmissionPayload;
+}
+
+export interface ReviewSubmissionPayload {
+  action: "approve" | "request_changes";
+  summary: string;
+  comments: ReviewCommentPayload[];
+  finding_actions: FindingActionPayload[];
+}
+
+export interface ReviewCommentPayload {
+  id: string;
+  file_path: string;
+  line_number: number;
+  content: string;
+  suggestion?: string;
+  resolved: boolean;
+}
+
+export interface FindingActionPayload {
+  finding_id: string;
+  action: "fix" | "accept" | "dismiss";
+}
+
 export type InboundMessage =
   | ExecuteCommand
   | PermissionResponseCommand
   | FeedbackResponseCommand
+  | ReviewResponseCommand
   | CancelCommand;
 
 export interface SidecarConfig {
@@ -143,6 +171,25 @@ export interface HeartbeatMessage {
   type: "heartbeat";
 }
 
+export interface ReviewFindingsMessage {
+  type: "review_findings";
+  request_id: string;
+  ticket_id: string;
+  findings: ReviewFindingPayload[];
+  summary: string;
+}
+
+export interface ReviewFindingPayload {
+  id: string;
+  file_path: string;
+  line_number?: number;
+  severity: "critical" | "warning" | "info";
+  validity: "real" | "noise" | "undecided";
+  title: string;
+  description: string;
+  suggestion?: string;
+}
+
 export type OutboundMessage =
   | SessionMessage
   | TextMessage
@@ -159,4 +206,5 @@ export type OutboundMessage =
   | StepCompleteMessage
   | StatusUpdateMessage
   | FeedbackRequestMessage
-  | HeartbeatMessage;
+  | HeartbeatMessage
+  | ReviewFindingsMessage;

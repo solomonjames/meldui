@@ -61,10 +61,39 @@ function isValidSection(s: string): s is Section {
 
 export type FeedbackResponse = { approved: boolean; feedback?: string };
 
+export type ReviewSubmissionResponse = {
+  action: "approve" | "request_changes";
+  summary: string;
+  comments: Array<{
+    id: string;
+    file_path: string;
+    line_number: number;
+    content: string;
+    suggestion?: string;
+    resolved: boolean;
+  }>;
+  finding_actions: Array<{
+    finding_id: string;
+    action: "fix" | "accept" | "dismiss";
+  }>;
+};
+
+export interface ReviewFinding {
+  id: string;
+  file_path: string;
+  line_number?: number;
+  severity: "critical" | "warning" | "info";
+  validity: "real" | "noise" | "undecided";
+  title: string;
+  description: string;
+  suggestion?: string;
+}
+
 export function createMelduiMcpServer(
   projectDir: string,
   send: (msg: OutboundMessage) => void,
   emitFeedbackRequest?: (ticketId: string, summary: string) => Promise<FeedbackResponse>,
+  emitReviewRequest?: (ticketId: string, findings: ReviewFinding[], summary: string) => Promise<ReviewSubmissionResponse>,
 ) {
   // ── Ticket tools ──
 
@@ -205,8 +234,80 @@ export function createMelduiMcpServer(
     }
   );
 
+  // ── Review tools ──
+
+  const submitReview = tool(
+    "meldui_submit_review",
+    "Submit review findings for the user to review. BLOCKS until the user responds with approve or request changes. The user sees your findings in the diff review UI and can add inline comments. Returns a ReviewSubmission with the user's decision, comments, and per-finding actions.",
+    {
+      ticket_id: z.string().describe("The ticket ID"),
+      findings: z.array(z.object({
+        id: z.string().describe("Unique finding ID (e.g. F1, F2)"),
+        file_path: z.string().describe("File path the finding relates to"),
+        line_number: z.number().optional().describe("Line number in the new file"),
+        severity: z.enum(["critical", "warning", "info"]).describe("Finding severity"),
+        validity: z.enum(["real", "noise", "undecided"]).describe("Your assessment of whether this is a real issue"),
+        title: z.string().describe("Short title for the finding"),
+        description: z.string().describe("Detailed description of the issue"),
+        suggestion: z.string().optional().describe("Suggested code fix"),
+      })).describe("Array of review findings"),
+      summary: z.string().describe("Brief summary of your review"),
+    },
+    async ({ ticket_id, findings, summary }) => {
+      if (!emitReviewRequest) {
+        return { content: [{ type: "text" as const, text: "Review request not available (no callback configured)" }], isError: true };
+      }
+
+      // Emit heartbeats while waiting for user response
+      const heartbeat = setInterval(() => {
+        send({ type: "heartbeat" });
+      }, 30_000);
+
+      try {
+        const submission = await emitReviewRequest(ticket_id, findings, summary);
+
+        if (submission.action === "approve") {
+          const commentCount = submission.comments.length;
+          return { content: [{ type: "text" as const, text: `User approved the review${commentCount > 0 ? ` with ${commentCount} comment(s)` : ""}. Summary: ${submission.summary || "(none)"}. You may now call meldui_step_complete to advance to the next step.` }] };
+        }
+
+        // Request changes — format the feedback for the agent
+        const parts: string[] = [`User requested changes. Summary: ${submission.summary}`];
+
+        if (submission.comments.length > 0) {
+          parts.push("\n\nInline comments:");
+          for (const comment of submission.comments) {
+            parts.push(`- ${comment.file_path}:${comment.line_number}: ${comment.content}${comment.suggestion ? `\n  Suggestion: ${comment.suggestion}` : ""}`);
+          }
+        }
+
+        if (submission.finding_actions.length > 0) {
+          const fixRequests = submission.finding_actions.filter(a => a.action === "fix");
+          const accepted = submission.finding_actions.filter(a => a.action === "accept");
+          const dismissed = submission.finding_actions.filter(a => a.action === "dismiss");
+
+          if (fixRequests.length > 0) {
+            parts.push(`\nFindings to fix: ${fixRequests.map(a => a.finding_id).join(", ")}`);
+          }
+          if (accepted.length > 0) {
+            parts.push(`Findings accepted (no action needed): ${accepted.map(a => a.finding_id).join(", ")}`);
+          }
+          if (dismissed.length > 0) {
+            parts.push(`Findings dismissed: ${dismissed.map(a => a.finding_id).join(", ")}`);
+          }
+        }
+
+        parts.push("\nPlease address the feedback, then call meldui_submit_review again with updated findings for re-review.");
+
+        return { content: [{ type: "text" as const, text: parts.join("\n") }] };
+      } finally {
+        clearInterval(heartbeat);
+      }
+    }
+  );
+
   return createSdkMcpServer({
     name: "meldui",
-    tools: [writeSection, readSection, ticketShow, stepComplete, requestFeedback, notify, showStatus],
+    tools: [writeSection, readSection, ticketShow, stepComplete, requestFeedback, submitReview, notify, showStatus],
   });
 }

@@ -16,6 +16,9 @@ import type {
   StepCompleteEvent,
   StatusUpdateEvent,
   FeedbackRequestEvent,
+  ReviewFinding,
+  ReviewComment,
+  ReviewSubmission,
 } from "@/types";
 
 function emptyStepOutput(): StepOutputStream {
@@ -40,6 +43,9 @@ export function useWorkflow(projectDir: string) {
   const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [pendingFeedback, setPendingFeedback] = useState<FeedbackRequestEvent | null>(null);
+  const [reviewFindings, setReviewFindings] = useState<ReviewFinding[]>([]);
+  const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
+  const [pendingReviewRequestId, setPendingReviewRequestId] = useState<string | null>(null);
   const [listenersReady, setListenersReady] = useState(false);
   const unlistenRef = useRef<UnlistenFn | null>(null);
   const permissionUnlistenRef = useRef<UnlistenFn | null>(null);
@@ -250,6 +256,22 @@ export function useWorkflow(projectDir: string) {
       );
       melduiUnlistens.push(feedbackUnlisten);
 
+      const reviewUnlisten = await listen<{
+        request_id: string;
+        ticket_id: string;
+        findings: ReviewFinding[];
+        summary: string;
+      }>(
+        "agent-review-findings",
+        (event) => {
+          if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
+            setReviewFindings(event.payload.findings);
+            setPendingReviewRequestId(event.payload.request_id);
+          }
+        }
+      );
+      melduiUnlistens.push(reviewUnlisten);
+
       if (!cancelled) {
         melduiUnlistenRefs.current = melduiUnlistens;
         setListenersReady(true);
@@ -406,6 +428,59 @@ export function useWorkflow(projectDir: string) {
     []
   );
 
+  const addReviewComment = useCallback(
+    (filePath: string, lineNumber: number, content: string, suggestion?: string) => {
+      const comment: ReviewComment = {
+        id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file_path: filePath,
+        line_number: lineNumber,
+        content,
+        suggestion,
+        resolved: false,
+      };
+      setReviewComments((prev) => [...prev, comment]);
+    },
+    []
+  );
+
+  const deleteReviewComment = useCallback((commentId: string) => {
+    setReviewComments((prev) => prev.filter((c) => c.id !== commentId));
+  }, []);
+
+  const submitReview = useCallback(
+    async (submission: ReviewSubmission) => {
+      if (!pendingReviewRequestId) return;
+      try {
+        await invoke("agent_review_respond", {
+          requestId: pendingReviewRequestId,
+          submission,
+        });
+        setPendingReviewRequestId(null);
+
+        // Mark existing comments as resolved for next round
+        if (submission.action === "request_changes") {
+          setReviewComments((prev) =>
+            prev.map((c) => ({ ...c, resolved: true }))
+          );
+          setReviewFindings([]);
+        } else {
+          // Approved — clear all review state
+          setReviewComments([]);
+          setReviewFindings([]);
+        }
+      } catch (err) {
+        setPendingReviewRequestId(null);
+        const errStr = String(err);
+        if (errStr.includes("Broken pipe") || errStr.includes("not available")) {
+          setError("Agent session expired. Click Resume to continue where you left off.");
+        } else {
+          setError(`Failed to submit review: ${err}`);
+        }
+      }
+    },
+    [pendingReviewRequestId]
+  );
+
   const suggestWorkflow = useCallback(
     async (issueId: string) => {
       try {
@@ -493,5 +568,11 @@ export function useWorkflow(projectDir: string) {
     suggestWorkflow,
     getDiff,
     getStepOutput,
+    reviewFindings,
+    reviewComments,
+    addReviewComment,
+    deleteReviewComment,
+    submitReview,
+    pendingReviewRequestId,
   };
 }

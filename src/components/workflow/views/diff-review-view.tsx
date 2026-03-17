@@ -1,111 +1,93 @@
-import { useState, useEffect } from "react";
-import { FileCode } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Ticket, DiffFile } from "@/types";
+import { useState, useEffect, useCallback } from "react";
+import { DiffViewer } from "@/components/diff";
+import type {
+  Ticket,
+  DiffFile,
+  ReviewComment,
+  ReviewFinding,
+  FindingAction,
+  ReviewSubmission,
+} from "@/types";
 
 interface DiffReviewViewProps {
   ticket: Ticket;
   onGetDiff: () => Promise<DiffFile[]>;
+  reviewFindings: ReviewFinding[];
+  reviewComments: ReviewComment[];
+  onAddComment: (filePath: string, lineNumber: number, content: string, suggestion?: string) => void;
+  onDeleteComment: (commentId: string) => void;
+  onSubmitReview: (submission: ReviewSubmission) => void;
+  reviewDisabled?: boolean;
 }
 
 export function DiffReviewView({
   ticket,
   onGetDiff,
+  reviewFindings,
+  reviewComments,
+  onAddComment,
+  onDeleteComment,
+  onSubmitReview,
+  reviewDisabled,
 }: DiffReviewViewProps) {
   const [files, setFiles] = useState<DiffFile[]>([]);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [findingActions, setFindingActions] = useState<FindingAction[]>([]);
 
-  useEffect(() => {
-    const loadDiff = async () => {
-      setLoading(true);
-      const diff = await onGetDiff();
-      setFiles(diff);
-      if (diff.length > 0) {
-        setSelectedFile(diff[0].path);
-      }
-      setLoading(false);
-    };
-    loadDiff();
+  const loadDiff = useCallback(async () => {
+    setLoading(true);
+    const diff = await onGetDiff();
+    setFiles(diff);
+    setLoading(false);
   }, [onGetDiff]);
 
-  const currentFile = files.find((f) => f.path === selectedFile);
+  useEffect(() => {
+    loadDiff();
+  }, [loadDiff]);
+
+  const handleFindingAction = (findingId: string, action: FindingAction["action"]) => {
+    setFindingActions((prev) => {
+      const existing = prev.findIndex((a) => a.finding_id === findingId);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = { finding_id: findingId, action };
+        return updated;
+      }
+      return [...prev, { finding_id: findingId, action }];
+    });
+  };
+
+  const handleApprove = (summary: string) => {
+    onSubmitReview({
+      action: "approve",
+      summary,
+      comments: reviewComments.filter((c) => !c.resolved),
+      finding_actions: findingActions,
+    });
+  };
+
+  const handleRequestChanges = (summary: string) => {
+    onSubmitReview({
+      action: "request_changes",
+      summary,
+      comments: reviewComments.filter((c) => !c.resolved),
+      finding_actions: findingActions,
+    });
+  };
 
   return (
-    <div className="flex h-full">
-      {/* Left: File tree */}
-      <div className="w-64 border-r bg-white dark:bg-zinc-900 flex flex-col">
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Changed Files ({files.length})
-          </h3>
-        </div>
-        <ScrollArea className="flex-1">
-          {loading ? (
-            <p className="p-4 text-xs text-muted-foreground">Loading diff...</p>
-          ) : files.length === 0 ? (
-            <p className="p-4 text-xs text-muted-foreground">No changes found</p>
-          ) : (
-            <div className="p-2 space-y-0.5">
-              {files.map((file) => (
-                <button
-                  key={file.path}
-                  onClick={() => setSelectedFile(file.path)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors ${
-                    selectedFile === file.path
-                      ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400"
-                      : "text-muted-foreground hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  }`}
-                >
-                  <FileCode className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{file.path}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </ScrollArea>
-      </div>
-
-      {/* Right: Diff content */}
-      <div className="flex-1 flex flex-col">
-        <div className="px-6 py-3 border-b bg-white dark:bg-zinc-900">
-          <h3 className="text-sm font-medium">
-            {selectedFile ?? "Diff Review"}
-          </h3>
-          <p className="text-xs text-muted-foreground">{ticket.title}</p>
-        </div>
-
-        <ScrollArea className="flex-1">
-          {currentFile ? (
-            <pre className="p-4 text-xs font-mono leading-relaxed overflow-x-auto">
-              {currentFile.content.split("\n").map((line, idx) => {
-                let lineClass = "";
-                if (line.startsWith("+") && !line.startsWith("+++")) {
-                  lineClass =
-                    "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400";
-                } else if (line.startsWith("-") && !line.startsWith("---")) {
-                  lineClass =
-                    "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400";
-                } else if (line.startsWith("@@")) {
-                  lineClass =
-                    "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400";
-                }
-                return (
-                  <div key={idx} className={`px-2 ${lineClass}`}>
-                    {line}
-                  </div>
-                );
-              })}
-            </pre>
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-sm text-muted-foreground">
-                Select a file to view changes
-              </p>
-            </div>
-          )}
-        </ScrollArea>
-      </div>
-    </div>
+    <DiffViewer
+      files={files}
+      comments={reviewComments}
+      findings={reviewFindings}
+      findingActions={findingActions}
+      loading={loading}
+      reviewDisabled={reviewDisabled}
+      onAddComment={onAddComment}
+      onDeleteComment={onDeleteComment}
+      onFindingAction={handleFindingAction}
+      onApprove={handleApprove}
+      onRequestChanges={handleRequestChanges}
+    />
   );
 }

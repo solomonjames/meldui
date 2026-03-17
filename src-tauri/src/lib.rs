@@ -69,6 +69,20 @@ async fn agent_feedback_respond(
     }
 }
 
+#[tauri::command]
+async fn agent_review_respond(
+    request_id: String,
+    submission: serde_json::Value,
+    state: tauri::State<'_, AgentState>,
+) -> Result<(), String> {
+    let handle_guard = state.handle.lock().await;
+    if let Some(handle) = handle_guard.as_ref() {
+        handle.respond_to_review(&request_id, submission).await
+    } else {
+        Err("No active agent session".to_string())
+    }
+}
+
 // ── Ticket commands ──
 
 #[tauri::command]
@@ -295,6 +309,7 @@ pub fn run() {
             claude_login,
             agent_permission_respond,
             agent_feedback_respond,
+            agent_review_respond,
             ticket_list,
             ticket_create,
             ticket_update,

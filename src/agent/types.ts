@@ -42,6 +42,42 @@ export interface FeedbackRequestEvent {
   resolve: (response: { approved: boolean; feedback?: string }) => void;
 }
 
+export interface ReviewRequestEvent {
+  requestId: string;
+  ticketId: string;
+  findings: ReviewFindingData[];
+  summary: string;
+  resolve: (submission: ReviewSubmissionData) => void;
+}
+
+export interface ReviewFindingData {
+  id: string;
+  file_path: string;
+  line_number?: number;
+  severity: "critical" | "warning" | "info";
+  validity: "real" | "noise" | "undecided";
+  title: string;
+  description: string;
+  suggestion?: string;
+}
+
+export interface ReviewSubmissionData {
+  action: "approve" | "request_changes";
+  summary: string;
+  comments: Array<{
+    id: string;
+    file_path: string;
+    line_number: number;
+    content: string;
+    suggestion?: string;
+    resolved: boolean;
+  }>;
+  finding_actions: Array<{
+    finding_id: string;
+    action: "fix" | "accept" | "dismiss";
+  }>;
+}
+
 export interface MeldAgentEvents {
   "chat-session": (event: { sessionId: string }) => void;
   "chat-agent-message": (event: { content: string }) => void;
@@ -52,6 +88,7 @@ export interface MeldAgentEvents {
   "tool-use-end": (event: { id: string }) => void;
   "permission-request": (event: PermissionRequestEvent) => void;
   "feedback-request": (event: FeedbackRequestEvent) => void;
+  "review-request": (event: ReviewRequestEvent) => void;
   "thinking-update": (event: { text: string }) => void;
   completed: (event: { response: string; sessionId: string }) => void;
   failed: (event: { message: string }) => void;

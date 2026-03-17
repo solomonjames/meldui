@@ -18,6 +18,9 @@ import type {
   PermissionRequest,
   NotificationEvent,
   FeedbackRequestEvent,
+  ReviewFinding,
+  ReviewComment,
+  ReviewSubmission,
 } from "@/types";
 
 interface WorkflowShellProps {
@@ -40,6 +43,12 @@ interface WorkflowShellProps {
   statusText: string | null;
   pendingFeedback: FeedbackRequestEvent | null;
   onRespondToFeedback: (requestId: string, approved: boolean, feedback?: string) => void;
+  reviewFindings: ReviewFinding[];
+  reviewComments: ReviewComment[];
+  onAddReviewComment: (filePath: string, lineNumber: number, content: string, suggestion?: string) => void;
+  onDeleteReviewComment: (commentId: string) => void;
+  onSubmitReview: (submission: ReviewSubmission) => void;
+  reviewDisabled?: boolean;
 }
 
 export function WorkflowShell({
@@ -61,6 +70,12 @@ export function WorkflowShell({
   statusText,
   pendingFeedback,
   onRespondToFeedback,
+  reviewFindings,
+  reviewComments,
+  onAddReviewComment,
+  onDeleteReviewComment,
+  onSubmitReview,
+  reviewDisabled,
 }: WorkflowShellProps) {
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
   // Use a ref with a monotonic counter to prevent StrictMode double-fire
@@ -250,6 +265,12 @@ export function WorkflowShell({
           <DiffReviewView
             ticket={ticket}
             onGetDiff={onGetDiff}
+            reviewFindings={reviewFindings}
+            reviewComments={reviewComments}
+            onAddComment={onAddReviewComment}
+            onDeleteComment={onDeleteReviewComment}
+            onSubmitReview={onSubmitReview}
+            reviewDisabled={reviewDisabled}
           />
         );
       case "commit":

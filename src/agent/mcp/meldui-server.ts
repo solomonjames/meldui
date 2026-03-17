@@ -18,16 +18,15 @@ import type { OutboundMessage } from "../protocol.js";
 
 // ── Ticket file helpers ──
 
-function ensureTicketsDir(projectDir: string): string {
-  const dir = join(projectDir, ".meldui", "tickets");
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+function ensureTicketsDir(ticketsDir: string): string {
+  if (!existsSync(ticketsDir)) {
+    mkdirSync(ticketsDir, { recursive: true });
   }
-  return dir;
+  return ticketsDir;
 }
 
-function readTicket(projectDir: string, id: string): Record<string, unknown> | null {
-  const dir = ensureTicketsDir(projectDir);
+function readTicket(ticketsDir: string, id: string): Record<string, unknown> | null {
+  const dir = ensureTicketsDir(ticketsDir);
   // Try exact ID match first, then scan for prefix match
   const exactPath = join(dir, `${id}.json`);
   if (existsSync(exactPath)) {
@@ -44,8 +43,8 @@ function readTicket(projectDir: string, id: string): Record<string, unknown> | n
   return null;
 }
 
-function writeTicket(projectDir: string, ticket: Record<string, unknown>): void {
-  const dir = ensureTicketsDir(projectDir);
+function writeTicket(ticketsDir: string, ticket: Record<string, unknown>): void {
+  const dir = ensureTicketsDir(ticketsDir);
   const path = join(dir, `${ticket.id}.json`);
   writeFileSync(path, JSON.stringify(ticket, null, 2));
 }
@@ -94,7 +93,12 @@ export function createMelduiMcpServer(
   send: (msg: OutboundMessage) => void,
   emitFeedbackRequest?: (ticketId: string, summary: string) => Promise<FeedbackResponse>,
   emitReviewRequest?: (ticketId: string, findings: ReviewFinding[], summary: string) => Promise<ReviewSubmissionResponse>,
+  ticketsDir?: string,
 ) {
+  // Resolve tickets directory: use explicit override (e.g. from main project when running in a worktree),
+  // or fall back to the default location under projectDir.
+  const resolvedTicketsDir = ticketsDir ?? join(projectDir, ".meldui", "tickets");
+
   // ── Ticket tools ──
 
   const writeSection = tool(
@@ -109,14 +113,14 @@ export function createMelduiMcpServer(
       if (!isValidSection(section)) {
         return { content: [{ type: "text" as const, text: `Invalid section: ${section}. Valid: ${VALID_SECTIONS.join(", ")}` }], isError: true };
       }
-      const ticket = readTicket(projectDir, ticket_id);
+      const ticket = readTicket(resolvedTicketsDir, ticket_id);
       if (!ticket) {
         return { content: [{ type: "text" as const, text: `Ticket '${ticket_id}' not found` }], isError: true };
       }
 
       ticket[section] = content;
       ticket.updated_at = new Date().toISOString();
-      writeTicket(projectDir, ticket);
+      writeTicket(resolvedTicketsDir, ticket);
 
       // Emit section_update so the frontend refreshes the ticket context panel
       send({ type: "section_update", ticket_id, section, content });
@@ -136,7 +140,7 @@ export function createMelduiMcpServer(
       if (!isValidSection(section)) {
         return { content: [{ type: "text" as const, text: `Invalid section: ${section}. Valid: ${VALID_SECTIONS.join(", ")}` }], isError: true };
       }
-      const ticket = readTicket(projectDir, ticket_id);
+      const ticket = readTicket(resolvedTicketsDir, ticket_id);
       if (!ticket) {
         return { content: [{ type: "text" as const, text: `Ticket '${ticket_id}' not found` }], isError: true };
       }
@@ -152,7 +156,7 @@ export function createMelduiMcpServer(
       ticket_id: z.string().describe("The ticket ID"),
     },
     async ({ ticket_id }) => {
-      const ticket = readTicket(projectDir, ticket_id);
+      const ticket = readTicket(resolvedTicketsDir, ticket_id);
       if (!ticket) {
         return { content: [{ type: "text" as const, text: `Ticket '${ticket_id}' not found` }], isError: true };
       }

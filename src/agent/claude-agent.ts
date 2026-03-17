@@ -58,7 +58,7 @@ export class ClaudeAgent
       });
     };
 
-    const melduiMcpServer = createMelduiMcpServer(config.projectDir, this.sendFn, emitFeedbackRequest, emitReviewRequest);
+    const melduiMcpServer = createMelduiMcpServer(config.projectDir, this.sendFn, emitFeedbackRequest, emitReviewRequest, config.ticketsDir);
 
     const systemPromptAppend = buildSystemPromptAppend(config);
 

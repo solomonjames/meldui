@@ -14,11 +14,18 @@ export interface SyncAdapter {
   mapFromTicket(ticket: Ticket): ExternalTicket;
 }
 
+export interface SyncSettings {
+  enabled: boolean;
+  provider: string;
+  auto_push: boolean;
+  config: Record<string, string>;
+}
+
+export interface WorktreeSettings {
+  setup_command?: string;
+}
+
 export interface ProjectSettings {
-  sync?: {
-    enabled: boolean;
-    provider: string;
-    auto_push: boolean;
-    config: Record<string, string>;
-  };
+  sync?: SyncSettings;
+  worktree?: WorktreeSettings;
 }

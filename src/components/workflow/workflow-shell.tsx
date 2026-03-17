@@ -15,6 +15,8 @@ import type {
   StepExecutionResult,
   StepOutputStream,
   DiffFile,
+  BranchInfo,
+  CommitActionResult,
   PermissionRequest,
   NotificationEvent,
   FeedbackRequestEvent,
@@ -35,7 +37,7 @@ interface WorkflowShellProps {
   pendingPermission: PermissionRequest | null;
   onRespondToPermission: (requestId: string, allowed: boolean) => void;
   onExecuteStep: (issueId: string) => Promise<StepExecutionResult | null>;
-  onGetDiff: () => Promise<DiffFile[]>;
+  onGetDiff: (dirOverride?: string) => Promise<DiffFile[]>;
   onBack: () => void;
   onRefreshTicket: () => Promise<void>;
   notifications: NotificationEvent[];
@@ -49,6 +51,9 @@ interface WorkflowShellProps {
   onDeleteReviewComment: (commentId: string) => void;
   onSubmitReview: (submission: ReviewSubmission) => void;
   reviewDisabled?: boolean;
+  onGetBranchInfo: (dirOverride?: string) => Promise<BranchInfo | null>;
+  onExecuteCommitAction: (issueId: string, action: "commit" | "commit_and_pr", commitMessage: string) => Promise<CommitActionResult | null>;
+  onCleanupWorktree: (issueId: string) => Promise<void>;
 }
 
 export function WorkflowShell({
@@ -76,6 +81,9 @@ export function WorkflowShell({
   onDeleteReviewComment,
   onSubmitReview,
   reviewDisabled,
+  onGetBranchInfo,
+  onExecuteCommitAction,
+  onCleanupWorktree,
 }: WorkflowShellProps) {
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
   // Use a ref with a monotonic counter to prevent StrictMode double-fire
@@ -279,6 +287,10 @@ export function WorkflowShell({
             ticket={ticket}
             response={responseText}
             onBack={onBack}
+            onGetDiff={onGetDiff}
+            onGetBranchInfo={onGetBranchInfo}
+            onExecuteCommitAction={onExecuteCommitAction}
+            onCleanupWorktree={onCleanupWorktree}
           />
         );
       default:

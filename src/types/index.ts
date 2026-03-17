@@ -197,3 +197,17 @@ export interface FeedbackRequestEvent {
   ticket_id: string;
   summary: string;
 }
+
+// ── Git Types ──
+
+export interface BranchInfo {
+  branch: string;
+  remote_tracking?: string;
+}
+
+export interface CommitActionResult {
+  success: boolean;
+  message: string;
+  commit_hash?: string;
+  pr_url?: string;
+}

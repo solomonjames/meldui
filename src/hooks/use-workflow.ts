@@ -10,6 +10,8 @@ import type {
   StepOutputStream,
   ToolActivity,
   DiffFile,
+  BranchInfo,
+  CommitActionResult,
   PermissionRequest,
   SectionUpdateEvent,
   NotificationEvent,
@@ -519,14 +521,55 @@ export function useWorkflow(projectDir: string) {
     []
   );
 
-  const getDiff = useCallback(async () => {
+  const getDiff = useCallback(async (dirOverride?: string) => {
     try {
-      return await invoke<DiffFile[]>("workflow_get_diff", { projectDir });
+      return await invoke<DiffFile[]>("workflow_get_diff", { projectDir: dirOverride ?? projectDir });
     } catch (err) {
       setError(`Failed to get diff: ${err}`);
       return [];
     }
   }, [projectDir]);
+
+  const getBranchInfo = useCallback(async (dirOverride?: string) => {
+    try {
+      return await invoke<BranchInfo>("workflow_get_branch_info", { projectDir: dirOverride ?? projectDir });
+    } catch (err) {
+      setError(`Failed to get branch info: ${err}`);
+      return null;
+    }
+  }, [projectDir]);
+
+  const executeCommitAction = useCallback(
+    async (issueId: string, action: "commit" | "commit_and_pr", commitMessage: string) => {
+      try {
+        setLoading(true);
+        setError(null);
+        return await invoke<CommitActionResult>("workflow_execute_commit_action", {
+          projectDir,
+          issueId,
+          action,
+          commitMessage,
+        });
+      } catch (err) {
+        setError(`Commit action failed: ${err}`);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [projectDir]
+  );
+
+  const cleanupWorktree = useCallback(
+    async (issueId: string) => {
+      try {
+        await invoke("workflow_cleanup_worktree", { projectDir, issueId });
+      } catch (err) {
+        setError(`Failed to cleanup worktree: ${err}`);
+      }
+    },
+    [projectDir]
+  );
 
   const getStepOutput = useCallback(
     (stepId: string): StepOutputStream | undefined => {
@@ -567,6 +610,9 @@ export function useWorkflow(projectDir: string) {
     executeStep,
     suggestWorkflow,
     getDiff,
+    getBranchInfo,
+    executeCommitAction,
+    cleanupWorktree,
     getStepOutput,
     reviewFindings,
     reviewComments,

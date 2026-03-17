@@ -6,6 +6,7 @@ import { BacklogPage } from "@/components/backlog/backlog-page";
 import { CreateTicketDialog } from "@/components/backlog/create-ticket-dialog";
 import { WelcomeScreen } from "@/components/welcome/welcome-screen";
 import { WorkflowShell } from "@/components/workflow/workflow-shell";
+import { SettingsPage } from "@/components/settings/settings-page";
 import { useClaude } from "@/hooks/use-claude";
 import { useTickets } from "@/hooks/use-tickets";
 import { useWorkflow } from "@/hooks/use-workflow";
@@ -196,7 +197,12 @@ function App() {
           onDeleteReviewComment={workflow.deleteReviewComment}
           onSubmitReview={workflow.submitReview}
           reviewDisabled={!workflow.pendingReviewRequestId}
+          onGetBranchInfo={workflow.getBranchInfo}
+          onExecuteCommitAction={workflow.executeCommitAction}
+          onCleanupWorktree={workflow.cleanupWorktree}
         />
+      ) : activePage === "settings" ? (
+        <SettingsPage projectDir={projectDir} />
       ) : (
         <BacklogPage
           tickets={ticketStore.tickets}

@@ -1,4 +1,4 @@
-import { FolderOpen, LayoutGrid } from "lucide-react";
+import { FolderOpen, LayoutGrid, Settings } from "lucide-react";
 import { MeldLogo } from "@/components/meld-logo";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -18,6 +18,7 @@ interface AppSidebarProps {
 
 const NAV_ITEMS = [
   { id: "backlog", label: "Backlog", icon: LayoutGrid },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 export function AppSidebar({

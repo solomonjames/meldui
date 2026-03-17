@@ -1,4 +1,5 @@
-import { FolderOpen, Layers, LayoutGrid } from "lucide-react";
+import { FolderOpen, LayoutGrid } from "lucide-react";
+import { MeldLogo } from "@/components/meld-logo";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -36,7 +37,7 @@ export function AppSidebar({
       {/* Logo */}
       <div className="p-6 pb-0">
         <div className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-emerald" />
+          <MeldLogo className="w-5 h-5" />
           <span className="font-semibold text-base">Meld</span>
         </div>
       </div>

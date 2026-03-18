@@ -291,8 +291,8 @@ async fn workflow_suggest(
 }
 
 #[tauri::command]
-async fn workflow_get_diff(project_dir: String) -> Result<Vec<DiffFile>, String> {
-    workflow::get_diff(&project_dir).await
+async fn workflow_get_diff(project_dir: String, base_commit: Option<String>) -> Result<Vec<DiffFile>, String> {
+    workflow::get_diff(&project_dir, base_commit.as_deref()).await
 }
 
 #[tauri::command]

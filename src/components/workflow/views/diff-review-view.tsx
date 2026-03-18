@@ -11,7 +11,7 @@ import type {
 
 interface DiffReviewViewProps {
   ticket: Ticket;
-  onGetDiff: () => Promise<DiffFile[]>;
+  onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
   reviewFindings: ReviewFinding[];
   reviewComments: ReviewComment[];
   onAddComment: (filePath: string, lineNumber: number, content: string, suggestion?: string) => void;
@@ -34,12 +34,15 @@ export function DiffReviewView({
   const [loading, setLoading] = useState(true);
   const [findingActions, setFindingActions] = useState<FindingAction[]>([]);
 
+  const worktreePath = ticket.metadata?.worktree_path as string | undefined;
+  const worktreeBaseCommit = ticket.metadata?.worktree_base_commit as string | undefined;
+
   const loadDiff = useCallback(async () => {
     setLoading(true);
-    const diff = await onGetDiff();
+    const diff = await onGetDiff(worktreePath, worktreeBaseCommit);
     setFiles(diff);
     setLoading(false);
-  }, [onGetDiff]);
+  }, [onGetDiff, worktreePath, worktreeBaseCommit]);
 
   useEffect(() => {
     loadDiff();

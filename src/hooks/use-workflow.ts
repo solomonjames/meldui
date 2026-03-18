@@ -521,9 +521,12 @@ export function useWorkflow(projectDir: string) {
     []
   );
 
-  const getDiff = useCallback(async (dirOverride?: string) => {
+  const getDiff = useCallback(async (dirOverride?: string, baseCommit?: string) => {
     try {
-      return await invoke<DiffFile[]>("workflow_get_diff", { projectDir: dirOverride ?? projectDir });
+      return await invoke<DiffFile[]>("workflow_get_diff", {
+        projectDir: dirOverride ?? projectDir,
+        baseCommit: baseCommit ?? null,
+      });
     } catch (err) {
       setError(`Failed to get diff: ${err}`);
       return [];

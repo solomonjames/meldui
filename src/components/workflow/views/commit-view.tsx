@@ -24,7 +24,7 @@ interface CommitViewProps {
   ticket: Ticket;
   response: string;
   onBack: () => void;
-  onGetDiff: (dirOverride?: string) => Promise<DiffFile[]>;
+  onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
   onGetBranchInfo: (dirOverride?: string) => Promise<BranchInfo | null>;
   onExecuteCommitAction: (
     issueId: string,
@@ -66,17 +66,18 @@ export function CommitView({
   const [actionState, setActionState] = useState<ActionState>({ status: "idle" });
   const [cleanedUp, setCleanedUp] = useState(false);
 
-  // Resolve the worktree path from ticket metadata (if available)
+  // Resolve the worktree path and base commit from ticket metadata (if available)
   const worktreePath = ticket.metadata?.worktree_path as string | undefined;
+  const worktreeBaseCommit = ticket.metadata?.worktree_base_commit as string | undefined;
 
-  // Fetch diff and branch info on mount (using worktree path if available)
+  // Fetch diff and branch info on mount (using worktree path and base commit if available)
   useEffect(() => {
-    onGetDiff(worktreePath).then((files) => {
+    onGetDiff(worktreePath, worktreeBaseCommit).then((files) => {
       setDiffFiles(files);
       setFilesExpanded((prev) => prev ?? (files.length > 0 && files.length <= 10));
     });
     onGetBranchInfo(worktreePath).then(setBranchInfo);
-  }, [onGetDiff, onGetBranchInfo, worktreePath]);
+  }, [onGetDiff, onGetBranchInfo, worktreePath, worktreeBaseCommit]);
 
   const totalAdditions = diffFiles.reduce((sum, f) => sum + f.additions, 0);
   const totalDeletions = diffFiles.reduce((sum, f) => sum + f.deletions, 0);

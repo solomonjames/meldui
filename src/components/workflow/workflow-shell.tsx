@@ -37,7 +37,7 @@ interface WorkflowShellProps {
   pendingPermission: PermissionRequest | null;
   onRespondToPermission: (requestId: string, allowed: boolean) => void;
   onExecuteStep: (issueId: string) => Promise<StepExecutionResult | null>;
-  onGetDiff: (dirOverride?: string) => Promise<DiffFile[]>;
+  onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
   onBack: () => void;
   onRefreshTicket: () => Promise<void>;
   notifications: NotificationEvent[];

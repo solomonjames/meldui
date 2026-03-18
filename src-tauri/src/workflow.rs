@@ -35,6 +35,19 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
         }
     }
 
+    // Capture the base commit hash before creating the worktree (this is the branch point)
+    let base_commit_output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to get base commit: {}", e))?;
+    let base_commit = String::from_utf8_lossy(&base_commit_output.stdout)
+        .trim()
+        .to_string();
+
     // Create the worktree
     let output = Command::new("git")
         .args(["worktree", "add", &worktree_str, "-b", &branch_name])
@@ -102,6 +115,9 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
     let mut meta = ticket.metadata.clone();
     meta["worktree_path"] = serde_json::Value::String(worktree_str.clone());
     meta["worktree_branch"] = serde_json::Value::String(branch_name.clone());
+    if !base_commit.is_empty() {
+        meta["worktree_base_commit"] = serde_json::Value::String(base_commit.clone());
+    }
     let meta_str = serde_json::to_string(&meta)
         .map_err(|e| format!("Failed to serialize worktree metadata: {}", e))?;
     crate::tickets::update_ticket(
@@ -1041,13 +1057,15 @@ fn extract_pr_url(text: &str) -> Option<String> {
 }
 
 /// Get the git diff for the current project (for diff-review view)
-pub async fn get_diff(project_dir: &str) -> Result<Vec<DiffFile>, String> {
+pub async fn get_diff(project_dir: &str, base_commit: Option<&str>) -> Result<Vec<DiffFile>, String> {
     use std::process::Stdio;
     use tokio::process::Command;
 
-    // Get both staged and unstaged changes
+    // When a base_commit is provided, diff from that commit to capture all branch changes
+    // (committed + uncommitted). Otherwise fall back to git diff HEAD.
+    let diff_arg = base_commit.unwrap_or("HEAD");
     let output = Command::new("git")
-        .args(["diff", "HEAD"])
+        .args(["diff", diff_arg])
         .current_dir(project_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

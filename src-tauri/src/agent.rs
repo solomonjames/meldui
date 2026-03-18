@@ -641,25 +641,30 @@ pub async fn execute_step(
                     );
                 }
                 "tool_input" => {
-                    if let Some(content) = json.get("content").and_then(|c| c.as_str()) {
-                        let _ = app_handle.emit(
-                            "workflow-step-output",
-                            StreamChunk {
-                                issue_id: issue_id.to_string(),
-                                chunk_type: "tool_input".to_string(),
-                                content: content.to_string(),
-                            },
-                        );
-                    }
+                    let tool_id = json.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
+                    let content = json.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                    let payload = serde_json::json!({
+                        "tool_id": tool_id,
+                        "content": content,
+                    });
+                    let _ = app_handle.emit(
+                        "workflow-step-output",
+                        StreamChunk {
+                            issue_id: issue_id.to_string(),
+                            chunk_type: "tool_input".to_string(),
+                            content: payload.to_string(),
+                        },
+                    );
                 }
                 "tool_end" => {
                     let tool_id = json.get("tool_id").and_then(|i| i.as_str()).unwrap_or("0");
+                    let payload = serde_json::json!({ "tool_id": tool_id });
                     let _ = app_handle.emit(
                         "workflow-step-output",
                         StreamChunk {
                             issue_id: issue_id.to_string(),
                             chunk_type: "tool_end".to_string(),
-                            content: tool_id.to_string(),
+                            content: payload.to_string(),
                         },
                     );
                 }
@@ -764,7 +769,10 @@ pub async fn execute_step(
 
                     // Advance the workflow to the next step
                     if !ticket_id.is_empty() {
-                        match crate::workflow::advance_step(canonical_project_dir.unwrap_or(project_dir), ticket_id) {
+                        match crate::workflow::advance_step(
+                            canonical_project_dir.unwrap_or(project_dir),
+                            ticket_id,
+                        ) {
                             Ok(_state) => {
                                 log::info!(
                                     "agent: workflow advanced for {} (summary: {})",
@@ -818,6 +826,131 @@ pub async fn execute_step(
                         "url": url,
                     });
                     let _ = app_handle.emit("meldui-pr-url-reported", payload);
+                }
+                "tool_progress" => {
+                    let tool_name = json.get("tool_name").and_then(|n| n.as_str()).unwrap_or("");
+                    let tool_use_id = json
+                        .get("tool_use_id")
+                        .and_then(|i| i.as_str())
+                        .unwrap_or("");
+                    let elapsed = json
+                        .get("elapsed_seconds")
+                        .and_then(|e| e.as_f64())
+                        .unwrap_or(0.0);
+                    let payload = serde_json::json!({
+                        "tool_name": tool_name,
+                        "tool_use_id": tool_use_id,
+                        "elapsed_seconds": elapsed,
+                    });
+                    let _ = app_handle.emit(
+                        "workflow-step-output",
+                        StreamChunk {
+                            issue_id: issue_id.to_string(),
+                            chunk_type: "tool_progress".to_string(),
+                            content: payload.to_string(),
+                        },
+                    );
+                }
+                "subagent_start" => {
+                    let task_id = json.get("task_id").and_then(|t| t.as_str()).unwrap_or("");
+                    let tool_use_id = json
+                        .get("tool_use_id")
+                        .and_then(|i| i.as_str())
+                        .unwrap_or("");
+                    let description = json
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("");
+                    let payload = serde_json::json!({
+                        "task_id": task_id,
+                        "tool_use_id": tool_use_id,
+                        "description": description,
+                    });
+                    let _ = app_handle.emit(
+                        "workflow-step-output",
+                        StreamChunk {
+                            issue_id: issue_id.to_string(),
+                            chunk_type: "subagent_start".to_string(),
+                            content: payload.to_string(),
+                        },
+                    );
+                }
+                "subagent_progress" => {
+                    let payload = serde_json::json!({
+                        "task_id": json.get("task_id").and_then(|t| t.as_str()).unwrap_or(""),
+                        "summary": json.get("summary"),
+                        "last_tool_name": json.get("last_tool_name"),
+                        "usage": json.get("usage"),
+                    });
+                    let _ = app_handle.emit(
+                        "workflow-step-output",
+                        StreamChunk {
+                            issue_id: issue_id.to_string(),
+                            chunk_type: "subagent_progress".to_string(),
+                            content: payload.to_string(),
+                        },
+                    );
+                }
+                "subagent_complete" => {
+                    let payload = serde_json::json!({
+                        "task_id": json.get("task_id").and_then(|t| t.as_str()).unwrap_or(""),
+                        "status": json.get("status").and_then(|s| s.as_str()).unwrap_or("completed"),
+                        "summary": json.get("summary"),
+                        "usage": json.get("usage"),
+                    });
+                    let _ = app_handle.emit(
+                        "workflow-step-output",
+                        StreamChunk {
+                            issue_id: issue_id.to_string(),
+                            chunk_type: "subagent_complete".to_string(),
+                            content: payload.to_string(),
+                        },
+                    );
+                }
+                "files_changed" => {
+                    let files = json.get("files").cloned().unwrap_or(serde_json::json!([]));
+                    let payload = serde_json::json!({ "files": files });
+                    let _ = app_handle.emit(
+                        "workflow-step-output",
+                        StreamChunk {
+                            issue_id: issue_id.to_string(),
+                            chunk_type: "files_changed".to_string(),
+                            content: payload.to_string(),
+                        },
+                    );
+                }
+                "tool_use_summary" => {
+                    let summary = json.get("summary").and_then(|s| s.as_str()).unwrap_or("");
+                    let tool_ids = json
+                        .get("tool_ids")
+                        .cloned()
+                        .unwrap_or(serde_json::json!([]));
+                    let payload = serde_json::json!({
+                        "summary": summary,
+                        "tool_ids": tool_ids,
+                    });
+                    let _ = app_handle.emit(
+                        "workflow-step-output",
+                        StreamChunk {
+                            issue_id: issue_id.to_string(),
+                            chunk_type: "tool_use_summary".to_string(),
+                            content: payload.to_string(),
+                        },
+                    );
+                }
+                "compacting" => {
+                    let is_compacting = json
+                        .get("is_compacting")
+                        .and_then(|b| b.as_bool())
+                        .unwrap_or(false);
+                    let _ = app_handle.emit(
+                        "workflow-step-output",
+                        StreamChunk {
+                            issue_id: issue_id.to_string(),
+                            chunk_type: "compacting".to_string(),
+                            content: is_compacting.to_string(),
+                        },
+                    );
                 }
                 "heartbeat" => {
                     // Heartbeat received — idle timeout was already reset by receiving this line

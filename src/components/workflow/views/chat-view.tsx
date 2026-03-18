@@ -4,98 +4,11 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Play, Send, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { Ticket, StepStatus, StepOutputStream, ToolActivity, FeedbackRequestEvent } from "@/types";
-
-const TOOL_LABELS: Record<string, string> = {
-  Write: "Writing file",
-  Read: "Reading file",
-  Edit: "Editing file",
-  Bash: "Running command",
-  Glob: "Searching files",
-  Grep: "Searching content",
-  Agent: "Running agent",
-  WebSearch: "Searching web",
-  WebFetch: "Fetching URL",
-};
-
-function ToolCard({ activity }: { activity: ToolActivity }) {
-  const [expanded, setExpanded] = useState(false);
-  const isRunning = activity.status === "running";
-  const hasInput = activity.input.length > 0;
-
-  // Hide meldui MCP tool cards — these are app-internal communication
-  if (activity.tool_name.startsWith("mcp__meldui")) return null;
-
-  let summary = "";
-  try {
-    const parsed = JSON.parse(activity.input);
-    if (parsed.file_path) summary = parsed.file_path;
-    else if (parsed.command) summary = parsed.command;
-    else if (parsed.pattern) summary = parsed.pattern;
-    else if (parsed.content?.slice) summary = `${parsed.content.slice(0, 60)}...`;
-  } catch {
-    if (activity.input.length > 0) {
-      summary = activity.input.slice(0, 80);
-      if (activity.input.length > 80) summary += "...";
-    }
-  }
-
-  return (
-    <div className="rounded-lg border bg-white dark:bg-zinc-900 my-2">
-      <button
-        onClick={() => hasInput && setExpanded(!expanded)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm"
-      >
-        {isRunning ? (
-          <div className="relative w-4 h-4 shrink-0">
-            <div className="absolute inset-0 rounded-full border-2 border-emerald-200 dark:border-emerald-800" />
-            <div className="absolute inset-0 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
-          </div>
-        ) : (
-          <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        )}
-        <span className="font-medium text-zinc-700 dark:text-zinc-300">
-          {TOOL_LABELS[activity.tool_name] ?? activity.tool_name}
-        </span>
-        {summary && (
-          <span className="text-xs text-muted-foreground truncate">
-            {summary}
-          </span>
-        )}
-        {hasInput && (
-          <svg
-            className={`w-3 h-3 ml-auto text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        )}
-      </button>
-      {expanded && hasInput && (
-        <div className="px-3 pb-2 border-t">
-          <pre className="text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap mt-2 max-h-48 overflow-y-auto">
-            {activity.input}
-          </pre>
-        </div>
-      )}
-      {expanded && activity.result && (
-        <div className="px-3 pb-2 border-t">
-          <p className="text-xs font-medium text-zinc-500 mt-2 mb-1">Result{activity.is_error ? " (error)" : ""}:</p>
-          <pre className={`text-xs overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto ${activity.is_error ? "text-red-500" : "text-muted-foreground"}`}>
-            {activity.result.slice(0, 2000)}{activity.result.length > 2000 ? "..." : ""}
-          </pre>
-        </div>
-      )}
-    </div>
-  );
-}
+import type { Ticket, StepStatus, StepOutputStream, FeedbackRequestEvent } from "@/types";
+import { ActivityGroup } from "@/components/workflow/shared/activity-group";
+import { ActivityBar } from "@/components/workflow/shared/activity-bar";
+import { SubagentCard } from "@/components/workflow/shared/subagent-card";
+import { FilesChanged } from "@/components/workflow/shared/files-changed";
 
 function FeedbackCard({
   request,
@@ -226,14 +139,15 @@ export function ChatView({
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const contextScrollRef = useRef<HTMLDivElement>(null);
 
-  const hasToolActivity = (stepOutput?.toolActivities?.length ?? 0) > 0;
-  const hasText = response.length > 0;
-  const isThinking = isExecuting && (stepOutput?.thinkingContent?.length ?? 0) > 0 && !hasText && !hasToolActivity;
+  const contentBlocks = stepOutput?.contentBlocks ?? [];
+  const hasContent = contentBlocks.length > 0 || response.length > 0;
+  const isThinking = isExecuting && (stepOutput?.thinkingContent?.length ?? 0) > 0 && !hasContent;
+  const isStepComplete = stepOutput?.resultContent != null;
 
   // Auto-scroll chat panel
   useEffect(() => {
     chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [response, stepOutput?.toolActivities.length, pendingFeedback]);
+  }, [contentBlocks.length, response, pendingFeedback]);
 
   const handleSend = () => {
     if (!input.trim() || isExecuting) return;
@@ -248,7 +162,7 @@ export function ChatView({
     }
   };
 
-  // Build spec content from ticket fields (refreshed live via meldui-section-update)
+  // Build spec content from ticket fields
   const specContent = [
     ticket.design && `## Design\n${ticket.design}`,
     ticket.notes && `## Notes\n${ticket.notes}`,
@@ -259,14 +173,16 @@ export function ChatView({
 
   return (
     <div data-testid="chat-view" className="flex h-full">
-      {/* Left: Ticket Context — always shows live ticket fields */}
+      {/* Left: Ticket Context */}
       <div className="w-1/2 border-r flex flex-col">
         <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900 flex items-center gap-2">
           <h3 className="text-sm font-medium text-muted-foreground">
             Ticket Context
           </h3>
           {isExecuting && (
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 animate-pulse">
+              live
+            </span>
           )}
         </div>
         <div className="flex-1 overflow-y-auto p-4">
@@ -298,8 +214,9 @@ export function ChatView({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 relative">
           <div className="space-y-1">
+            {/* Thinking indicator */}
             {isThinking && (
               <div className="flex items-center gap-2.5 text-sm text-muted-foreground py-1">
                 <div className="flex gap-1">
@@ -307,30 +224,70 @@ export function ChatView({
                   <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
                 </div>
-                Thinking...
+                <span className="truncate max-w-[250px]">
+                  {stepOutput?.thinkingContent && stepOutput.thinkingContent.length > 0
+                    ? stepOutput.thinkingContent.slice(-60).trim()
+                    : "Thinking..."}
+                </span>
               </div>
             )}
-            {hasToolActivity && (
-              stepOutput!.toolActivities.map((activity, i) => (
-                <ToolCard key={`${activity.tool_id}-${i}`} activity={activity} />
-              ))
-            )}
-            {hasText && (
+
+            {/* Content blocks — text-first with activity groups */}
+            {contentBlocks.map((block, i) => {
+              switch (block.type) {
+                case "text":
+                  return (
+                    <div key={`text-${i}`} className="prose prose-sm dark:prose-invert max-w-none mt-2">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {block.content}
+                      </ReactMarkdown>
+                    </div>
+                  );
+                case "tool_group": {
+                  const isLastGroup = !contentBlocks.slice(i + 1).some((b) => b.type === "tool_group");
+                  const isActive = isExecuting && isLastGroup && block.activities.some((a) => a.status === "running");
+                  return (
+                    <ActivityGroup
+                      key={`group-${i}`}
+                      activities={block.activities}
+                      summaryText={block.summaryText}
+                      isActive={isActive}
+                    />
+                  );
+                }
+                case "subagent":
+                  return (
+                    <SubagentCard key={`subagent-${i}`} activity={block.activity} />
+                  );
+                default:
+                  return null;
+              }
+            })}
+
+            {/* Fallback: render response text if no contentBlocks */}
+            {contentBlocks.length === 0 && response.length > 0 && (
               <div className="prose prose-sm dark:prose-invert max-w-none mt-2">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {response}
                 </ReactMarkdown>
               </div>
             )}
+
+            {/* Files changed summary */}
+            {isStepComplete && stepOutput && (
+              <FilesChanged
+                filesChanged={stepOutput.filesChanged}
+                toolActivities={stepOutput.toolActivities}
+              />
+            )}
+
+            {/* Feedback card */}
             {pendingFeedback && onRespondToFeedback && (
               <FeedbackCard request={pendingFeedback} onRespond={onRespondToFeedback} />
             )}
-            {!hasToolActivity && !hasText && !isThinking && isExecuting && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Processing...
-              </div>
-            )}
+
+            {/* Empty states */}
+            {/* ActivityBar below handles processing state */}
             {!isExecuting && stepStatus === "pending" && (
               <div className="flex flex-col items-center justify-center gap-3 py-8">
                 <p className="text-sm text-muted-foreground">
@@ -346,7 +303,7 @@ export function ChatView({
                 </Button>
               </div>
             )}
-            {!isExecuting && !hasText && stepOutput?.stderrLines && stepOutput.stderrLines.length > 0 && (
+            {!isExecuting && !hasContent && stepOutput?.stderrLines && stepOutput.stderrLines.length > 0 && (
               <div className="w-full max-w-lg space-y-2">
                 <p className="text-sm font-medium text-red-600 dark:text-red-400">
                   Agent returned an error:
@@ -367,6 +324,9 @@ export function ChatView({
               </div>
             )}
           </div>
+
+          {/* Activity bar — sticky at bottom of scroll area */}
+          <ActivityBar stepOutput={stepOutput} isExecuting={isExecuting} isWaitingForUser={!!pendingFeedback} />
           <div ref={chatScrollRef} />
         </div>
 

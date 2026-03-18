@@ -129,6 +129,34 @@ async function main(): Promise<void> {
     send({ type: "thinking", content: text });
   });
 
+  agent.on("tool-progress", ({ toolUseId, toolName, elapsedSeconds }) => {
+    send({ type: "tool_progress", tool_use_id: toolUseId, tool_name: toolName, elapsed_seconds: elapsedSeconds });
+  });
+
+  agent.on("tool-use-summary", ({ summary, toolIds }) => {
+    send({ type: "tool_use_summary", summary, tool_ids: toolIds });
+  });
+
+  agent.on("subagent-start", ({ taskId, toolUseId, description }) => {
+    send({ type: "subagent_start", task_id: taskId, tool_use_id: toolUseId, description });
+  });
+
+  agent.on("subagent-progress", ({ taskId, summary, lastToolName, usage }) => {
+    send({ type: "subagent_progress", task_id: taskId, summary, last_tool_name: lastToolName, usage });
+  });
+
+  agent.on("subagent-complete", ({ taskId, status, summary, usage }) => {
+    send({ type: "subagent_complete", task_id: taskId, status, summary, usage });
+  });
+
+  agent.on("files-persisted", ({ files }) => {
+    send({ type: "files_changed", files });
+  });
+
+  agent.on("status-change", ({ isCompacting }) => {
+    send({ type: "compacting", is_compacting: isCompacting });
+  });
+
   agent.on("permission-request", (event: PermissionRequestEvent) => {
     pendingPermissions.set(event.requestId, event.resolve);
     send({

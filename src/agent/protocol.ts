@@ -196,6 +196,54 @@ export interface ReviewFindingPayload {
   suggestion?: string;
 }
 
+// ── Agent SDK message types ──
+
+export interface ToolProgressMessage {
+  type: "tool_progress";
+  tool_name: string;
+  tool_use_id: string;
+  elapsed_seconds: number;
+}
+
+export interface SubagentStartMessage {
+  type: "subagent_start";
+  task_id: string;
+  tool_use_id?: string;
+  description: string;
+}
+
+export interface SubagentProgressMessage {
+  type: "subagent_progress";
+  task_id: string;
+  summary?: string;
+  last_tool_name?: string;
+  usage?: { total_tokens: number; tool_uses: number; duration_ms: number };
+}
+
+export interface SubagentCompleteMessage {
+  type: "subagent_complete";
+  task_id: string;
+  status: "completed" | "failed" | "stopped";
+  summary?: string;
+  usage?: { total_tokens: number; tool_uses: number; duration_ms: number };
+}
+
+export interface FilesChangedMessage {
+  type: "files_changed";
+  files: Array<{ filename: string }>;
+}
+
+export interface ToolUseSummaryMessage {
+  type: "tool_use_summary";
+  summary: string;
+  tool_ids: string[];
+}
+
+export interface CompactingMessage {
+  type: "compacting";
+  is_compacting: boolean;
+}
+
 export type OutboundMessage =
   | SessionMessage
   | TextMessage
@@ -214,4 +262,11 @@ export type OutboundMessage =
   | FeedbackRequestMessage
   | HeartbeatMessage
   | ReviewFindingsMessage
-  | PrUrlReportedMessage;
+  | PrUrlReportedMessage
+  | ToolProgressMessage
+  | SubagentStartMessage
+  | SubagentProgressMessage
+  | SubagentCompleteMessage
+  | FilesChangedMessage
+  | ToolUseSummaryMessage
+  | CompactingMessage;

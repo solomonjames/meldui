@@ -35,6 +35,8 @@ export class ClaudeAgent
   private abortController: AbortController | null = null;
   private agentQuery: ReturnType<typeof query> | null = null;
   private sendFn: (msg: OutboundMessage) => void;
+  /** Maps content block index → real tool_use_id for stream events */
+  private blockIndexToToolId = new Map<number, string>();
 
   constructor(send: (msg: OutboundMessage) => void) {
     super();
@@ -163,6 +165,8 @@ export class ClaudeAgent
           }
 
           case "assistant": {
+            // Clear block index map for each new assistant turn
+            this.blockIndexToToolId.clear();
             const assistantMsg = msg.message as Record<string, unknown> | undefined;
             if (assistantMsg?.content && Array.isArray(assistantMsg.content)) {
               for (const block of assistantMsg.content) {
@@ -208,6 +212,87 @@ export class ClaudeAgent
             this.handleStreamEvent(msg);
             break;
           }
+
+          case "tool_progress": {
+            const toolMsg = msg as { tool_use_id?: string; tool_name?: string; elapsed_time_seconds?: number };
+            if (toolMsg.tool_use_id) {
+              this.emit("tool-progress", {
+                toolUseId: toolMsg.tool_use_id,
+                toolName: toolMsg.tool_name ?? "unknown",
+                elapsedSeconds: toolMsg.elapsed_time_seconds ?? 0,
+              });
+            }
+            break;
+          }
+
+          case "tool_use_summary": {
+            const summaryMsg = msg as { summary?: string; preceding_tool_use_ids?: string[] };
+            if (summaryMsg.summary) {
+              this.emit("tool-use-summary", {
+                summary: summaryMsg.summary,
+                toolIds: summaryMsg.preceding_tool_use_ids ?? [],
+              });
+            }
+            break;
+          }
+        }
+
+        // Handle system subtypes (subagent lifecycle, files_persisted, status)
+        if (msgType === "system") {
+          const subtype = msg.subtype as string | undefined;
+          switch (subtype) {
+            case "task_started": {
+              const taskMsg = msg as { task_id?: string; tool_use_id?: string; description?: string };
+              if (taskMsg.task_id) {
+                this.emit("subagent-start", {
+                  taskId: taskMsg.task_id,
+                  toolUseId: taskMsg.tool_use_id,
+                  description: taskMsg.description ?? "",
+                });
+              }
+              break;
+            }
+            case "task_progress": {
+              const taskMsg = msg as { task_id?: string; summary?: string; last_tool_name?: string; usage?: unknown };
+              if (taskMsg.task_id) {
+                this.emit("subagent-progress", {
+                  taskId: taskMsg.task_id,
+                  summary: taskMsg.summary,
+                  lastToolName: taskMsg.last_tool_name,
+                  usage: taskMsg.usage as { total_tokens: number; tool_uses: number; duration_ms: number } | undefined,
+                });
+              }
+              break;
+            }
+            case "task_notification": {
+              const taskMsg = msg as { task_id?: string; status?: string; summary?: string; usage?: unknown };
+              if (taskMsg.task_id) {
+                this.emit("subagent-complete", {
+                  taskId: taskMsg.task_id,
+                  status: (taskMsg.status ?? "completed") as "completed" | "failed" | "stopped",
+                  summary: taskMsg.summary,
+                  usage: taskMsg.usage as { total_tokens: number; tool_uses: number; duration_ms: number } | undefined,
+                });
+              }
+              break;
+            }
+            case "files_persisted": {
+              const filesMsg = msg as { files?: Array<{ filename: string }> };
+              if (filesMsg.files && filesMsg.files.length > 0) {
+                this.emit("files-persisted", {
+                  files: filesMsg.files.map((f) => ({ filename: f.filename })),
+                });
+              }
+              break;
+            }
+            case "status": {
+              const statusMsg = msg as { status?: string | null };
+              this.emit("status-change", {
+                isCompacting: statusMsg.status === "compacting",
+              });
+              break;
+            }
+          }
         }
       }
 
@@ -252,10 +337,13 @@ export class ClaudeAgent
     switch (eventType) {
       case "content_block_start": {
         const contentBlock = event.content_block as Record<string, unknown> | undefined;
+        const index = event.index as number;
         if (contentBlock?.type === "tool_use") {
+          const toolId = contentBlock.id as string;
+          this.blockIndexToToolId.set(index, toolId);
           this.emit("tool-use-start", {
             name: contentBlock.name as string,
-            id: contentBlock.id as string,
+            id: toolId,
           });
         }
         break;
@@ -279,11 +367,10 @@ export class ClaudeAgent
         } else if (deltaType === "input_json_delta") {
           const partialJson = delta.partial_json as string;
           if (partialJson) {
-            // Find the current tool use block by index
             const index = event.index as number;
-            // We track active tool IDs by index in the stream
+            const toolId = this.blockIndexToToolId.get(index) ?? String(index);
             this.emit("tool-input-delta", {
-              id: String(index),
+              id: toolId,
               partialJson,
             });
           }
@@ -293,7 +380,8 @@ export class ClaudeAgent
 
       case "content_block_stop": {
         const index = event.index as number;
-        this.emit("tool-use-end", { id: String(index) });
+        const toolId = this.blockIndexToToolId.get(index) ?? String(index);
+        this.emit("tool-use-end", { id: toolId });
         break;
       }
     }

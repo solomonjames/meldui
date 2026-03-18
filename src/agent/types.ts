@@ -86,6 +86,13 @@ export interface MeldAgentEvents {
   "tool-use-start": (event: { name: string; id: string }) => void;
   "tool-input-delta": (event: { id: string; partialJson: string }) => void;
   "tool-use-end": (event: { id: string }) => void;
+  "tool-progress": (event: { toolUseId: string; toolName: string; elapsedSeconds: number }) => void;
+  "tool-use-summary": (event: { summary: string; toolIds: string[] }) => void;
+  "subagent-start": (event: { taskId: string; toolUseId?: string; description: string }) => void;
+  "subagent-progress": (event: { taskId: string; summary?: string; lastToolName?: string; usage?: { total_tokens: number; tool_uses: number; duration_ms: number } }) => void;
+  "subagent-complete": (event: { taskId: string; status: "completed" | "failed" | "stopped"; summary?: string; usage?: { total_tokens: number; tool_uses: number; duration_ms: number } }) => void;
+  "files-persisted": (event: { files: Array<{ filename: string }> }) => void;
+  "status-change": (event: { isCompacting: boolean }) => void;
   "permission-request": (event: PermissionRequestEvent) => void;
   "feedback-request": (event: FeedbackRequestEvent) => void;
   "review-request": (event: ReviewRequestEvent) => void;

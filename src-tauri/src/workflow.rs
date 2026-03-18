@@ -1068,7 +1068,10 @@ fn extract_pr_url(text: &str) -> Option<String> {
 }
 
 /// Get the git diff for the current project (for diff-review view)
-pub async fn get_diff(project_dir: &str, base_commit: Option<&str>) -> Result<Vec<DiffFile>, String> {
+pub async fn get_diff(
+    project_dir: &str,
+    base_commit: Option<&str>,
+) -> Result<Vec<DiffFile>, String> {
     use std::process::Stdio;
     use tokio::process::Command;
 

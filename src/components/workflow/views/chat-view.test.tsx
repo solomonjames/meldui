@@ -34,7 +34,7 @@ describe("ChatView display states", () => {
     expect(screen.getByText("Here is the analysis")).toBeInTheDocument();
   });
 
-  it("shows Processing... when isExecuting is true and no response", () => {
+  it("shows Processing... in activity bar when isExecuting is true and no response", () => {
     render(
       <ChatView
         {...defaultProps}
@@ -44,6 +44,7 @@ describe("ChatView display states", () => {
       />
     );
 
+    // Processing state is shown via the ActivityBar component
     expect(screen.getByText("Processing...")).toBeInTheDocument();
   });
 
@@ -75,6 +76,13 @@ describe("ChatView display states", () => {
           resultContent: null,
           thinkingContent: "",
           lastChunkType: "",
+          contentBlocks: [],
+          subagentActivities: [],
+          filesChanged: [],
+          activeToolName: null,
+          activeToolStartTime: null,
+          toolUseSummaries: [],
+          isCompacting: false,
         }}
       />
     );

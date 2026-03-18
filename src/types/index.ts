@@ -78,7 +78,11 @@ export interface WorkflowSuggestion {
 
 export interface StreamChunk {
   issue_id: string;
-  chunk_type: "text" | "tool_start" | "tool_input" | "tool_end" | "tool_result" | "thinking" | "result" | "error" | "stderr";
+  chunk_type:
+    | "text" | "tool_start" | "tool_input" | "tool_end" | "tool_result"
+    | "thinking" | "result" | "error" | "stderr"
+    | "tool_progress" | "subagent_start" | "subagent_progress" | "subagent_complete"
+    | "files_changed" | "tool_use_summary" | "compacting";
   content: string;
 }
 
@@ -91,6 +95,25 @@ export interface ToolActivity {
   status: "running" | "complete";
 }
 
+export interface SubagentActivity {
+  task_id: string;
+  tool_use_id?: string;
+  description: string;
+  status: "running" | "completed" | "failed" | "stopped";
+  summary?: string;
+  last_tool_name?: string;
+  usage?: { total_tokens: number; tool_uses: number; duration_ms: number };
+}
+
+export interface FileChange {
+  filename: string;
+}
+
+export type ContentBlock =
+  | { type: "text"; content: string }
+  | { type: "tool_group"; activities: ToolActivity[]; summaryText?: string }
+  | { type: "subagent"; activity: SubagentActivity };
+
 export interface StepOutputStream {
   textContent: string;
   toolActivities: ToolActivity[];
@@ -98,6 +121,13 @@ export interface StepOutputStream {
   resultContent: string | null;
   thinkingContent: string;
   lastChunkType: string;
+  contentBlocks: ContentBlock[];
+  subagentActivities: SubagentActivity[];
+  filesChanged: FileChange[];
+  activeToolName: string | null;
+  activeToolStartTime: number | null;
+  toolUseSummaries: Array<{ summary: string; toolIds: string[] }>;
+  isCompacting: boolean;
 }
 
 export interface PermissionRequest {

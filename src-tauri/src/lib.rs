@@ -2,6 +2,8 @@ mod agent;
 #[allow(dead_code)]
 mod beads;
 mod claude;
+mod menu;
+mod preferences;
 mod settings;
 mod sync;
 mod tickets;
@@ -345,6 +347,25 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Build and set macOS app menu
+            match menu::build_app_menu(app) {
+                Ok(menu) => {
+                    app.set_menu(menu)?;
+                    app.on_menu_event(|app_handle, event| {
+                        if event.id().0.as_str() == "preferences" {
+                            if let Err(e) = preferences::open_preferences_window(app_handle.clone())
+                            {
+                                log::error!("Failed to open preferences window: {}", e);
+                            }
+                        }
+                    });
+                }
+                Err(e) => {
+                    log::warn!("Failed to build app menu: {}", e);
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -377,6 +398,9 @@ pub fn run() {
             workflow_get_branch_info,
             workflow_execute_commit_action,
             workflow_cleanup_worktree,
+            preferences::get_app_preferences,
+            preferences::set_app_preferences,
+            preferences::open_preferences_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

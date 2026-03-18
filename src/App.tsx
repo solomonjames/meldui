@@ -11,9 +11,11 @@ import { useClaude } from "@/hooks/use-claude";
 import { useTickets } from "@/hooks/use-tickets";
 import { useWorkflow } from "@/hooks/use-workflow";
 import { useProjectDir } from "@/hooks/use-project-dir";
+import { useTheme } from "@/hooks/use-theme";
 import type { Ticket } from "@/types";
 
 function App() {
+  useTheme();
   const { projectDir, folderName, loading: dirLoading, openFolderDialog } = useProjectDir();
   const claude = useClaude();
   const ticketStore = useTickets(projectDir ?? "");

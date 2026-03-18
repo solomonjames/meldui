@@ -11,6 +11,7 @@ import {
   Check,
   Send,
   Pencil,
+  GitPullRequest,
 } from "lucide-react";
 import {
   Dialog,
@@ -545,6 +546,17 @@ export function TicketDetailDialog({
               <span>
                 Assigned to {currentTicket.assignee}
               </span>
+            )}
+            {typeof currentTicket.metadata?.pr_url === "string" && (
+              <a
+                href={currentTicket.metadata.pr_url as string}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                <GitPullRequest className="w-3 h-3" />
+                Pull Request
+              </a>
             )}
           </div>
         </div>

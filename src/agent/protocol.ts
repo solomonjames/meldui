@@ -160,6 +160,12 @@ export interface StatusUpdateMessage {
   status_text: string;
 }
 
+export interface PrUrlReportedMessage {
+  type: "pr_url_reported";
+  ticket_id: string;
+  url: string;
+}
+
 export interface FeedbackRequestMessage {
   type: "feedback_request";
   request_id: string;
@@ -207,4 +213,5 @@ export type OutboundMessage =
   | StatusUpdateMessage
   | FeedbackRequestMessage
   | HeartbeatMessage
-  | ReviewFindingsMessage;
+  | ReviewFindingsMessage
+  | PrUrlReportedMessage;

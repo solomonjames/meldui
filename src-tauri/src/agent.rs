@@ -810,6 +810,15 @@ pub async fn execute_step(
                         let _ = app_handle.emit("agent-review-findings", review_req);
                     }
                 }
+                "pr_url_reported" => {
+                    let ticket_id = json.get("ticket_id").and_then(|t| t.as_str()).unwrap_or("");
+                    let url = json.get("url").and_then(|u| u.as_str()).unwrap_or("");
+                    let payload = serde_json::json!({
+                        "ticket_id": ticket_id,
+                        "url": url,
+                    });
+                    let _ = app_handle.emit("meldui-pr-url-reported", payload);
+                }
                 "heartbeat" => {
                     // Heartbeat received — idle timeout was already reset by receiving this line
                     log::debug!("agent: heartbeat received");

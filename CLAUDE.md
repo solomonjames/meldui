@@ -37,11 +37,15 @@ MeldUI is a **Tauri v2** desktop app: a React frontend communicates with a Rust 
 
 ### Frontend → Backend Communication
 
-React hooks in `src/hooks/` call Tauri commands defined in `src-tauri/src/lib.rs`. The Rust side coordinates two integrations:
+React hooks in `src/hooks/` call Tauri commands defined in `src-tauri/src/lib.rs`. The Rust side coordinates several modules:
 
 - **Beads (`bd`)** — issue tracking. `src-tauri/src/beads.rs` spawns the `bd` CLI, parses JSON output into `BeadsIssue` structs.
+- **Tickets** — `src-tauri/src/tickets.rs` handles ticket operations and state management.
 - **Agent sidecar** — AI workflow execution. `src-tauri/src/agent.rs` spawns a compiled Bun binary (`src/agent/`) that wraps `@anthropic-ai/claude-agent-sdk`. Communication is NDJSON over stdin/stdout.
+- **Workflow** — `src-tauri/src/workflow.rs` manages workflow orchestration.
 - **Claude status/login** — `src-tauri/src/claude.rs` handles auth status checks and login only (no longer does streaming).
+- **Settings** — `src-tauri/src/settings.rs` handles app settings persistence.
+- **Sync** — `src-tauri/src/sync/` module with `beads_adapter.rs` for syncing beads data.
 
 Both `bd` and `claude` CLIs are discovered at runtime by searching common install paths (homebrew, ~/.local/bin, etc.).
 
@@ -63,7 +67,7 @@ Bun Sidecar (src/agent/main.ts → compiled binary)
 Key files in `src/agent/`:
 - `main.ts` — entry point, reads config from stdin, wires events to stdout
 - `claude-agent.ts` — wraps `query()` with EventEmitter, handles `canUseTool` permissions
-- `mcp/beads-server.ts` — in-process MCP server with beads tools (uses `createSdkMcpServer`)
+- `mcp/meldui-server.ts` — in-process MCP server with beads tools (uses `createSdkMcpServer`)
 - `protocol.ts` — NDJSON message type definitions
 - `build.ts` — compiles to `src-tauri/binaries/agent-{arch}-apple-darwin`
 
@@ -94,12 +98,12 @@ Frontend TypeScript types in `src/types/index.ts` manually mirror the Rust serde
 
 **Beads parent-child relationships**: `bd list --json` doesn't return a `parent_id` field. Sub-tickets have a `dependencies` array with entries where `type === "parent-child"`. The Rust `list_issues()` function derives `parent_id` from this at fetch time.
 
-**Hook pattern**: Each integration has a custom hook (`useBeads`, `useClaude`, `useWorkflow`, `useProjectDir`) that wraps Tauri invoke calls and manages loading/error state.
+**Hook pattern**: Each integration has a custom hook (`useTickets`, `useClaude`, `useWorkflow`, `useProjectDir`, `useSettings`, `useSync`, `useDebugLog`) that wraps Tauri invoke calls and manages loading/error state.
 
 **Agent permission flow**: When the agent needs permission for a dangerous tool (e.g., Bash outside project dir), the sidecar emits a `permission_request` on stdout → Rust emits `agent-permission-request` Tauri event → frontend shows inline dialog → user clicks Allow/Deny → frontend invokes `agent_permission_respond` → Rust writes response to sidecar stdin → `canUseTool` Promise resolves.
 
 **Session continuity**: The agent's `session_id` is stored in ticket metadata (`agent_session_id`). When the next workflow step starts, the sidecar resumes the session so Claude retains context from prior steps.
 
-**Kanban board**: Issues flow through `BacklogPage` → `KanbanColumn` → `KanbanCard`. Column assignment is derived from status via `getColumnForStatus()`. Cards are draggable between columns, which triggers status updates through beads.
+**Kanban board**: Issues flow through `BacklogPage` → `KanbanColumn` → `KanbanCard`. Columns are defined statically in `backlog-page.tsx`. Cards are draggable between columns, which triggers status updates through beads.
 
-**Issue config maps**: `TYPE_CONFIG` and `PRIORITY_CONFIG` are exported from `kanban-card.tsx` and reused across components for consistent styling of issue types and priorities.
+**Issue config maps**: `TYPE_CONFIG`, `PRIORITY_CONFIG`, and `STATUS_CONFIG` are defined in `ticket-constants.ts` (re-exported from `kanban-card.tsx`) and reused across components for consistent styling of issue types, priorities, and statuses.

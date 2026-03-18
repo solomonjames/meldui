@@ -310,8 +310,33 @@ export function createMelduiMcpServer(
     }
   );
 
+  const reportPrUrl = tool(
+    "meldui_report_pr_url",
+    "Report a pull request URL so the app can display it. Call this after successfully creating a PR with `gh pr create`.",
+    {
+      ticket_id: z.string().describe("The ticket ID"),
+      url: z.string().url().describe("The full PR URL (e.g. https://github.com/owner/repo/pull/123)"),
+    },
+    async ({ ticket_id, url }) => {
+      const ticket = readTicket(resolvedTicketsDir, ticket_id);
+      if (!ticket) {
+        return { content: [{ type: "text" as const, text: `Ticket '${ticket_id}' not found` }], isError: true };
+      }
+
+      const metadata = (ticket.metadata as Record<string, unknown>) ?? {};
+      metadata.pr_url = url;
+      ticket.metadata = metadata;
+      ticket.updated_at = new Date().toISOString();
+      writeTicket(resolvedTicketsDir, ticket);
+
+      send({ type: "pr_url_reported", ticket_id, url });
+
+      return { content: [{ type: "text" as const, text: `PR URL reported for ${ticket_id}: ${url}` }] };
+    }
+  );
+
   return createSdkMcpServer({
     name: "meldui",
-    tools: [writeSection, readSection, ticketShow, stepComplete, requestFeedback, submitReview, notify, showStatus],
+    tools: [writeSection, readSection, ticketShow, stepComplete, requestFeedback, submitReview, notify, showStatus, reportPrUrl],
   });
 }

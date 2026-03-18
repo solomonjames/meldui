@@ -984,7 +984,8 @@ pub async fn execute_commit_action(
             2. Run `git commit` with the EXACT commit message below — do NOT modify it, do NOT add co-author lines or any other text:\n\
             ```\n{}\n```\n\
             3. Push the current branch to origin\n\
-            4. Create a pull request using `gh pr create` with an appropriate title and body based on the commit message\n\n\
+            4. Create a pull request using `gh pr create` with an appropriate title and body based on the commit message\n\
+            5. After the PR is created, call `meldui_report_pr_url` with the ticket ID and the PR URL so the app can display it\n\n\
             After completing, report the commit hash and PR URL.",
             commit_message
         )
@@ -1020,7 +1021,17 @@ pub async fn execute_commit_action(
     // Parse the response to extract commit hash and PR URL
     let commit_hash = extract_commit_hash(&response_text);
     let pr_url = if action == "commit_and_pr" {
-        extract_pr_url(&response_text)
+        // Primary: read pr_url from ticket metadata (set by meldui_report_pr_url MCP tool)
+        let metadata_url = crate::tickets::show_ticket(project_dir, issue_id)
+            .ok()
+            .and_then(|t| {
+                t.metadata
+                    .get("pr_url")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            });
+        // Fallback: extract from agent response text
+        metadata_url.or_else(|| extract_pr_url(&response_text))
     } else {
         None
     };

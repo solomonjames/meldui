@@ -827,6 +827,19 @@ pub async fn execute_step(
                     });
                     let _ = app_handle.emit("meldui-pr-url-reported", payload);
                 }
+                "subtask_created" | "subtask_updated" | "subtask_closed" => {
+                    let subtask_id = json
+                        .get("subtask_id")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("");
+                    let parent_id = json.get("parent_id").and_then(|p| p.as_str()).unwrap_or("");
+                    let payload = serde_json::json!({
+                        "subtask_id": subtask_id,
+                        "parent_id": parent_id,
+                    });
+                    let _ =
+                        app_handle.emit(&format!("meldui-{}", msg_type.replace('_', "-")), payload);
+                }
                 "tool_progress" => {
                     let tool_name = json.get("tool_name").and_then(|n| n.as_str()).unwrap_or("");
                     let tool_use_id = json

@@ -138,6 +138,7 @@ export interface SectionUpdateMessage {
   type: "section_update";
   ticket_id: string;
   section: string;
+  section_id?: string;
   content: string;
 }
 
@@ -164,6 +165,24 @@ export interface PrUrlReportedMessage {
   type: "pr_url_reported";
   ticket_id: string;
   url: string;
+}
+
+export interface SubtaskCreatedMessage {
+  type: "subtask_created";
+  subtask_id: string;
+  parent_id: string;
+}
+
+export interface SubtaskUpdatedMessage {
+  type: "subtask_updated";
+  subtask_id: string;
+  parent_id: string;
+}
+
+export interface SubtaskClosedMessage {
+  type: "subtask_closed";
+  subtask_id: string;
+  parent_id: string;
 }
 
 export interface FeedbackRequestMessage {
@@ -269,4 +288,7 @@ export type OutboundMessage =
   | SubagentCompleteMessage
   | FilesChangedMessage
   | ToolUseSummaryMessage
-  | CompactingMessage;
+  | CompactingMessage
+  | SubtaskCreatedMessage
+  | SubtaskUpdatedMessage
+  | SubtaskClosedMessage;

@@ -566,6 +566,23 @@ export function useWorkflow(projectDir: string) {
       try {
         setLoading(true);
         setError(null);
+
+        // Initialize typed sections if the workflow defines them
+        if (currentState?.workflow_id) {
+          const wf = workflows.find((w) => w.id === currentState.workflow_id);
+          if (wf?.ticket_sections && wf.ticket_sections.length > 0) {
+            try {
+              await invoke("ticket_initialize_sections", {
+                projectDir,
+                ticketId: issueId,
+                sectionDefs: wf.ticket_sections,
+              });
+            } catch {
+              // Non-fatal — sections may already exist
+            }
+          }
+        }
+
         // Lock the executing step so streaming output goes to the right place
         executingStepRef.current = currentStepRef.current;
         // Issue 5: optimistic isExecuting update
@@ -597,7 +614,7 @@ export function useWorkflow(projectDir: string) {
         setLoading(false);
       }
     },
-    [projectDir, getWorkflowState]
+    [projectDir, getWorkflowState, currentState?.workflow_id, workflows]
   );
 
   const respondToFeedback = useCallback(

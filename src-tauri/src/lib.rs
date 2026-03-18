@@ -183,6 +183,15 @@ async fn ticket_add_comment(
     tickets::add_comment(&project_dir, &id, "user", &text)
 }
 
+#[tauri::command]
+async fn ticket_initialize_sections(
+    project_dir: String,
+    ticket_id: String,
+    section_defs: Vec<tickets::TicketSectionDef>,
+) -> Result<Ticket, String> {
+    tickets::initialize_ticket_sections(&project_dir, &ticket_id, section_defs)
+}
+
 // ── Settings commands ──
 
 #[tauri::command]
@@ -352,6 +361,7 @@ pub fn run() {
             ticket_show,
             ticket_delete,
             ticket_add_comment,
+            ticket_initialize_sections,
             settings_get,
             settings_update,
             sync_pull_all,

@@ -2,6 +2,15 @@ id: meld-quick
 name: MELD Quick Flow
 description: "Skip spec engineering — implement directly with verification"
 version: "1.0"
+ticket_sections:
+  - id: description
+    label: Description
+    type: markdown
+    collapsed: false
+  - id: notes
+    label: Notes
+    type: markdown
+    collapsed: true
 steps:
   - id: implement
     name: Implement
@@ -23,7 +32,7 @@ steps:
         - If no test framework exists, implement directly
 
         When implementation is complete:
-        1. Use meldui_write_section to write an implementation report to the "notes" field
+        1. Use meldui_write_typed_section with section_id "notes" and content {text: "## Implementation Report\n..."} to write your report
         2. Use meldui_step_complete to signal you're done
 
         Format the implementation report as:
@@ -62,7 +71,7 @@ steps:
         ### Overall: PASS/FAIL
 
         When verification is complete:
-        1. Use meldui_write_section to write the verification report to the "notes" field
+        1. Use meldui_write_typed_section with section_id "notes" and content {text: "## Verification Report\n..."} to write your report
         2. Use meldui_request_feedback to ask the user to review
         3. Once approved, use meldui_step_complete to advance
 

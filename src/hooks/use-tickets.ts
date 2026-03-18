@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Ticket } from "@/lib/tickets";
 
 export function useTickets(projectDir: string) {
@@ -23,6 +24,37 @@ export function useTickets(projectDir: string) {
       setLoading(false);
     }
   }, [projectDir]);
+
+  // Debounced refresh on subtask events
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedRefresh = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      refreshTickets();
+    }, 300);
+  }, [refreshTickets]);
+
+  // Listen for subtask events from the agent sidecar
+  useEffect(() => {
+    const unlisteners: Array<() => void> = [];
+
+    const events = [
+      "meldui-subtask-created",
+      "meldui-subtask-updated",
+      "meldui-subtask-closed",
+    ];
+
+    for (const event of events) {
+      listen(event, () => {
+        debouncedRefresh();
+      }).then((unlisten) => unlisteners.push(unlisten));
+    }
+
+    return () => {
+      for (const unlisten of unlisteners) unlisten();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [debouncedRefresh]);
 
   const createTicket = useCallback(
     async (

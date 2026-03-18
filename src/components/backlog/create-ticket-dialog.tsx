@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TYPE_CONFIG, PRIORITY_CONFIG } from "./kanban-card";
+import { TYPE_CONFIG, PRIORITY_CONFIG } from "./ticket-constants";
 
 interface CreateTicketDialogProps {
   open: boolean;

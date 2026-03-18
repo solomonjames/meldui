@@ -22,6 +22,7 @@ fn beads_to_ticket(issue: &beads::BeadsIssue) -> Ticket {
         labels: issue.labels.clone().unwrap_or_default(),
         parent_id: issue.parent_id.clone(),
         children_ids: Vec::new(),
+        sections: Vec::new(),
         metadata: issue
             .metadata
             .clone()

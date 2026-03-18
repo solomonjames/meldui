@@ -4,6 +4,15 @@ export type {
   TicketComment,
   TicketStatus,
   TicketType,
+  TicketSection,
+  SectionType,
+  AcceptanceCriterion,
+  ChecklistItem,
+  KeyValueEntry,
+  MarkdownContent,
+  AcceptanceCriteriaContent,
+  ChecklistContent,
+  KeyValueContent,
 } from "@/lib/tickets";
 
 export interface ClaudeStatus {
@@ -24,12 +33,20 @@ export interface ChatMessage {
 
 export type StepViewType = "chat" | "review" | "progress" | "diff_review" | "commit";
 
+export interface WorkflowSectionDef {
+  id: string;
+  label: string;
+  type: string;
+  collapsed: boolean;
+}
+
 export interface WorkflowDefinition {
   id: string;
   name: string;
   description: string;
   version: string;
   steps: WorkflowStep[];
+  ticket_sections?: WorkflowSectionDef[];
 }
 
 export interface WorkflowStep {
@@ -203,7 +220,23 @@ export interface ReviewSubmission {
 export interface SectionUpdateEvent {
   ticket_id: string;
   section: string;
+  section_id?: string;
   content: string;
+}
+
+export interface SubtaskCreatedEvent {
+  subtask_id: string;
+  parent_id: string;
+}
+
+export interface SubtaskUpdatedEvent {
+  subtask_id: string;
+  parent_id: string;
+}
+
+export interface SubtaskClosedEvent {
+  subtask_id: string;
+  parent_id: string;
 }
 
 export interface NotificationEvent {

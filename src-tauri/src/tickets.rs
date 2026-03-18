@@ -10,6 +10,23 @@ pub struct TicketComment {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TicketSection {
+    pub id: String,
+    pub label: String,
+    #[serde(rename = "type")]
+    pub section_type: String,
+    pub content: serde_json::Value,
+    #[serde(default)]
+    pub collapsed: bool,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Ticket {
     pub id: String,
     pub title: String,
@@ -40,6 +57,8 @@ pub struct Ticket {
     pub parent_id: Option<String>,
     #[serde(default)]
     pub children_ids: Vec<String>,
+    #[serde(default)]
+    pub sections: Vec<TicketSection>,
     #[serde(default)]
     pub metadata: serde_json::Value,
     #[serde(default)]
@@ -181,6 +200,7 @@ pub fn create_ticket(
         labels: Vec::new(),
         parent_id: None,
         children_ids: Vec::new(),
+        sections: Vec::new(),
         metadata: serde_json::json!({}),
         comments: Vec::new(),
         external_id: None,
@@ -286,6 +306,57 @@ pub fn add_comment(
 
     ticket.comments.push(comment);
     ticket.updated_at = chrono::Utc::now().to_rfc3339();
+    write_ticket(project_dir, &ticket)?;
+    Ok(ticket)
+}
+
+/// Definition for initializing a ticket section from a workflow.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TicketSectionDef {
+    pub id: String,
+    pub label: String,
+    #[serde(rename = "type")]
+    pub section_type: String,
+    #[serde(default)]
+    pub collapsed: bool,
+}
+
+/// Initialize typed sections on a ticket from workflow section definitions.
+/// Skips sections where an entry with the same ID already exists.
+pub fn initialize_ticket_sections(
+    project_dir: &str,
+    ticket_id: &str,
+    section_defs: Vec<TicketSectionDef>,
+) -> Result<Ticket, String> {
+    let mut ticket = read_ticket(project_dir, ticket_id)?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    for def in section_defs {
+        if ticket.sections.iter().any(|s| s.id == def.id) {
+            continue;
+        }
+
+        let empty_content = match def.section_type.as_str() {
+            "markdown" => serde_json::json!({ "text": "" }),
+            "acceptance_criteria" => serde_json::json!({ "items": [] }),
+            "checklist" => serde_json::json!({ "items": [] }),
+            "key_value" => serde_json::json!({ "entries": [] }),
+            _ => serde_json::json!({}),
+        };
+
+        ticket.sections.push(TicketSection {
+            id: def.id,
+            label: def.label,
+            section_type: def.section_type,
+            content: empty_content,
+            collapsed: def.collapsed,
+            source: "workflow".to_string(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        });
+    }
+
+    ticket.updated_at = now;
     write_ticket(project_dir, &ticket)?;
     Ok(ticket)
 }

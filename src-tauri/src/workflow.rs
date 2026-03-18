@@ -245,12 +245,24 @@ fn effective_project_dir(project_dir: &str, ticket_id: &str) -> String {
 // ── Workflow Definition (parsed from YAML) ──
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkflowSectionDef {
+    pub id: String,
+    pub label: String,
+    #[serde(rename = "type")]
+    pub section_type: String,
+    #[serde(default)]
+    pub collapsed: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkflowDefinition {
     pub id: String,
     pub name: String,
     pub description: String,
     pub version: String,
     pub steps: Vec<WorkflowStep>,
+    #[serde(default)]
+    pub ticket_sections: Vec<WorkflowSectionDef>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]

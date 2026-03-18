@@ -1,53 +1,10 @@
-import {
-  Sparkles,
-  SquareCheckBig,
-  Layers,
-  Wrench,
-  Bug,
-} from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
+import { TYPE_CONFIG, PRIORITY_CONFIG } from "./ticket-constants";
 import type { Ticket } from "@/types";
 
-export const TYPE_CONFIG: Record<
-  string,
-  { icon: typeof Sparkles; color: string; bg: string }
-> = {
-  feature: {
-    icon: Sparkles,
-    color: "text-emerald-600",
-    bg: "bg-emerald-500/10",
-  },
-  task: {
-    icon: SquareCheckBig,
-    color: "text-blue-600",
-    bg: "bg-blue-500/10",
-  },
-  epic: {
-    icon: Layers,
-    color: "text-purple-600",
-    bg: "bg-purple-500/10",
-  },
-  chore: {
-    icon: Wrench,
-    color: "text-amber-600",
-    bg: "bg-amber-500/10",
-  },
-  bug: {
-    icon: Bug,
-    color: "text-red-600",
-    bg: "bg-red-500/10",
-  },
-};
-
-export const PRIORITY_CONFIG: Record<number, { label: string; color: string; bg: string }> = {
-  0: { label: "P0", color: "text-red-600", bg: "bg-red-500/10" },
-  1: { label: "P1", color: "text-amber-600", bg: "bg-amber-500/10" },
-  2: { label: "P2", color: "text-cyan-600", bg: "bg-cyan-500/10" },
-  3: { label: "P3", color: "text-blue-600", bg: "bg-blue-500/10" },
-  4: { label: "P4", color: "text-zinc-500", bg: "bg-zinc-500/10" },
-};
+export { TYPE_CONFIG, PRIORITY_CONFIG } from "./ticket-constants";
 
 const NEXT_STATUS: Record<string, string | null> = {
   open: "in_progress",

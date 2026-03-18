@@ -1,7 +1,16 @@
 <?xml version="1.0" standalone="no"?>
 <svg version="1.0" xmlns="http://www.w3.org/2000/svg"
- viewBox="240 -50 1240 1240"
+ viewBox="90 -200 1540 1540"
  preserveAspectRatio="xMidYMid meet">
+
+<defs>
+  <linearGradient id="bg-gradient" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#1a1a2e"/>
+    <stop offset="100%" stop-color="#0d0d14"/>
+  </linearGradient>
+</defs>
+
+<rect x="90" y="-200" width="1540" height="1540" fill="url(#bg-gradient)"/>
 
 <g transform="translate(0.000000,1140.000000) scale(0.100000,-0.100000)"
 fill="#5BF0A0" stroke="none">

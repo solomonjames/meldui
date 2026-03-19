@@ -34,7 +34,7 @@ function synthesizeFallbackSections(ticket: Ticket): { id: string; label: string
 
 /** Resolve section content: typed section by ID > top-level field > empty */
 function resolveSectionContent(ticket: Ticket, sectionId: string): TicketSection | null {
-  return ticket.sections.find((s) => s.id === sectionId) ?? null;
+  return ticket.sections?.find((s) => s.id === sectionId) ?? null;
 }
 
 function resolveTopLevelFallback(ticket: Ticket, sectionId: string): string | null {
@@ -103,7 +103,7 @@ export function TicketContextPanel({
     async (sectionId: string) => {
       try {
         // For typed sections, use the update_section command
-        const section = ticket.sections.find((s) => s.id === sectionId);
+        const section = ticket.sections?.find((s) => s.id === sectionId);
         if (section) {
           // Determine content shape based on section type
           let content: unknown;
@@ -238,9 +238,9 @@ export function TicketContextPanel({
         {/* Workflow sections (accordion) */}
         {hasSectionDefs ? (
           <Accordion
-            type="multiple"
+            multiple
             value={expandedSections}
-            onValueChange={setExpandedSections}
+            onValueChange={(value) => setExpandedSections(value)}
           >
             {sectionDefs.map((def) => {
               const typedSection = resolveSectionContent(ticket, def.id);
@@ -334,7 +334,7 @@ export function TicketContextPanel({
             }
             return (
               <Accordion
-                type="multiple"
+                multiple
                 defaultValue={fallback.map((s) => s.id)}
               >
                 {fallback.map((section) => (

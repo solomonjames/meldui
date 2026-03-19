@@ -34,30 +34,36 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
 
   const updateSync = useCallback(
     (patch: Partial<SyncSettings>) => {
-      setDraft((prev) => ({
-        ...prev,
-        sync: {
-          enabled: false,
-          provider: "beads",
-          auto_push: false,
-          config: {},
-          ...prev.sync,
-          ...patch,
-        },
-      }));
+      setDraft((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          sync: {
+            enabled: false,
+            provider: "beads",
+            auto_push: false,
+            config: {},
+            ...prev.sync,
+            ...patch,
+          },
+        };
+      });
     },
     []
   );
 
   const updateWorktree = useCallback(
     (patch: Partial<WorktreeSettings>) => {
-      setDraft((prev) => ({
-        ...prev,
-        worktree: {
-          ...prev.worktree,
-          ...patch,
-        },
-      }));
+      setDraft((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          worktree: {
+            ...prev.worktree,
+            ...patch,
+          },
+        };
+      });
     },
     []
   );

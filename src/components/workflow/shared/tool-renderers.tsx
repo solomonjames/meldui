@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- renderer lookup pattern, components are not directly exported */
 import type { ToolActivity } from "@/types";
 
 interface RendererProps {
@@ -270,16 +271,3 @@ export function getToolRenderer(toolName: string): React.FC<RendererProps> {
   return RENDERERS[toolName] ?? DefaultRenderer;
 }
 
-export function getToolSummary(activity: ToolActivity): string {
-  try {
-    const parsed = JSON.parse(activity.input);
-    if (parsed.file_path) return parsed.file_path;
-    if (parsed.command) return parsed.command.length > 80 ? parsed.command.slice(0, 80) + "..." : parsed.command;
-    if (parsed.pattern) return parsed.pattern;
-    if (parsed.query) return parsed.query;
-    if (parsed.url) return parsed.url;
-  } catch {
-    // ignore
-  }
-  return "";
-}

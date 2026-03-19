@@ -97,17 +97,16 @@ export function WorkflowShell({
     (s) => s.id === workflowState.current_step_id
   );
 
-  // Reset executing guard when step changes so next step can auto-execute
-  const prevStepId = useRef(workflowState.current_step_id);
-  if (prevStepId.current !== workflowState.current_step_id) {
-    prevStepId.current = workflowState.current_step_id;
+  // Reset executing guard and clear stale result when step changes.
+  // Render-time ref check is the React-recommended pattern for responding to prop changes.
+  /* eslint-disable react-hooks/refs */
+  const prevStepIdRef = useRef(workflowState.current_step_id);
+  if (prevStepIdRef.current !== workflowState.current_step_id) {
+    prevStepIdRef.current = workflowState.current_step_id;
     executingRef.current.stepId = null;
-  }
-
-  // Clear stale result from previous step so it doesn't appear in the new step's view
-  useEffect(() => {
     setLastResult(null);
-  }, [workflowState.current_step_id]);
+  }
+  /* eslint-enable react-hooks/refs */
 
   // Show toast notifications from agent
   const lastNotifCount = useRef(0);

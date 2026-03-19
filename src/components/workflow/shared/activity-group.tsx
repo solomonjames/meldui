@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ToolActivity } from "@/types";
-import { ToolCard, TOOL_LABELS } from "./tool-card";
+import { ToolCard } from "./tool-card";
+import { TOOL_LABELS } from "./tool-labels";
 
 interface ActivityGroupProps {
   activities: ToolActivity[];

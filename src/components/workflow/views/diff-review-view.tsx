@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { DiffViewer } from "@/components/diff";
 import type {
   Ticket,
@@ -37,16 +37,18 @@ export function DiffReviewView({
   const worktreePath = ticket.metadata?.worktree_path as string | undefined;
   const worktreeBaseCommit = ticket.metadata?.worktree_base_commit as string | undefined;
 
-  const loadDiff = useCallback(async () => {
-    setLoading(true);
-    const diff = await onGetDiff(worktreePath, worktreeBaseCommit);
-    setFiles(diff);
-    setLoading(false);
-  }, [onGetDiff, worktreePath, worktreeBaseCommit]);
-
   useEffect(() => {
-    loadDiff();
-  }, [loadDiff]);
+    let cancelled = false;
+    setLoading(true);
+    onGetDiff(worktreePath, worktreeBaseCommit).then((diff) => {
+      if (!cancelled) {
+        setFiles(diff);
+        setLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [worktreePath, worktreeBaseCommit]);
 
   const handleFindingAction = (findingId: string, action: FindingAction["action"]) => {
     setFindingActions((prev) => {

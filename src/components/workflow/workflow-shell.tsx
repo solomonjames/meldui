@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { Toaster, toast } from "sonner";
+import { toast } from "sonner";
 import { StageBar } from "./stage-bar";
 import { DebugPanel } from "./debug-panel";
 import { ChatView } from "./views/chat-view";
@@ -313,7 +313,6 @@ export function WorkflowShell({
 
   return (
     <div data-testid="workflow-shell" data-status={typeof workflowState.step_status === 'string' ? workflowState.step_status : 'failed'} className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
-      <Toaster position="top-right" richColors />
       <StageBar
         steps={workflowDefinition.steps}
         currentStepId={workflowState.current_step_id}

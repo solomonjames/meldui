@@ -12,10 +12,13 @@ import { useTickets } from "@/hooks/use-tickets";
 import { useWorkflow } from "@/hooks/use-workflow";
 import { useProjectDir } from "@/hooks/use-project-dir";
 import { useTheme } from "@/hooks/use-theme";
+import { useUpdater } from "@/hooks/use-updater";
+import { Toaster } from "sonner";
 import type { Ticket } from "@/types";
 
 function App() {
   useTheme();
+  useUpdater();
   const { projectDir, folderName, loading: dirLoading, openFolderDialog } = useProjectDir();
   const claude = useClaude();
   const ticketStore = useTickets(projectDir ?? "");
@@ -230,6 +233,7 @@ function App() {
         onOpenChange={setCreateDialogOpen}
         onCreateTicket={ticketStore.createTicket}
       />
+      <Toaster position="top-right" richColors />
     </AppLayout>
   );
 }

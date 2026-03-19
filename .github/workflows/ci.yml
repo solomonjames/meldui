@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Install agent dependencies
+        run: cd src/agent && bun install
+
+      - name: Build agent sidecar
+        run: cd src/agent && bun run build.ts
+
+      - name: Lint (ESLint)
+        run: bun run lint
+
+      - name: Type check (TypeScript)
+        run: npx tsc --noEmit
+
+      - name: Format check (Rust)
+        run: cd src-tauri && cargo fmt -- --check
+
+      - name: Type check (Rust)
+        run: cd src-tauri && cargo check

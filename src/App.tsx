@@ -191,6 +191,7 @@ function App() {
           notifications={workflow.notifications}
           onClearNotification={workflow.clearNotification}
           statusText={workflow.statusText}
+          lastUpdatedSectionId={workflow.lastUpdatedSectionId}
           pendingFeedback={workflow.pendingFeedback}
           onRespondToFeedback={workflow.respondToFeedback}
           reviewFindings={workflow.reviewFindings}

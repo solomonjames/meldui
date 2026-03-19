@@ -4,11 +4,12 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Play, Send, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { Ticket, StepStatus, StepOutputStream, FeedbackRequestEvent } from "@/types";
+import type { Ticket, StepStatus, StepOutputStream, FeedbackRequestEvent, WorkflowSectionDef } from "@/types";
 import { ActivityGroup } from "@/components/workflow/shared/activity-group";
 import { ActivityBar } from "@/components/workflow/shared/activity-bar";
 import { SubagentCard } from "@/components/workflow/shared/subagent-card";
 import { FilesChanged } from "@/components/workflow/shared/files-changed";
+import { TicketContextPanel } from "@/components/workflow/ticket-context-panel";
 
 function FeedbackCard({
   request,
@@ -121,6 +122,10 @@ interface ChatViewProps {
   pendingFeedback?: FeedbackRequestEvent | null;
   onRespondToFeedback?: (requestId: string, approved: boolean, feedback?: string) => void;
   onExecute: () => void;
+  sectionDefs?: WorkflowSectionDef[];
+  lastUpdatedSectionId?: string | null;
+  projectDir?: string;
+  onTicketRefresh?: () => Promise<void>;
 }
 
 export function ChatView({
@@ -134,10 +139,13 @@ export function ChatView({
   pendingFeedback,
   onRespondToFeedback,
   onExecute,
+  sectionDefs,
+  lastUpdatedSectionId,
+  projectDir,
+  onTicketRefresh,
 }: ChatViewProps) {
   const [input, setInput] = useState("");
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const contextScrollRef = useRef<HTMLDivElement>(null);
 
   const contentBlocks = stepOutput?.contentBlocks ?? [];
   const hasContent = contentBlocks.length > 0 || response.length > 0;
@@ -162,43 +170,51 @@ export function ChatView({
     }
   };
 
-  // Build spec content from ticket fields
-  const specContent = [
-    ticket.design && `## Design\n${ticket.design}`,
-    ticket.notes && `## Notes\n${ticket.notes}`,
-    ticket.acceptance_criteria && `## Acceptance Criteria\n${ticket.acceptance_criteria}`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
   return (
     <div data-testid="chat-view" className="flex h-full">
       {/* Left: Ticket Context */}
       <div className="w-1/2 border-r flex flex-col">
-        <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900 flex items-center gap-2">
-          <h3 className="text-sm font-medium text-muted-foreground">
-            Ticket Context
-          </h3>
-          {isExecuting && (
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 animate-pulse">
-              live
-            </span>
-          )}
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          {specContent ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {specContent}
-              </ReactMarkdown>
+        {projectDir && onTicketRefresh ? (
+          <TicketContextPanel
+            ticket={ticket}
+            sectionDefs={sectionDefs}
+            lastUpdatedSectionId={lastUpdatedSectionId}
+            projectDir={projectDir}
+            onTicketRefresh={onTicketRefresh}
+            isExecuting={isExecuting}
+          />
+        ) : (
+          /* Legacy fallback when projectDir/onTicketRefresh not provided */
+          <>
+            <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900 flex items-center gap-2">
+              <h3 className="text-sm font-medium text-muted-foreground">
+                Ticket Context
+              </h3>
+              {isExecuting && (
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 animate-pulse">
+                  live
+                </span>
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No spec content available
-            </p>
-          )}
-          <div ref={contextScrollRef} />
-        </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {(ticket.design || ticket.notes || ticket.acceptance_criteria) ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {[
+                      ticket.design && `## Design\n${ticket.design}`,
+                      ticket.notes && `## Notes\n${ticket.notes}`,
+                      ticket.acceptance_criteria && `## Acceptance Criteria\n${ticket.acceptance_criteria}`,
+                    ].filter(Boolean).join("\n\n")}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No spec content available
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Right: Chat */}

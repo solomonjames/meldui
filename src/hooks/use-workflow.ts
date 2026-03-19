@@ -73,6 +73,7 @@ export function useWorkflow(projectDir: string) {
   const [reviewFindings, setReviewFindings] = useState<ReviewFinding[]>([]);
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [pendingReviewRequestId, setPendingReviewRequestId] = useState<string | null>(null);
+  const [lastUpdatedSectionId, setLastUpdatedSectionId] = useState<string | null>(null);
   const [listenersReady, setListenersReady] = useState(false);
   const unlistenRef = useRef<UnlistenFn | null>(null);
   const permissionUnlistenRef = useRef<UnlistenFn | null>(null);
@@ -399,6 +400,7 @@ export function useWorkflow(projectDir: string) {
           if (cancelled) return;
           // Trigger ticket refresh so the ticket context panel updates live
           if (activeTicketId && event.payload.ticket_id === activeTicketId) {
+            setLastUpdatedSectionId(event.payload.section_id ?? event.payload.section);
             onRefreshTicketRef.current?.();
           }
         }
@@ -809,6 +811,7 @@ export function useWorkflow(projectDir: string) {
     notifications,
     clearNotification,
     statusText,
+    lastUpdatedSectionId,
     pendingFeedback,
     respondToFeedback,
     setOnRefreshTicket,

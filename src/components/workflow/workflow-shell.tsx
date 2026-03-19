@@ -43,6 +43,7 @@ interface WorkflowShellProps {
   notifications: NotificationEvent[];
   onClearNotification: (index: number) => void;
   statusText: string | null;
+  lastUpdatedSectionId?: string | null;
   pendingFeedback: FeedbackRequestEvent | null;
   onRespondToFeedback: (requestId: string, approved: boolean, feedback?: string) => void;
   reviewFindings: ReviewFinding[];
@@ -58,6 +59,7 @@ interface WorkflowShellProps {
 
 export function WorkflowShell({
   ticket,
+  projectDir,
   workflowState,
   workflowDefinition,
   stepOutputs,
@@ -73,6 +75,7 @@ export function WorkflowShell({
   notifications,
   onClearNotification,
   statusText,
+  lastUpdatedSectionId,
   pendingFeedback,
   onRespondToFeedback,
   reviewFindings,
@@ -245,6 +248,10 @@ export function WorkflowShell({
             pendingFeedback={pendingFeedback}
             onRespondToFeedback={onRespondToFeedback}
             onExecute={handleExecute}
+            sectionDefs={workflowDefinition?.ticket_sections}
+            lastUpdatedSectionId={lastUpdatedSectionId}
+            projectDir={projectDir}
+            onTicketRefresh={onRefreshTicket}
           />
         );
       case "review":

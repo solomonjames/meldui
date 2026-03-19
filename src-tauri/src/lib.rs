@@ -186,6 +186,16 @@ async fn ticket_add_comment(
 }
 
 #[tauri::command]
+async fn ticket_update_section(
+    project_dir: String,
+    ticket_id: String,
+    section_id: String,
+    content: serde_json::Value,
+) -> Result<Ticket, String> {
+    tickets::update_section(&project_dir, &ticket_id, &section_id, content)
+}
+
+#[tauri::command]
 async fn ticket_initialize_sections(
     project_dir: String,
     ticket_id: String,
@@ -382,6 +392,7 @@ pub fn run() {
             ticket_show,
             ticket_delete,
             ticket_add_comment,
+            ticket_update_section,
             ticket_initialize_sections,
             settings_get,
             settings_update,

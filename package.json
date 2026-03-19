@@ -13,6 +13,7 @@
     "agent:install": "cd src/agent && bun install",
     "agent:build": "cd src/agent && bun run build.ts",
     "tauri:build": "bun run agent:build && tauri build --bundles app",
+    "tauri:build:dev": "bun run agent:build && tauri build --no-bundle",
     "tauri:dev": "bun run agent:build && tauri dev",
     "e2e:build-mock": "cd e2e/mock-sidecar && bun run build.ts",
     "e2e:test": "wdio run e2e/wdio.conf.ts",

@@ -11,8 +11,11 @@ bun run tauri:dev
 # Frontend only (Vite dev server on :5173)
 bun run dev
 
-# Build native binary (.app bundle)
+# Build native binary (.app bundle, requires code signing)
 bun run tauri:build
+
+# Build native binary (no bundle/signing, for local dev)
+bun run tauri:build:dev
 
 # Agent sidecar only
 bun run agent:install               # First time only

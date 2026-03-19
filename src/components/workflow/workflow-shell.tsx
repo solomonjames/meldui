@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { Toaster, toast } from "sonner";
+import { toast } from "sonner";
 import { StageBar } from "./stage-bar";
 import { DebugPanel } from "./debug-panel";
 import { ChatView } from "./views/chat-view";
@@ -43,6 +43,7 @@ interface WorkflowShellProps {
   notifications: NotificationEvent[];
   onClearNotification: (index: number) => void;
   statusText: string | null;
+  lastUpdatedSectionId?: string | null;
   pendingFeedback: FeedbackRequestEvent | null;
   onRespondToFeedback: (requestId: string, approved: boolean, feedback?: string) => void;
   reviewFindings: ReviewFinding[];
@@ -58,6 +59,7 @@ interface WorkflowShellProps {
 
 export function WorkflowShell({
   ticket,
+  projectDir,
   workflowState,
   workflowDefinition,
   stepOutputs,
@@ -73,6 +75,7 @@ export function WorkflowShell({
   notifications,
   onClearNotification,
   statusText,
+  lastUpdatedSectionId,
   pendingFeedback,
   onRespondToFeedback,
   reviewFindings,
@@ -94,17 +97,16 @@ export function WorkflowShell({
     (s) => s.id === workflowState.current_step_id
   );
 
-  // Reset executing guard when step changes so next step can auto-execute
-  const prevStepId = useRef(workflowState.current_step_id);
-  if (prevStepId.current !== workflowState.current_step_id) {
-    prevStepId.current = workflowState.current_step_id;
+  // Reset executing guard and clear stale result when step changes.
+  // Render-time ref check is the React-recommended pattern for responding to prop changes.
+  /* eslint-disable react-hooks/refs */
+  const prevStepIdRef = useRef(workflowState.current_step_id);
+  if (prevStepIdRef.current !== workflowState.current_step_id) {
+    prevStepIdRef.current = workflowState.current_step_id;
     executingRef.current.stepId = null;
-  }
-
-  // Clear stale result from previous step so it doesn't appear in the new step's view
-  useEffect(() => {
     setLastResult(null);
-  }, [workflowState.current_step_id]);
+  }
+  /* eslint-enable react-hooks/refs */
 
   // Show toast notifications from agent
   const lastNotifCount = useRef(0);
@@ -245,6 +247,10 @@ export function WorkflowShell({
             pendingFeedback={pendingFeedback}
             onRespondToFeedback={onRespondToFeedback}
             onExecute={handleExecute}
+            sectionDefs={workflowDefinition?.ticket_sections}
+            lastUpdatedSectionId={lastUpdatedSectionId}
+            projectDir={projectDir}
+            onTicketRefresh={onRefreshTicket}
           />
         );
       case "review":
@@ -306,7 +312,6 @@ export function WorkflowShell({
 
   return (
     <div data-testid="workflow-shell" data-status={typeof workflowState.step_status === 'string' ? workflowState.step_status : 'failed'} className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
-      <Toaster position="top-right" richColors />
       <StageBar
         steps={workflowDefinition.steps}
         currentStepId={workflowState.current_step_id}

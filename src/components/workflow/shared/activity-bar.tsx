@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { StepOutputStream } from "@/types";
-import { TOOL_LABELS } from "./tool-card";
+import { TOOL_LABELS } from "./tool-labels";
 
 interface ActivityBarProps {
   stepOutput?: StepOutputStream;

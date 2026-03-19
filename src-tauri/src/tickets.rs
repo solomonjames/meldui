@@ -321,6 +321,35 @@ pub struct TicketSectionDef {
     pub collapsed: bool,
 }
 
+/// Update a single typed section's content on a ticket.
+pub fn update_section(
+    project_dir: &str,
+    ticket_id: &str,
+    section_id: &str,
+    content: serde_json::Value,
+) -> Result<Ticket, String> {
+    let mut ticket = read_ticket(project_dir, ticket_id)?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let section = ticket
+        .sections
+        .iter_mut()
+        .find(|s| s.id == section_id)
+        .ok_or_else(|| {
+            format!(
+                "Section '{}' not found on ticket '{}'",
+                section_id, ticket_id
+            )
+        })?;
+
+    section.content = content;
+    section.updated_at = now.clone();
+
+    ticket.updated_at = now;
+    write_ticket(project_dir, &ticket)?;
+    Ok(ticket)
+}
+
 /// Initialize typed sections on a ticket from workflow section definitions.
 /// Skips sections where an entry with the same ID already exists.
 pub fn initialize_ticket_sections(

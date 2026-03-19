@@ -7,6 +7,8 @@
     "core:default",
     "dialog:default",
     "store:default",
+    "updater:default",
+    "process:default",
     "shell:allow-open",
     {
       "identifier": "shell:allow-execute",

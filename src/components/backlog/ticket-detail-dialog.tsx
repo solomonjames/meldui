@@ -307,7 +307,7 @@ export function TicketDetailDialog({
                           {Renderer ? (
                             <Renderer
                               section={section}
-                              onChange={(content) => {
+                              onChange={() => {
                                 // TODO: persist section content updates via Tauri command
                               }}
                             />

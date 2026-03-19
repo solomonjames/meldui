@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { clearTauriMocks, mockInvoke } from "@/test/mocks/tauri";
+import { clearTauriMocks } from "@/test/mocks/tauri";
 import { WorkflowShell } from "./workflow-shell";
 import type {
   Ticket,

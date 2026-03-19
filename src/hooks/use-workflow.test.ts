@@ -237,9 +237,8 @@ describe("useWorkflow", () => {
       await act(async () => { await result.current.getWorkflowState("issue-1"); });
 
       // Start executeStep (won't resolve yet)
-      let stepDone = false;
       act(() => {
-        result.current.executeStep("issue-1").then(() => { stepDone = true; });
+        result.current.executeStep("issue-1");
       });
 
       // Emit text while executeStep is active — should be captured

@@ -270,7 +270,7 @@ export function TicketContextPanel({
                         </span>
                       )}
                     </AccordionTrigger>
-                    {typedSection && typedSection.section_type === "markdown" && (
+                    {typedSection && typedSection.type === "markdown" && (
                       <Button
                         variant="ghost"
                         size="sm"

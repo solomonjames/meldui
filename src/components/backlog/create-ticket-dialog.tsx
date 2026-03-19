@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/select";
 import { TYPE_CONFIG, PRIORITY_CONFIG } from "./ticket-constants";
 
+const SEVERITY_NAMES = ["Critical", "High", "Medium", "Low", "Minimal"] as const;
+
 interface CreateTicketDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -69,7 +71,11 @@ export function CreateTicketDialog({
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="text-sm font-medium mb-1 block">Type</label>
-              <Select value={ticketType} onValueChange={(v) => v && setTicketType(v)}>
+              <Select
+                value={ticketType}
+                onValueChange={(v) => v && setTicketType(v)}
+                items={Object.keys(TYPE_CONFIG).map((key) => ({ value: key, label: key.charAt(0).toUpperCase() + key.slice(1) }))}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -90,7 +96,11 @@ export function CreateTicketDialog({
             </div>
             <div className="flex-1">
               <label className="text-sm font-medium mb-1 block">Priority</label>
-              <Select value={priority} onValueChange={(v) => v && setPriority(v)}>
+              <Select
+                value={priority}
+                onValueChange={(v) => v && setPriority(v)}
+                items={Object.entries(PRIORITY_CONFIG).map(([key, config]) => ({ value: key, label: `${config.label} ${SEVERITY_NAMES[Number(key)]}` }))}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -100,7 +110,7 @@ export function CreateTicketDialog({
                       <span className={`inline-flex items-center gap-2 ${config.color}`}>
                         {config.label}
                         <span className="text-muted-foreground font-normal">
-                          {["Critical", "High", "Medium", "Low", "Minimal"][Number(key)]}
+                          {SEVERITY_NAMES[Number(key)]}
                         </span>
                       </span>
                     </SelectItem>

@@ -6,6 +6,7 @@ import { BacklogPage } from "@/components/backlog/backlog-page";
 import { CreateTicketDialog } from "@/components/backlog/create-ticket-dialog";
 import { WelcomeScreen } from "@/components/welcome/welcome-screen";
 import { WorkflowShell } from "@/components/workflow/workflow-shell";
+import { WorkflowProvider } from "@/components/workflow/workflow-context";
 import { SettingsPage } from "@/components/settings/settings-page";
 import { useClaude } from "@/hooks/use-claude";
 import { useTickets } from "@/hooks/use-tickets";
@@ -26,20 +27,12 @@ function App() {
   const [activePage, setActivePage] = useState("backlog");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [activeWorkflowTicket, setActiveWorkflowTicket] = useState<Ticket | null>(null);
-  const [workflowDef, setWorkflowDef] = useState<Awaited<ReturnType<typeof workflow.getWorkflow>>>(null);
-
   useEffect(() => {
     if (!projectDir) return;
     claude.checkStatus();
     ticketStore.refreshTickets();
     workflow.listWorkflows();
   }, [projectDir]);
-
-  // Load workflow definition when active ticket changes
-  useEffect(() => {
-    if (!activeWorkflowTicket || !workflow.currentState) return;
-    workflow.getWorkflow(workflow.currentState.workflow_id).then(setWorkflowDef);
-  }, [activeWorkflowTicket, workflow.currentState?.workflow_id]);
 
   // C keyboard shortcut to open create dialog (only when not in workflow view)
   useEffect(() => {
@@ -176,38 +169,14 @@ function App() {
       }
     >
       {activePage === "workflow" && activeWorkflowTicket && workflow.currentState ? (
-        <WorkflowShell
-          ticket={activeWorkflowTicket}
-          projectDir={projectDir}
-          workflowState={workflow.currentState}
-          workflowDefinition={workflowDef}
-          stepOutputs={workflow.stepOutputs}
-          loading={workflow.loading}
-          error={workflow.error}
-          listenersReady={workflow.listenersReady}
-          pendingPermission={workflow.pendingPermission}
-          onRespondToPermission={workflow.respondToPermission}
-          onExecuteStep={workflow.executeStep}
-          onGetDiff={workflow.getDiff}
-          onBack={handleBackToBoard}
-          onRefreshTicket={handleRefreshTicket}
-          notifications={workflow.notifications}
-          onClearNotification={workflow.clearNotification}
-          statusText={workflow.statusText}
-          lastUpdatedSectionId={workflow.lastUpdatedSectionId}
-          pendingFeedback={workflow.pendingFeedback}
-          onRespondToFeedback={workflow.respondToFeedback}
-          reviewFindings={workflow.reviewFindings}
-          reviewComments={workflow.reviewComments}
-          onAddReviewComment={workflow.addReviewComment}
-          onDeleteReviewComment={workflow.deleteReviewComment}
-          onSubmitReview={workflow.submitReview}
-          reviewDisabled={!workflow.pendingReviewRequestId}
-          reviewRoundKey={workflow.reviewRoundKey}
-          onGetBranchInfo={workflow.getBranchInfo}
-          onExecuteCommitAction={workflow.executeCommitAction}
-          onCleanupWorktree={workflow.cleanupWorktree}
-        />
+        <WorkflowProvider workflow={workflow}>
+          <WorkflowShell
+            ticket={activeWorkflowTicket}
+            projectDir={projectDir}
+            onBack={handleBackToBoard}
+            onRefreshTicket={handleRefreshTicket}
+          />
+        </WorkflowProvider>
       ) : activePage === "settings" ? (
         <SettingsPage projectDir={projectDir} />
       ) : (

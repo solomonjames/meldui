@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { clearTauriMocks, emitTauriEvent } from "@/test/mocks/tauri";
 import { useWorkflowStreaming } from "./use-workflow-streaming";

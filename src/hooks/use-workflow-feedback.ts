@@ -13,6 +13,7 @@ export function useWorkflowFeedback(
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mark not-ready before re-subscribing to Tauri events
     setFeedbackReady(false);
 
     const setup = async () => {

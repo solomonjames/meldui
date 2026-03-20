@@ -13,6 +13,7 @@ export function useWorkflowPermissions(
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mark not-ready before re-subscribing to Tauri events
     setPermissionsReady(false);
 
     const setup = async () => {

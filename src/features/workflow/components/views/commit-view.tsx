@@ -23,7 +23,7 @@ import type { Ticket, DiffFile, BranchInfo, CommitActionResult } from "@/shared/
 interface CommitViewProps {
   ticket: Ticket;
   response: string;
-  onBack: () => void;
+  onNavigateToBacklog: () => void;
   onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
   onGetBranchInfo: (dirOverride?: string) => Promise<BranchInfo | null>;
   onExecuteCommitAction: (
@@ -49,7 +49,7 @@ const FILE_STATUS_CONFIG: Record<string, { icon: typeof FileText; label: string;
 export function CommitView({
   ticket,
   response,
-  onBack,
+  onNavigateToBacklog,
   onGetDiff,
   onGetBranchInfo,
   onExecuteCommitAction,
@@ -288,7 +288,7 @@ export function CommitView({
 
       {/* Actions */}
       <div className="px-6 py-4 border-t bg-white dark:bg-zinc-900 flex items-center justify-between">
-        <Button variant="outline" size="sm" onClick={onBack}>
+        <Button variant="outline" size="sm" onClick={onNavigateToBacklog}>
           <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
           Back to Board
         </Button>
@@ -299,7 +299,7 @@ export function CommitView({
             disabled={!hasChanges || isLoading}
             onClick={() => handleCommitAction("commit")}
           >
-            {isLoading && actionState.status === "loading" && actionState.action === "commit" ? (
+            {actionState.status === "loading" && actionState.action === "commit" ? (
               <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
             ) : (
               <GitCommit className="w-3.5 h-3.5 mr-1.5" />
@@ -312,9 +312,9 @@ export function CommitView({
             onClick={() => handleCommitAction("commit_and_pr")}
             className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
           >
-            {isLoading && actionState.status === "loading" && actionState.action === "commit_and_pr" ? (
+            {actionState.status === "loading" && actionState.action === "commit_and_pr" && (
               <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-            ) : null}
+            )}
             Create Pull Request
           </Button>
         </div>

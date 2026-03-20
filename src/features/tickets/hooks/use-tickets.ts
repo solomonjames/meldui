@@ -85,6 +85,19 @@ export function useTickets(projectDir: string) {
       }),
   });
 
+  const updateSection = useMutation({
+    mutationFn: (vars: { ticketId: string; sectionId: string; content: unknown }) =>
+      invoke("ticket_update_section", {
+        projectDir,
+        ticketId: vars.ticketId,
+        sectionId: vars.sectionId,
+        content: vars.content,
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(projectDir, vars.ticketId) });
+    },
+  });
+
   async function showTicket(id: string): Promise<Ticket | null> {
     try {
       return await queryClient.fetchQuery({
@@ -142,6 +155,9 @@ export function useTickets(projectDir: string) {
     },
     addComment: async (id: string, text: string) => {
       await addComment.mutateAsync({ id, text });
+    },
+    updateSection: async (ticketId: string, sectionId: string, content: unknown) => {
+      await updateSection.mutateAsync({ ticketId, sectionId, content });
     },
   };
 }

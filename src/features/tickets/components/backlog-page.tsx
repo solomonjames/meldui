@@ -13,14 +13,7 @@ import {
 import { Button } from "@/shared/ui/button";
 import { KanbanColumn } from "@/features/tickets/components/kanban-column";
 import { KanbanCard } from "@/features/tickets/components/kanban-card";
-import { TicketDetailDialog } from "@/features/tickets/components/ticket-detail-dialog";
-import { WorkflowSelector } from "@/shared/components/workflow-selector";
-import type {
-  Ticket,
-  WorkflowDefinition,
-  WorkflowState,
-  WorkflowSuggestion,
-} from "@/shared/types";
+import type { Ticket } from "@/shared/types";
 
 interface BacklogPageProps {
   tickets: Ticket[];
@@ -31,16 +24,9 @@ interface BacklogPageProps {
     updates: { status?: string; priority?: string; description?: string }
   ) => Promise<void>;
   onCloseTicket: (id: string, reason?: string) => Promise<void>;
-  onDeleteTicket: (id: string) => Promise<void>;
-  onShowTicket: (id: string) => Promise<Ticket | null>;
-  onAddComment: (id: string, text: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onAutoStart?: (ticket: Ticket) => Promise<void>;
-  workflows?: WorkflowDefinition[];
-  onAssignWorkflow?: (issueId: string, workflowId: string) => Promise<WorkflowState | null>;
-  onSuggestWorkflow?: (issueId: string) => Promise<WorkflowSuggestion | null>;
-  onGetWorkflowState?: (issueId: string) => Promise<WorkflowState | null>;
-  onStartWorkflow?: (ticket: Ticket) => Promise<void>;
+  onCardClick: (ticket: Ticket) => void;
 }
 
 type SortMode = "priority" | "date";
@@ -64,19 +50,13 @@ export function BacklogPage({
   error,
   onUpdateTicket,
   onCloseTicket,
-  onDeleteTicket,
-  onShowTicket,
-  onAddComment,
-  onRefresh,
   onAutoStart,
-  workflows = [],
-  onAssignWorkflow,
-  onSuggestWorkflow,
+  onRefresh,
+  onCardClick,
 }: BacklogPageProps) {
   const [sortMode, setSortMode] = useState<SortMode>("priority");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -238,7 +218,7 @@ export function BacklogPage({
                     tickets={columnTickets}
                     onUpdate={onUpdateTicket}
                     onClose={onCloseTicket}
-                    onCardClick={setSelectedTicket}
+                    onCardClick={onCardClick}
                   />
                 </div>
               );
@@ -257,46 +237,6 @@ export function BacklogPage({
           </DragOverlay>
         </DndContext>
       </div>
-      <TicketDetailDialog
-        ticket={selectedTicket}
-        allTickets={tickets}
-        open={!!selectedTicket}
-        onOpenChange={(open) => {
-          if (!open) setSelectedTicket(null);
-        }}
-        onDelete={onDeleteTicket}
-        onSave={async (id, updates) => {
-          await onUpdateTicket(id, updates);
-        }}
-        onShowTicket={onShowTicket}
-        onAddComment={onAddComment}
-        workflowSelector={
-          selectedTicket && onAssignWorkflow && onSuggestWorkflow ? (
-            <WorkflowSelector
-              currentWorkflowId={
-                ((tickets.find((t) => t.id === selectedTicket.id) ?? selectedTicket)
-                  .metadata?.workflow as { workflow_id?: string })
-                  ?.workflow_id
-              }
-              workflows={workflows}
-              onAssign={async (workflowId) => {
-                await onAssignWorkflow(selectedTicket.id, workflowId);
-                await onRefresh();
-              }}
-              onSuggest={async () => {
-                return onSuggestWorkflow(selectedTicket.id);
-              }}
-            />
-          ) : undefined
-        }
-        hasWorkflowAssigned={
-          !!(
-            (tickets.find((t) => t.id === selectedTicket?.id) ?? selectedTicket)
-              ?.metadata?.workflow as { workflow_id?: string } | undefined
-          )?.workflow_id
-        }
-        onStartWorkflow={onAutoStart}
-      />
     </div>
   );
 }

@@ -16,15 +16,13 @@ import type {
 
 interface WorkflowShellProps {
   ticket: Ticket;
-  projectDir: string;
-  onBack: () => void;
+  onNavigateToBacklog: () => void;
   onRefreshTicket: () => Promise<void>;
 }
 
 export function WorkflowShell({
   ticket,
-  projectDir,
-  onBack,
+  onNavigateToBacklog,
   onRefreshTicket,
 }: WorkflowShellProps) {
   const {
@@ -40,7 +38,6 @@ export function WorkflowShell({
     notifications,
     clearNotification: onClearNotification,
     statusText,
-    lastUpdatedSectionId,
     pendingFeedback,
     respondToFeedback: onRespondToFeedback,
     reviewFindings,
@@ -189,7 +186,7 @@ export function WorkflowShell({
               All steps have been completed for {ticket.title}
             </p>
             <button
-              onClick={onBack}
+              onClick={onNavigateToBacklog}
               className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-medium"
             >
               Back to Board
@@ -212,7 +209,6 @@ export function WorkflowShell({
       case "chat":
         return (
           <ChatView
-            ticket={ticket}
             stepName={currentStep.name}
             response={responseText}
             isExecuting={isExecuting}
@@ -222,10 +218,6 @@ export function WorkflowShell({
             pendingFeedback={pendingFeedback}
             onRespondToFeedback={onRespondToFeedback}
             onExecute={handleExecute}
-            sectionDefs={workflowDef?.ticket_sections}
-            lastUpdatedSectionId={lastUpdatedSectionId}
-            projectDir={projectDir}
-            onTicketRefresh={onRefreshTicket}
           />
         );
       case "review":
@@ -268,7 +260,7 @@ export function WorkflowShell({
           <CommitView
             ticket={ticket}
             response={responseText}
-            onBack={onBack}
+            onNavigateToBacklog={onNavigateToBacklog}
             onGetDiff={onGetDiff}
             onGetBranchInfo={onGetBranchInfo}
             onExecuteCommitAction={onExecuteCommitAction}

@@ -4,12 +4,11 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Play, Send, MessageSquare } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
-import type { Ticket, StepStatus, StepOutputStream, FeedbackRequestEvent, WorkflowSectionDef } from "@/shared/types";
+import type { StepStatus, StepOutputStream, FeedbackRequestEvent } from "@/shared/types";
 import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
 import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
 import { SubagentCard } from "@/features/workflow/components/shared/subagent-card";
 import { FilesChanged } from "@/features/workflow/components/shared/files-changed";
-import { TicketContextPanel } from "@/features/workflow/components/ticket-context-panel";
 
 function FeedbackCard({
   request,
@@ -112,7 +111,6 @@ function FeedbackCard({
 }
 
 interface ChatViewProps {
-  ticket: Ticket;
   stepName: string;
   response: string;
   isExecuting: boolean;
@@ -122,14 +120,9 @@ interface ChatViewProps {
   pendingFeedback?: FeedbackRequestEvent | null;
   onRespondToFeedback?: (requestId: string, approved: boolean, feedback?: string) => void;
   onExecute: () => void;
-  sectionDefs?: WorkflowSectionDef[];
-  lastUpdatedSectionId?: string | null;
-  projectDir?: string;
-  onTicketRefresh?: () => Promise<void>;
 }
 
 export function ChatView({
-  ticket,
   stepName,
   response,
   isExecuting,
@@ -139,10 +132,6 @@ export function ChatView({
   pendingFeedback,
   onRespondToFeedback,
   onExecute,
-  sectionDefs,
-  lastUpdatedSectionId,
-  projectDir,
-  onTicketRefresh,
 }: ChatViewProps) {
   const [input, setInput] = useState("");
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -171,54 +160,9 @@ export function ChatView({
   };
 
   return (
-    <div data-testid="chat-view" className="flex h-full">
-      {/* Left: Ticket Context */}
-      <div className="w-1/2 border-r flex flex-col">
-        {projectDir && onTicketRefresh ? (
-          <TicketContextPanel
-            ticket={ticket}
-            sectionDefs={sectionDefs}
-            lastUpdatedSectionId={lastUpdatedSectionId}
-            projectDir={projectDir}
-            onTicketRefresh={onTicketRefresh}
-            isExecuting={isExecuting}
-          />
-        ) : (
-          /* Legacy fallback when projectDir/onTicketRefresh not provided */
-          <>
-            <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900 flex items-center gap-2">
-              <h3 className="text-sm font-medium text-muted-foreground">
-                Ticket Context
-              </h3>
-              {isExecuting && (
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 animate-pulse">
-                  live
-                </span>
-              )}
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {(ticket.design || ticket.notes || ticket.acceptance_criteria) ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {[
-                      ticket.design && `## Design\n${ticket.design}`,
-                      ticket.notes && `## Notes\n${ticket.notes}`,
-                      ticket.acceptance_criteria && `## Acceptance Criteria\n${ticket.acceptance_criteria}`,
-                    ].filter(Boolean).join("\n\n")}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No spec content available
-                </p>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Right: Chat */}
-      <div className="w-1/2 flex flex-col">
+    <div data-testid="chat-view" className="flex flex-col h-full">
+      {/* Chat */}
+      <div className="flex flex-col flex-1 min-h-0">
         <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-medium">{stepName}</h3>

@@ -1,4 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/query-client";
+import { useTauriEventInvalidation } from "@/lib/invalidation";
 import { AppLayout } from "@/components/layout/app-layout";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { StatusBar } from "@/components/layout/status-bar";
@@ -8,7 +11,6 @@ import { WelcomeScreen } from "@/components/welcome/welcome-screen";
 import { WorkflowShell } from "@/components/workflow/workflow-shell";
 import { WorkflowProvider } from "@/components/workflow/workflow-context";
 import { SettingsPage } from "@/components/settings/settings-page";
-import { useClaude } from "@/hooks/use-claude";
 import { useTickets } from "@/hooks/use-tickets";
 import { useWorkflow } from "@/hooks/use-workflow";
 import { useProjectDir } from "@/hooks/use-project-dir";
@@ -17,22 +19,18 @@ import { useUpdater } from "@/hooks/use-updater";
 import { Toaster } from "sonner";
 import type { Ticket } from "@/types";
 
-function App() {
+function AppContent() {
   useTheme();
   useUpdater();
   const { projectDir, folderName, loading: dirLoading, openFolderDialog } = useProjectDir();
-  const claude = useClaude();
   const ticketStore = useTickets(projectDir ?? "");
   const workflow = useWorkflow(projectDir ?? "");
   const [activePage, setActivePage] = useState("backlog");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [activeWorkflowTicket, setActiveWorkflowTicket] = useState<Ticket | null>(null);
-  useEffect(() => {
-    if (!projectDir) return;
-    claude.checkStatus();
-    ticketStore.refreshTickets();
-    workflow.listWorkflows();
-  }, [projectDir]);
+
+  // Centralized event-driven query invalidation
+  useTauriEventInvalidation(projectDir ?? "");
 
   // C keyboard shortcut to open create dialog (only when not in workflow view)
   useEffect(() => {
@@ -96,8 +94,6 @@ function App() {
     [getWorkflowState, suggestWf, assignWf, setActiveTicketId]
   );
 
-  const { refreshTickets } = ticketStore;
-
   const handleRefreshTicket = useCallback(async () => {
     if (!activeWorkflowTicket || !projectDir) return;
     const updated = await ticketStore.showTicket(activeWorkflowTicket.id);
@@ -115,8 +111,8 @@ function App() {
     setActiveWorkflowTicket(null);
     setActiveTicketId(null);
     setActivePage("backlog");
-    refreshTickets();
-  }, [refreshTickets, setActiveTicketId]);
+    ticketStore.refreshTickets();
+  }, [ticketStore, setActiveTicketId]);
 
   const handleSidebarNavigate = useCallback(
     (page: string) => {
@@ -182,7 +178,7 @@ function App() {
       ) : (
         <BacklogPage
           tickets={ticketStore.tickets}
-          loading={ticketStore.loading}
+          loading={ticketStore.isLoading}
           error={ticketStore.error}
           onUpdateTicket={ticketStore.updateTicket}
           onCloseTicket={ticketStore.closeTicket}
@@ -205,6 +201,14 @@ function App() {
       />
       <Toaster position="top-right" richColors />
     </AppLayout>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
+    </QueryClientProvider>
   );
 }
 

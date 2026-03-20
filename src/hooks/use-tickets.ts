@@ -1,88 +1,129 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import type { Ticket } from "@/lib/tickets";
 
+// Query key factory — exported for use by invalidation hook
+export const ticketKeys = {
+  all: (projectDir: string) => ["tickets", "all", projectDir] as const,
+  detail: (projectDir: string, id: string) =>
+    ["tickets", "detail", projectDir, id] as const,
+};
+
 export function useTickets(projectDir: string) {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const refreshTickets = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await invoke<Ticket[]>("ticket_list", {
+  const ticketsQuery = useQuery({
+    queryKey: ticketKeys.all(projectDir),
+    queryFn: () =>
+      invoke<Ticket[]>("ticket_list", { projectDir, showAll: true }),
+    enabled: !!projectDir,
+  });
+
+  const createTicket = useMutation({
+    mutationFn: (vars: {
+      title: string;
+      description?: string;
+      ticketType?: string;
+      priority?: string;
+    }) =>
+      invoke<Ticket>("ticket_create", {
         projectDir,
-        showAll: true,
+        title: vars.title,
+        description: vars.description,
+        ticketType: vars.ticketType || "task",
+        priority: vars.priority ? parseInt(vars.priority, 10) : 2,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    },
+  });
+
+  const updateTicket = useMutation({
+    mutationFn: (vars: {
+      id: string;
+      updates: {
+        title?: string;
+        status?: string;
+        priority?: string;
+        description?: string;
+        notes?: string;
+        design?: string;
+        acceptance_criteria?: string;
+      };
+    }) =>
+      invoke("ticket_update", {
+        projectDir,
+        id: vars.id,
+        ...vars.updates,
+        priority: vars.updates.priority
+          ? parseInt(vars.updates.priority, 10)
+          : undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    },
+  });
+
+  const closeTicket = useMutation({
+    mutationFn: (vars: { id: string; reason?: string }) =>
+      invoke("ticket_close", { projectDir, id: vars.id, reason: vars.reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    },
+  });
+
+  const deleteTicket = useMutation({
+    mutationFn: (vars: { id: string }) =>
+      invoke("ticket_delete", { projectDir, id: vars.id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    },
+  });
+
+  const addComment = useMutation({
+    mutationFn: (vars: { id: string; text: string }) =>
+      invoke("ticket_add_comment", {
+        projectDir,
+        id: vars.id,
+        text: vars.text,
+      }),
+  });
+
+  async function showTicket(id: string): Promise<Ticket | null> {
+    try {
+      return await queryClient.fetchQuery({
+        queryKey: ticketKeys.detail(projectDir, id),
+        queryFn: () => invoke<Ticket>("ticket_show", { projectDir, id }),
       });
-      setTickets(result);
-    } catch (err) {
-      setError(`Failed to load tickets: ${err}`);
-      setTickets([]);
-    } finally {
-      setLoading(false);
+    } catch {
+      return null;
     }
-  }, [projectDir]);
+  }
 
-  // Debounced refresh on subtask events
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debouncedRefresh = useCallback(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      refreshTickets();
-    }, 300);
-  }, [refreshTickets]);
-
-  // Listen for subtask events from the agent sidecar
-  useEffect(() => {
-    const unlisteners: Array<() => void> = [];
-
-    const events = [
-      "meldui-subtask-created",
-      "meldui-subtask-updated",
-      "meldui-subtask-closed",
-    ];
-
-    for (const event of events) {
-      listen(event, () => {
-        debouncedRefresh();
-      }).then((unlisten) => unlisteners.push(unlisten));
-    }
-
-    return () => {
-      for (const unlisten of unlisteners) unlisten();
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [debouncedRefresh]);
-
-  const createTicket = useCallback(
-    async (
+  return {
+    tickets: ticketsQuery.data ?? [],
+    isLoading: ticketsQuery.isLoading,
+    error: ticketsQuery.error ? String(ticketsQuery.error) : null,
+    refreshTickets: () =>
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) }),
+    createTicket: async (
       title: string,
       description?: string,
       ticketType?: string,
       priority?: string
     ) => {
       try {
-        const ticket = await invoke<Ticket>("ticket_create", {
-          projectDir,
+        return await createTicket.mutateAsync({
           title,
-          description: description || undefined,
-          ticketType: ticketType || "task",
-          priority: priority ? parseInt(priority, 10) : 2,
+          description,
+          ticketType,
+          priority,
         });
-        await refreshTickets();
-        return ticket;
-      } catch (err) {
-        setError(`Create failed: ${err}`);
+      } catch {
         return null;
       }
     },
-    [projectDir, refreshTickets]
-  );
-
-  const updateTicket = useCallback(
-    async (
+    updateTicket: async (
       id: string,
       updates: {
         title?: string;
@@ -94,93 +135,17 @@ export function useTickets(projectDir: string) {
         acceptance_criteria?: string;
       }
     ) => {
-      try {
-        await invoke("ticket_update", {
-          projectDir,
-          id,
-          ...updates,
-          priority: updates.priority ? parseInt(updates.priority, 10) : undefined,
-        });
-        await refreshTickets();
-      } catch (err) {
-        setError(`Update failed: ${err}`);
-      }
+      await updateTicket.mutateAsync({ id, updates });
     },
-    [projectDir, refreshTickets]
-  );
-
-  const closeTicket = useCallback(
-    async (id: string, reason?: string) => {
-      try {
-        await invoke("ticket_close", {
-          projectDir,
-          id,
-          reason,
-        });
-        await refreshTickets();
-      } catch (err) {
-        setError(`Close failed: ${err}`);
-      }
+    closeTicket: async (id: string, reason?: string) => {
+      await closeTicket.mutateAsync({ id, reason });
     },
-    [projectDir, refreshTickets]
-  );
-
-  const showTicket = useCallback(
-    async (id: string): Promise<Ticket | null> => {
-      try {
-        return await invoke<Ticket>("ticket_show", {
-          projectDir,
-          id,
-        });
-      } catch (err) {
-        setError(`Show failed: ${err}`);
-        return null;
-      }
-    },
-    [projectDir]
-  );
-
-  const deleteTicket = useCallback(
-    async (id: string) => {
-      try {
-        await invoke("ticket_delete", { projectDir, id });
-        await refreshTickets();
-      } catch (err) {
-        setError(`Delete failed: ${err}`);
-      }
-    },
-    [projectDir, refreshTickets]
-  );
-
-  const addComment = useCallback(
-    async (id: string, text: string) => {
-      try {
-        await invoke("ticket_add_comment", { projectDir, id, text });
-      } catch (err) {
-        setError(`Add comment failed: ${err}`);
-      }
-    },
-    [projectDir]
-  );
-
-  const getTicketsByStatus = useCallback(
-    (filterStatus: string) => {
-      return tickets.filter((t) => t.status === filterStatus);
-    },
-    [tickets]
-  );
-
-  return {
-    tickets,
-    loading,
-    error,
-    refreshTickets,
-    createTicket,
-    updateTicket,
-    closeTicket,
     showTicket,
-    deleteTicket,
-    addComment,
-    getTicketsByStatus,
+    deleteTicket: async (id: string) => {
+      await deleteTicket.mutateAsync({ id });
+    },
+    addComment: async (id: string, text: string) => {
+      await addComment.mutateAsync({ id, text });
+    },
   };
 }

@@ -1,44 +1,43 @@
-import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import type { ProjectSettings } from "@/lib/sync";
 
+export const settingsKeys = {
+  project: (projectDir: string) => ["settings", "project", projectDir] as const,
+};
+
 export function useSettings(projectDir: string) {
-  const [settings, setSettings] = useState<ProjectSettings | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await invoke<ProjectSettings>("settings_get", { projectDir });
-      setSettings(result);
-      return result;
-    } catch (err) {
-      setError(`Failed to load settings: ${err}`);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [projectDir]);
+  const settingsQuery = useQuery({
+    queryKey: settingsKeys.project(projectDir),
+    queryFn: () => invoke<ProjectSettings>("settings_get", { projectDir }),
+    enabled: !!projectDir,
+  });
 
-  const updateSettings = useCallback(
-    async (newSettings: ProjectSettings) => {
-      try {
-        await invoke("settings_update", { projectDir, settings: newSettings });
-        setSettings(newSettings);
-      } catch (err) {
-        setError(`Failed to update settings: ${err}`);
-      }
+  const updateSettingsMutation = useMutation({
+    mutationFn: (newSettings: ProjectSettings) =>
+      invoke("settings_update", { projectDir, settings: newSettings }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: settingsKeys.project(projectDir),
+      });
     },
-    [projectDir]
-  );
+  });
 
   return {
-    settings,
-    loading,
-    error,
-    loadSettings,
-    updateSettings,
+    settings: settingsQuery.data ?? null,
+    loading: settingsQuery.isLoading,
+    error: settingsQuery.error ? String(settingsQuery.error) : null,
+    loadSettings: async () => {
+      const data = await queryClient.fetchQuery({
+        queryKey: settingsKeys.project(projectDir),
+        queryFn: () => invoke<ProjectSettings>("settings_get", { projectDir }),
+      });
+      return data ?? null;
+    },
+    updateSettings: async (newSettings: ProjectSettings) => {
+      await updateSettingsMutation.mutateAsync(newSettings);
+    },
   };
 }

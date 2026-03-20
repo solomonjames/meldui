@@ -5,16 +5,20 @@ import {
   clearTauriMocks,
   emitTauriEvent,
 } from "@/test/mocks/tauri";
+import { createQueryWrapper } from "@/test/helpers/query-wrapper";
 import { useWorkflow } from "./use-workflow";
 import type { StreamChunk } from "@/types";
 
 describe("useWorkflow", () => {
+  let wrapper: ReturnType<typeof createQueryWrapper>;
+
   beforeEach(() => {
     clearTauriMocks();
+    wrapper = createQueryWrapper();
   });
 
   it("listenersReady becomes true after mount", async () => {
-    const { result } = renderHook(() => useWorkflow("/test/project"));
+    const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
 
     await waitFor(() => {
       expect(result.current.listenersReady).toBe(true);
@@ -35,7 +39,7 @@ describe("useWorkflow", () => {
       step_history: [],
     });
 
-    const { result } = renderHook(() => useWorkflow("/test/project"));
+    const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
 
     await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
@@ -50,16 +54,19 @@ describe("useWorkflow", () => {
   });
 
   it("executeStep sets loading and reverts on error", async () => {
-    mockInvoke.mockRejectedValueOnce(new Error("sidecar crashed"));
-    // For getWorkflowState on error recovery
-    mockInvoke.mockResolvedValueOnce({
-      workflow_id: "wf-1",
-      current_step_id: "step-1",
-      step_status: "pending",
-      step_history: [],
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "workflow_list") return Promise.resolve([]);
+      if (cmd === "workflow_execute_step") return Promise.reject(new Error("sidecar crashed"));
+      if (cmd === "workflow_state") return Promise.resolve({
+        workflow_id: "wf-1",
+        current_step_id: "step-1",
+        step_status: "pending",
+        step_history: [],
+      });
+      return Promise.resolve(null);
     });
 
-    const { result } = renderHook(() => useWorkflow("/test/project"));
+    const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
     await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
     await act(async () => {
@@ -90,7 +97,7 @@ describe("useWorkflow", () => {
       return Promise.resolve(null);
     });
 
-    const { result } = renderHook(() => useWorkflow("/test/project"));
+    const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
     await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
     act(() => { result.current.setActiveTicketId("issue-1"); });
@@ -174,7 +181,7 @@ describe("useWorkflow", () => {
   });
 
   it("events for a different issue_id are filtered out", async () => {
-    const { result } = renderHook(() => useWorkflow("/test/project"));
+    const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
     await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
     act(() => {
@@ -227,7 +234,7 @@ describe("useWorkflow", () => {
         return Promise.resolve(null);
       });
 
-      const { result } = renderHook(() => useWorkflow("/test/project"));
+      const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       act(() => { result.current.setActiveTicketId("issue-1"); });
@@ -278,16 +285,19 @@ describe("useWorkflow", () => {
 
   describe("executeStep error handling", () => {
     it("clears pendingFeedback and pendingPermission on error", async () => {
-      mockInvoke.mockRejectedValueOnce(new Error("sidecar timed out"));
-      // getWorkflowState on error recovery
-      mockInvoke.mockResolvedValueOnce({
-        workflow_id: "wf-1",
-        current_step_id: "step-1",
-        step_status: { failed: "sidecar timed out" },
-        step_history: [],
+      mockInvoke.mockImplementation((cmd: string) => {
+        if (cmd === "workflow_list") return Promise.resolve([]);
+        if (cmd === "workflow_execute_step") return Promise.reject(new Error("sidecar timed out"));
+        if (cmd === "workflow_state") return Promise.resolve({
+          workflow_id: "wf-1",
+          current_step_id: "step-1",
+          step_status: { failed: "sidecar timed out" },
+          step_history: [],
+        });
+        return Promise.resolve(null);
       });
 
-      const { result } = renderHook(() => useWorkflow("/test/project"));
+      const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       act(() => { result.current.setActiveTicketId("issue-1"); });
@@ -319,7 +329,7 @@ describe("useWorkflow", () => {
 
   describe("respondToFeedback broken pipe handling", () => {
     it("clears pendingFeedback and shows session expired on broken pipe", async () => {
-      const { result } = renderHook(() => useWorkflow("/test/project"));
+      const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       act(() => { result.current.setActiveTicketId("issue-1"); });
@@ -353,7 +363,7 @@ describe("useWorkflow", () => {
     });
 
     it("shows generic error for non-broken-pipe failures", async () => {
-      const { result } = renderHook(() => useWorkflow("/test/project"));
+      const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       act(() => { result.current.setActiveTicketId("issue-1"); });
@@ -382,7 +392,7 @@ describe("useWorkflow", () => {
 
   describe("respondToPermission broken pipe handling", () => {
     it("clears pendingPermission and shows session expired on broken pipe", async () => {
-      const { result } = renderHook(() => useWorkflow("/test/project"));
+      const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       act(() => { result.current.setActiveTicketId("issue-1"); });

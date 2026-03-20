@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -7,6 +8,10 @@ export type ThemeMode = "light" | "dark" | "system";
 interface AppPreferences {
   theme: string;
 }
+
+export const preferencesKeys = {
+  theme: () => ["preferences", "theme"] as const,
+};
 
 function applyTheme(mode: ThemeMode) {
   const isDark =
@@ -18,31 +23,35 @@ function applyTheme(mode: ThemeMode) {
 }
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<ThemeMode>("system");
+  const queryClient = useQueryClient();
 
-  // Load saved theme on mount
+  const prefsQuery = useQuery({
+    queryKey: preferencesKeys.theme(),
+    queryFn: async () => {
+      const prefs = await invoke<AppPreferences>("get_app_preferences");
+      return (prefs.theme as ThemeMode) || "system";
+    },
+  });
+
+  const theme = prefsQuery.data ?? "system";
+
+  // Apply theme whenever it changes
   useEffect(() => {
-    invoke<AppPreferences>("get_app_preferences").then((prefs) => {
-      const mode = (prefs.theme as ThemeMode) || "system";
-      setThemeState(mode);
-      applyTheme(mode);
-    });
-  }, []);
+    applyTheme(theme);
+  }, [theme]);
 
-  // Listen for cross-window sync
+  // Listen for cross-window sync — invalidate query on external changes
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
-    listen<AppPreferences>("preferences-changed", (event) => {
-      const mode = (event.payload.theme as ThemeMode) || "system";
-      setThemeState(mode);
-      applyTheme(mode);
+    listen<AppPreferences>("preferences-changed", () => {
+      queryClient.invalidateQueries({ queryKey: preferencesKeys.theme() });
     }).then((fn) => {
       unlisten = fn;
     });
     return () => {
       unlisten?.();
     };
-  }, []);
+  }, [queryClient]);
 
   // Listen for OS theme changes when in "system" mode
   useEffect(() => {
@@ -54,11 +63,22 @@ export function useTheme() {
     return () => mq.removeEventListener("change", handler);
   }, [theme]);
 
-  const setTheme = useCallback(async (mode: ThemeMode) => {
-    setThemeState(mode);
+  const setThemeMutation = useMutation({
+    mutationFn: async (mode: ThemeMode) => {
+      await invoke("set_app_preferences", { preferences: { theme: mode } });
+      return mode;
+    },
+    onSuccess: (mode) => {
+      queryClient.setQueryData(preferencesKeys.theme(), mode);
+      applyTheme(mode);
+    },
+  });
+
+  const setTheme = async (mode: ThemeMode) => {
+    // Optimistic UI update
     applyTheme(mode);
-    await invoke("set_app_preferences", { preferences: { theme: mode } });
-  }, []);
+    await setThemeMutation.mutateAsync(mode);
+  };
 
   return { theme, setTheme };
 }

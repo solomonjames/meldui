@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   WorkflowDefinition,
   WorkflowState,
@@ -15,35 +16,40 @@ import { useWorkflowNotifications } from "./use-workflow-notifications";
 import { useWorkflowFeedback } from "./use-workflow-feedback";
 import { useWorkflowReview } from "./use-workflow-review";
 
+export const workflowKeys = {
+  list: (projectDir: string) => ["workflows", "list", projectDir] as const,
+  detail: (projectDir: string, workflowId: string) =>
+    ["workflows", "detail", projectDir, workflowId] as const,
+  state: (projectDir: string, issueId: string) =>
+    ["workflows", "state", projectDir, issueId] as const,
+  diff: (dir: string, baseCommit?: string | null) =>
+    ["workflows", "diff", dir, baseCommit ?? null] as const,
+  branchInfo: (dir: string) => ["workflows", "branchInfo", dir] as const,
+};
+
 export function useWorkflow(projectDir: string) {
-  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  const queryClient = useQueryClient();
   const [currentState, setCurrentState] = useState<WorkflowState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
 
   const currentStepRef = useRef<string | null>(null);
-  // Tracks which step is actively receiving streaming output from the sidecar.
-  // Unlike currentStepRef (which tracks workflow state), this only changes when
-  // a new executeStep call starts — preventing late-arriving output from the
-  // previous step from leaking into the next step's output.
   const executingStepRef = useRef<string | null>(null);
   const onRefreshTicketRef = useRef<(() => Promise<void>) | null>(null);
   const getWorkflowStateRef = useRef<((issueId: string) => Promise<unknown>) | null>(null);
 
-  // Keep currentStepRef in sync
   useEffect(() => {
     currentStepRef.current = currentState?.current_step_id ?? null;
   }, [currentState?.current_step_id]);
 
-  // Compose sub-hooks
+  // Compose sub-hooks (untouched)
   const streaming = useWorkflowStreaming(activeTicketId, executingStepRef);
   const permissions = useWorkflowPermissions(activeTicketId, setError);
   const feedback = useWorkflowFeedback(activeTicketId, setError);
   const review = useWorkflowReview(activeTicketId, setError);
   const notifications = useWorkflowNotifications(activeTicketId, onRefreshTicketRef, getWorkflowStateRef);
 
-  // Derive listenersReady from all sub-hooks
   const listenersReady =
     streaming.streamingReady &&
     permissions.permissionsReady &&
@@ -51,36 +57,92 @@ export function useWorkflow(projectDir: string) {
     review.reviewReady &&
     notifications.notificationsReady;
 
+  // ── Queries ──
+
+  const workflowsQuery = useQuery({
+    queryKey: workflowKeys.list(projectDir),
+    queryFn: () => invoke<WorkflowDefinition[]>("workflow_list", { projectDir }),
+    enabled: !!projectDir,
+  });
+
+  const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data]);
+
   const listWorkflows = useCallback(async () => {
-    try {
-      setLoading(true);
-      const result = await invoke<WorkflowDefinition[]>("workflow_list", {
-        projectDir,
-      });
-      setWorkflows(result);
-      return result;
-    } catch (err) {
-      setError(`Failed to list workflows: ${err}`);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, [projectDir]);
+    const result = await queryClient.fetchQuery({
+      queryKey: workflowKeys.list(projectDir),
+      queryFn: () => invoke<WorkflowDefinition[]>("workflow_list", { projectDir }),
+    });
+    return result ?? [];
+  }, [projectDir, queryClient]);
 
   const getWorkflow = useCallback(
     async (workflowId: string) => {
       try {
-        return await invoke<WorkflowDefinition>("workflow_get", {
-          projectDir,
-          workflowId,
+        return await queryClient.fetchQuery({
+          queryKey: workflowKeys.detail(projectDir, workflowId),
+          queryFn: () =>
+            invoke<WorkflowDefinition>("workflow_get", { projectDir, workflowId }),
         });
       } catch (err) {
         setError(`Failed to get workflow: ${err}`);
         return null;
       }
     },
+    [projectDir, queryClient]
+  );
+
+  // getWorkflowState — imperative (called after executeStep, from notifications, etc.)
+  const getWorkflowState = useCallback(
+    async (issueId: string) => {
+      try {
+        const state = await invoke<WorkflowState | null>("workflow_state", {
+          projectDir,
+          issueId,
+        });
+        setCurrentState(state);
+        return state;
+      } catch (err) {
+        setError(`Failed to get workflow state: ${err}`);
+        return null;
+      }
+    },
     [projectDir]
   );
+
+  getWorkflowStateRef.current = getWorkflowState;
+
+  // getDiff — imperative, called by views with variable params
+  const getDiff = useCallback(
+    async (dirOverride?: string, baseCommit?: string) => {
+      try {
+        return await invoke<DiffFile[]>("workflow_get_diff", {
+          projectDir: dirOverride ?? projectDir,
+          baseCommit: baseCommit ?? null,
+        });
+      } catch (err) {
+        setError(`Failed to get diff: ${err}`);
+        return [];
+      }
+    },
+    [projectDir]
+  );
+
+  // getBranchInfo — imperative
+  const getBranchInfo = useCallback(
+    async (dirOverride?: string) => {
+      try {
+        return await invoke<BranchInfo>("workflow_get_branch_info", {
+          projectDir: dirOverride ?? projectDir,
+        });
+      } catch (err) {
+        setError(`Failed to get branch info: ${err}`);
+        return null;
+      }
+    },
+    [projectDir]
+  );
+
+  // ── Mutations ──
 
   const assignWorkflow = useCallback(
     async (issueId: string, workflowId: string) => {
@@ -103,30 +165,6 @@ export function useWorkflow(projectDir: string) {
     [projectDir]
   );
 
-  const getWorkflowState = useCallback(
-    async (issueId: string) => {
-      try {
-        const state = await invoke<WorkflowState | null>("workflow_state", {
-          projectDir,
-          issueId,
-        });
-        setCurrentState(state);
-        return state;
-      } catch (err) {
-        setError(`Failed to get workflow state: ${err}`);
-        return null;
-      }
-    },
-    [projectDir]
-  );
-
-  // Keep ref in sync so event listeners can call getWorkflowState without
-  // needing it in the useEffect dependency array (avoids TDZ errors)
-  getWorkflowStateRef.current = getWorkflowState;
-
-  // Extract stable function references for executeStep's dependency array.
-  // Sub-hook return objects are new references every render, so we depend on
-  // the individual useCallback-stable methods instead.
   const { clearPending: clearFeedbackPending } = feedback;
   const { clearPending: clearPermissionPending } = permissions;
 
@@ -136,7 +174,6 @@ export function useWorkflow(projectDir: string) {
         setLoading(true);
         setError(null);
 
-        // Initialize typed sections if the workflow defines them
         if (currentState?.workflow_id) {
           const wf = workflows.find((w) => w.id === currentState.workflow_id);
           if (wf?.ticket_sections && wf.ticket_sections.length > 0) {
@@ -147,14 +184,12 @@ export function useWorkflow(projectDir: string) {
                 sectionDefs: wf.ticket_sections,
               });
             } catch {
-              // Non-fatal — sections may already exist
+              // Non-fatal
             }
           }
         }
 
-        // Lock the executing step so streaming output goes to the right place
         executingStepRef.current = currentStepRef.current;
-        // Optimistic isExecuting update
         setCurrentState((prev) =>
           prev ? { ...prev, step_status: "in_progress" } : prev
         );
@@ -163,20 +198,14 @@ export function useWorkflow(projectDir: string) {
           { projectDir, issueId }
         );
 
-        // Unlock executing step — sidecar is done
         executingStepRef.current = null;
-
-        // Refresh state to pick up latest workflow state
         await getWorkflowState(issueId);
-
         return result;
       } catch (err) {
         executingStepRef.current = null;
-        // Clear stale pending states — the sidecar is dead
         clearFeedbackPending();
         clearPermissionPending();
         setError(`Step execution failed: ${err}`);
-        // Refresh state to pick up the failed status
         await getWorkflowState(issueId);
         return null;
       } finally {
@@ -185,8 +214,6 @@ export function useWorkflow(projectDir: string) {
     },
     [projectDir, getWorkflowState, currentState?.workflow_id, workflows, clearFeedbackPending, clearPermissionPending]
   );
-
-  const respondToFeedback = feedback.respondToFeedback;
 
   const suggestWorkflow = useCallback(
     async (issueId: string) => {
@@ -208,36 +235,30 @@ export function useWorkflow(projectDir: string) {
     [projectDir]
   );
 
-  const respondToPermission = permissions.respondToPermission;
-
-  const getDiff = useCallback(async (dirOverride?: string, baseCommit?: string) => {
-    try {
-      return await invoke<DiffFile[]>("workflow_get_diff", {
-        projectDir: dirOverride ?? projectDir,
-        baseCommit: baseCommit ?? null,
-      });
-    } catch (err) {
-      setError(`Failed to get diff: ${err}`);
-      return [];
-    }
-  }, [projectDir]);
-
-  const getBranchInfo = useCallback(async (dirOverride?: string) => {
-    try {
-      return await invoke<BranchInfo>("workflow_get_branch_info", { projectDir: dirOverride ?? projectDir });
-    } catch (err) {
-      setError(`Failed to get branch info: ${err}`);
-      return null;
-    }
-  }, [projectDir]);
+  const executeCommitActionMutation = useMutation({
+    mutationFn: (vars: {
+      issueId: string;
+      action: "commit" | "commit_and_pr";
+      commitMessage: string;
+    }) =>
+      invoke<CommitActionResult>("workflow_execute_commit_action", {
+        projectDir,
+        issueId: vars.issueId,
+        action: vars.action,
+        commitMessage: vars.commitMessage,
+      }),
+  });
 
   const executeCommitAction = useCallback(
-    async (issueId: string, action: "commit" | "commit_and_pr", commitMessage: string) => {
+    async (
+      issueId: string,
+      action: "commit" | "commit_and_pr",
+      commitMessage: string
+    ) => {
       try {
         setLoading(true);
         setError(null);
-        return await invoke<CommitActionResult>("workflow_execute_commit_action", {
-          projectDir,
+        return await executeCommitActionMutation.mutateAsync({
           issueId,
           action,
           commitMessage,
@@ -249,7 +270,7 @@ export function useWorkflow(projectDir: string) {
         setLoading(false);
       }
     },
-    [projectDir]
+    [executeCommitActionMutation]
   );
 
   const cleanupWorktree = useCallback(
@@ -266,6 +287,9 @@ export function useWorkflow(projectDir: string) {
   const setOnRefreshTicket = useCallback((fn: () => Promise<void>) => {
     onRefreshTicketRef.current = fn;
   }, []);
+
+  const respondToFeedback = feedback.respondToFeedback;
+  const respondToPermission = permissions.respondToPermission;
 
   return {
     workflows,

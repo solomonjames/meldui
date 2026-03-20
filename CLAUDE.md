@@ -30,6 +30,11 @@ bun run lint
 
 # Rust formatting
 cd src-tauri && cargo fmt -- --check
+
+# Tests
+bun run test                        # Vitest (unit/integration)
+bun run test:watch                  # Vitest watch mode
+bun run e2e                         # WebdriverIO e2e tests (builds mock sidecar first)
 ```
 
 Package manager is **bun** (not npm/yarn). The agent sidecar has its own `package.json` at `src/agent/package.json` — run `bun run agent:install` after cloning.
@@ -91,6 +96,19 @@ Frontend TypeScript types in `src/types/index.ts` manually mirror the Rust serde
 - **Lucide React** for icons
 - Path alias: `@/` → `src/`
 
+### Shared Libraries (`src/lib/`)
+
+- `query-client.ts` — TanStack Query client with staleTime/gcTime/retry defaults
+- `invalidation.ts` — event-driven cache invalidation (Tauri events → query invalidation)
+- `tauri-queries.ts` — helper utilities for Tauri invoke queries
+- `tickets/` — ticket type definitions and helpers
+- `sync/` — beads sync logic
+- `utils.ts` — general utilities (cn, etc.)
+
+### E2E Testing
+
+WebdriverIO tests in `e2e/` with a mock sidecar (`e2e/mock-sidecar/`). Run `bun run e2e` which builds the mock sidecar then runs specs. Config: `e2e/wdio.conf.ts`.
+
 ### Tauri Plugins
 
 - `tauri-plugin-dialog` — native folder picker
@@ -101,12 +119,16 @@ Frontend TypeScript types in `src/types/index.ts` manually mirror the Rust serde
 
 **Beads parent-child relationships**: `bd list --json` doesn't return a `parent_id` field. Sub-tickets have a `dependencies` array with entries where `type === "parent-child"`. The Rust `list_issues()` function derives `parent_id` from this at fetch time.
 
-**Hook pattern**: Each integration has a custom hook (`useTickets`, `useClaude`, `useWorkflow`, `useProjectDir`, `useSettings`, `useSync`, `useDebugLog`) that wraps Tauri invoke calls and manages loading/error state.
+**Hook pattern**: Each integration has a custom hook wrapping Tauri invoke calls via TanStack Query. Core hooks: `useTickets`, `useClaude`, `useProjectDir`, `useSettings`, `useDebugLog`, `useUpdater`. Workflow is split across `useWorkflow`, `useWorkflowStreaming`, `useWorkflowPermissions`, `useWorkflowFeedback`, `useWorkflowReview`, and `useWorkflowNotifications`.
 
 **Agent permission flow**: When the agent needs permission for a dangerous tool (e.g., Bash outside project dir), the sidecar emits a `permission_request` on stdout → Rust emits `agent-permission-request` Tauri event → frontend shows inline dialog → user clicks Allow/Deny → frontend invokes `agent_permission_respond` → Rust writes response to sidecar stdin → `canUseTool` Promise resolves.
 
 **Session continuity**: The agent's `session_id` is stored in ticket metadata (`agent_session_id`). When the next workflow step starts, the sidecar resumes the session so Claude retains context from prior steps.
 
 **Kanban board**: Issues flow through `BacklogPage` → `KanbanColumn` → `KanbanCard`. Columns are defined statically in `backlog-page.tsx`. Cards are draggable between columns, which triggers status updates through beads.
+
+**TanStack Query**: All Tauri `invoke()` calls go through `useQuery`/`useMutation` from `@tanstack/react-query`. Query client config is in `src/lib/query-client.ts`. Cache invalidation is event-driven via `src/lib/invalidation.ts` — Tauri events trigger targeted `queryClient.invalidateQueries()` calls.
+
+**Error boundaries**: `react-error-boundary` wraps the app at two levels — `AppCrashFallback` in `src/main.tsx` (root) and `ViewErrorFallback` for per-view recovery. Components live in `src/components/error/`.
 
 **Issue config maps**: `TYPE_CONFIG`, `PRIORITY_CONFIG`, and `STATUS_CONFIG` are defined in `ticket-constants.ts` (re-exported from `kanban-card.tsx`) and reused across components for consistent styling of issue types, priorities, and statuses.

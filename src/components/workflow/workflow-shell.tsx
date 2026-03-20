@@ -52,6 +52,7 @@ interface WorkflowShellProps {
   onDeleteReviewComment: (commentId: string) => void;
   onSubmitReview: (submission: ReviewSubmission) => void;
   reviewDisabled?: boolean;
+  reviewRoundKey?: number;
   onGetBranchInfo: (dirOverride?: string) => Promise<BranchInfo | null>;
   onExecuteCommitAction: (issueId: string, action: "commit" | "commit_and_pr", commitMessage: string) => Promise<CommitActionResult | null>;
   onCleanupWorktree: (issueId: string) => Promise<void>;
@@ -84,6 +85,7 @@ export function WorkflowShell({
   onDeleteReviewComment,
   onSubmitReview,
   reviewDisabled,
+  reviewRoundKey,
   onGetBranchInfo,
   onExecuteCommitAction,
   onCleanupWorktree,
@@ -285,6 +287,7 @@ export function WorkflowShell({
             onDeleteComment={onDeleteReviewComment}
             onSubmitReview={onSubmitReview}
             reviewDisabled={reviewDisabled}
+            reviewRoundKey={reviewRoundKey}
           />
         );
       case "commit":

@@ -203,6 +203,7 @@ function App() {
           onDeleteReviewComment={workflow.deleteReviewComment}
           onSubmitReview={workflow.submitReview}
           reviewDisabled={!workflow.pendingReviewRequestId}
+          reviewRoundKey={workflow.reviewRoundKey}
           onGetBranchInfo={workflow.getBranchInfo}
           onExecuteCommitAction={workflow.executeCommitAction}
           onCleanupWorktree={workflow.cleanupWorktree}

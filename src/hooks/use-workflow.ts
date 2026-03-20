@@ -73,6 +73,7 @@ export function useWorkflow(projectDir: string) {
   const [reviewFindings, setReviewFindings] = useState<ReviewFinding[]>([]);
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [pendingReviewRequestId, setPendingReviewRequestId] = useState<string | null>(null);
+  const [reviewRoundKey, setReviewRoundKey] = useState(0);
   const [lastUpdatedSectionId, setLastUpdatedSectionId] = useState<string | null>(null);
   const [listenersReady, setListenersReady] = useState(false);
   const unlistenRef = useRef<UnlistenFn | null>(null);
@@ -460,6 +461,7 @@ export function useWorkflow(projectDir: string) {
           if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
             setReviewFindings(event.payload.findings);
             setPendingReviewRequestId(event.payload.request_id);
+            setReviewRoundKey(prev => prev + 1);
           }
         }
       );
@@ -832,5 +834,6 @@ export function useWorkflow(projectDir: string) {
     deleteReviewComment,
     submitReview,
     pendingReviewRequestId,
+    reviewRoundKey,
   };
 }

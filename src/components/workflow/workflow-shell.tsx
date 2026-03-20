@@ -8,103 +8,71 @@ import { ProgressView } from "./views/progress-view";
 import { DiffReviewView } from "./views/diff-review-view";
 import { CommitView } from "./views/commit-view";
 import { useDebugLog } from "@/hooks/use-debug-log";
+import { useWorkflowContext } from "./workflow-context";
 import type {
   Ticket,
-  WorkflowDefinition,
-  WorkflowState,
   StepExecutionResult,
-  StepOutputStream,
-  DiffFile,
-  BranchInfo,
-  CommitActionResult,
-  PermissionRequest,
-  NotificationEvent,
-  FeedbackRequestEvent,
-  ReviewFinding,
-  ReviewComment,
-  ReviewSubmission,
 } from "@/types";
 
 interface WorkflowShellProps {
   ticket: Ticket;
   projectDir: string;
-  workflowState: WorkflowState;
-  workflowDefinition: WorkflowDefinition | null;
-  stepOutputs: Record<string, StepOutputStream>;
-  loading: boolean;
-  error: string | null;
-  listenersReady: boolean;
-  pendingPermission: PermissionRequest | null;
-  onRespondToPermission: (requestId: string, allowed: boolean) => void;
-  onExecuteStep: (issueId: string) => Promise<StepExecutionResult | null>;
-  onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
   onBack: () => void;
   onRefreshTicket: () => Promise<void>;
-  notifications: NotificationEvent[];
-  onClearNotification: (index: number) => void;
-  statusText: string | null;
-  lastUpdatedSectionId?: string | null;
-  pendingFeedback: FeedbackRequestEvent | null;
-  onRespondToFeedback: (requestId: string, approved: boolean, feedback?: string) => void;
-  reviewFindings: ReviewFinding[];
-  reviewComments: ReviewComment[];
-  onAddReviewComment: (filePath: string, lineNumber: number, content: string, suggestion?: string) => void;
-  onDeleteReviewComment: (commentId: string) => void;
-  onSubmitReview: (submission: ReviewSubmission) => void;
-  reviewDisabled?: boolean;
-  reviewRoundKey?: number;
-  onGetBranchInfo: (dirOverride?: string) => Promise<BranchInfo | null>;
-  onExecuteCommitAction: (issueId: string, action: "commit" | "commit_and_pr", commitMessage: string) => Promise<CommitActionResult | null>;
-  onCleanupWorktree: (issueId: string) => Promise<void>;
 }
 
 export function WorkflowShell({
   ticket,
   projectDir,
-  workflowState,
-  workflowDefinition,
-  stepOutputs,
-  loading,
-  error,
-  listenersReady,
-  pendingPermission,
-  onRespondToPermission,
-  onExecuteStep,
-  onGetDiff,
   onBack,
   onRefreshTicket,
-  notifications,
-  onClearNotification,
-  statusText,
-  lastUpdatedSectionId,
-  pendingFeedback,
-  onRespondToFeedback,
-  reviewFindings,
-  reviewComments,
-  onAddReviewComment,
-  onDeleteReviewComment,
-  onSubmitReview,
-  reviewDisabled,
-  reviewRoundKey,
-  onGetBranchInfo,
-  onExecuteCommitAction,
-  onCleanupWorktree,
 }: WorkflowShellProps) {
+  const {
+    currentState: workflowState,
+    stepOutputs,
+    loading,
+    error,
+    listenersReady,
+    pendingPermission,
+    respondToPermission,
+    executeStep: onExecuteStep,
+    getDiff: onGetDiff,
+    notifications,
+    clearNotification: onClearNotification,
+    statusText,
+    lastUpdatedSectionId,
+    pendingFeedback,
+    respondToFeedback: onRespondToFeedback,
+    reviewFindings,
+    reviewComments,
+    addReviewComment: onAddReviewComment,
+    deleteReviewComment: onDeleteReviewComment,
+    submitReview: onSubmitReview,
+    pendingReviewRequestId,
+    reviewRoundKey,
+    getBranchInfo: onGetBranchInfo,
+    executeCommitAction: onExecuteCommitAction,
+    cleanupWorktree: onCleanupWorktree,
+  } = useWorkflowContext();
+
+  // workflowState is guaranteed non-null by the parent guard in App.tsx
+  // but the context type includes null, so we assert here
+  const workflowDef = useWorkflowDefinition();
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
   // Use a ref with a monotonic counter to prevent StrictMode double-fire
   const executingRef = useRef<{ stepId: string | null; generation: number }>({ stepId: null, generation: 0 });
   const debug = useDebugLog();
 
-  const currentStep = workflowDefinition?.steps.find(
-    (s) => s.id === workflowState.current_step_id
+  const currentStep = workflowDef?.steps.find(
+    (s) => s.id === workflowState?.current_step_id
   );
 
   // Reset executing guard and clear stale result when step changes.
   // Render-time ref check is the React-recommended pattern for responding to prop changes.
   /* eslint-disable react-hooks/refs */
-  const prevStepIdRef = useRef(workflowState.current_step_id);
-  if (prevStepIdRef.current !== workflowState.current_step_id) {
-    prevStepIdRef.current = workflowState.current_step_id;
+  const prevStepIdRef = useRef(workflowState?.current_step_id);
+  if (prevStepIdRef.current !== workflowState?.current_step_id) {
+    prevStepIdRef.current = workflowState?.current_step_id;
     executingRef.current.stepId = null;
     setLastResult(null);
   }
@@ -153,10 +121,10 @@ export function WorkflowShell({
 
   // Auto-execute on pending steps
   useEffect(() => {
-    const guards = { status: workflowState.step_status, loading, listenersReady, hasStep: !!currentStep };
+    const guards = { status: workflowState?.step_status, loading, listenersReady, hasStep: !!currentStep };
 
     if (
-      workflowState.step_status !== "pending" ||
+      workflowState?.step_status !== "pending" ||
       !currentStep ||
       loading ||
       !listenersReady
@@ -191,9 +159,9 @@ export function WorkflowShell({
       });
 
     return () => { cancelled = true; };
-  }, [workflowState.current_step_id, workflowState.step_status, loading, listenersReady, currentStep, onExecuteStep, onRefreshTicket, ticket.id, debug]);
+  }, [workflowState?.current_step_id, workflowState?.step_status, loading, listenersReady, currentStep, onExecuteStep, onRefreshTicket, ticket.id, debug]);
 
-  if (!workflowDefinition) {
+  if (!workflowDef) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Loading workflow...</p>
@@ -201,12 +169,16 @@ export function WorkflowShell({
     );
   }
 
+  if (!workflowState) {
+    return null;
+  }
+
   // Workflow completed
   if (!currentStep) {
     return (
       <div className="flex flex-col h-full">
         <StageBar
-          steps={workflowDefinition.steps}
+          steps={workflowDef.steps}
           currentStepId={null}
           stepHistory={workflowState.step_history}
         />
@@ -233,6 +205,7 @@ export function WorkflowShell({
   const isFailed = typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
   const currentStepOutput = currentStep ? stepOutputs[currentStep.id] : undefined;
   const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
+  const reviewDisabled = !pendingReviewRequestId;
 
   const renderView = () => {
     switch (currentStep.view) {
@@ -249,7 +222,7 @@ export function WorkflowShell({
             pendingFeedback={pendingFeedback}
             onRespondToFeedback={onRespondToFeedback}
             onExecute={handleExecute}
-            sectionDefs={workflowDefinition?.ticket_sections}
+            sectionDefs={workflowDef?.ticket_sections}
             lastUpdatedSectionId={lastUpdatedSectionId}
             projectDir={projectDir}
             onTicketRefresh={onRefreshTicket}
@@ -273,7 +246,7 @@ export function WorkflowShell({
             isExecuting={isExecuting}
             isCompleted={isCompleted}
             pendingPermission={pendingPermission}
-            onRespondToPermission={onRespondToPermission}
+            onRespondToPermission={respondToPermission}
           />
         );
       case "diff_review":
@@ -316,7 +289,7 @@ export function WorkflowShell({
   return (
     <div data-testid="workflow-shell" data-status={typeof workflowState.step_status === 'string' ? workflowState.step_status : 'failed'} className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
       <StageBar
-        steps={workflowDefinition.steps}
+        steps={workflowDef.steps}
         currentStepId={workflowState.current_step_id}
         stepHistory={workflowState.step_history}
       />
@@ -359,4 +332,20 @@ export function WorkflowShell({
       />
     </div>
   );
+}
+
+/** Internal hook to load workflow definition from context */
+function useWorkflowDefinition() {
+  const { currentState, getWorkflow } = useWorkflowContext();
+  const [def, setDef] = useState<Awaited<ReturnType<typeof getWorkflow>>>(null);
+  const prevWorkflowId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!currentState?.workflow_id) return;
+    if (prevWorkflowId.current === currentState.workflow_id) return;
+    prevWorkflowId.current = currentState.workflow_id;
+    getWorkflow(currentState.workflow_id).then(setDef);
+  }, [currentState?.workflow_id, getWorkflow]);
+
+  return def;
 }

@@ -1,9 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { ErrorBoundary } from 'react-error-boundary'
 import { invoke } from '@tauri-apps/api/core'
 import './index.css'
 import App from './App.tsx'
 import { PreferencesApp } from './components/preferences/preferences-app.tsx'
+import { AppCrashFallback } from './components/error/app-crash-fallback.tsx'
 
 const isPreferencesWindow =
   new URLSearchParams(window.location.search).get('window') === 'preferences'
@@ -27,7 +29,14 @@ async function initAndRender() {
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      {isPreferencesWindow ? <PreferencesApp /> : <App />}
+      <ErrorBoundary
+        FallbackComponent={AppCrashFallback}
+        onError={(error, info) =>
+          console.error('[ErrorBoundary:root]', error, info.componentStack)
+        }
+      >
+        {isPreferencesWindow ? <PreferencesApp /> : <App />}
+      </ErrorBoundary>
     </StrictMode>,
   )
 }

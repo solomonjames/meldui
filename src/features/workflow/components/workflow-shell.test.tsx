@@ -118,10 +118,12 @@ function makeWorkflowContext(overrides: Partial<WorkflowContextValue> = {}): Wor
 
 describe("WorkflowShell auto-execute", () => {
   let onRefreshTicket: ReturnType<typeof vi.fn>;
+  let onNavigateToBacklog: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     clearTauriMocks();
     onRefreshTicket = vi.fn().mockResolvedValue(undefined);
+    onNavigateToBacklog = vi.fn();
   });
 
   const renderShell = (contextOverrides: Partial<WorkflowContextValue> = {}) => {
@@ -132,7 +134,7 @@ describe("WorkflowShell auto-execute", () => {
           <WorkflowShell
             ticket={makeTicket()}
             projectDir="/test"
-            onBack={vi.fn()}
+            onNavigateToBacklog={onNavigateToBacklog}
             onRefreshTicket={onRefreshTicket}
           />
         </WorkflowProvider>
@@ -171,7 +173,7 @@ describe("WorkflowShell auto-execute", () => {
         <WorkflowShell
           ticket={makeTicket()}
           projectDir="/test"
-          onBack={vi.fn()}
+          onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
       </WorkflowProvider>
@@ -187,7 +189,7 @@ describe("WorkflowShell auto-execute", () => {
         <WorkflowShell
           ticket={makeTicket()}
           projectDir="/test"
-          onBack={vi.fn()}
+          onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
       </WorkflowProvider>
@@ -204,7 +206,7 @@ describe("WorkflowShell auto-execute", () => {
         <WorkflowShell
           ticket={makeTicket()}
           projectDir="/test"
-          onBack={vi.fn()}
+          onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
       </WorkflowProvider>
@@ -221,7 +223,7 @@ describe("WorkflowShell auto-execute", () => {
         <WorkflowShell
           ticket={makeTicket()}
           projectDir="/test"
-          onBack={vi.fn()}
+          onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
       </WorkflowProvider>
@@ -244,10 +246,12 @@ describe("WorkflowShell auto-execute", () => {
 
 describe("WorkflowShell step transition cleanup", () => {
   let onRefreshTicket: ReturnType<typeof vi.fn>;
+  let onNavigateToBacklog: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     clearTauriMocks();
     onRefreshTicket = vi.fn().mockResolvedValue(undefined);
+    onNavigateToBacklog = vi.fn();
   });
 
   it("clears lastResult when step changes so old response doesn't leak", async () => {
@@ -272,7 +276,7 @@ describe("WorkflowShell step transition cleanup", () => {
         <WorkflowShell
           ticket={makeTicket()}
           projectDir="/test"
-          onBack={vi.fn()}
+          onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
       </WorkflowProvider>
@@ -299,7 +303,7 @@ describe("WorkflowShell step transition cleanup", () => {
         <WorkflowShell
           ticket={makeTicket()}
           projectDir="/test"
-          onBack={vi.fn()}
+          onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
       </WorkflowProvider>
@@ -319,7 +323,7 @@ describe("WorkflowShell step transition cleanup", () => {
         <WorkflowShell
           ticket={makeTicket()}
           projectDir="/test"
-          onBack={vi.fn()}
+          onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
       </WorkflowProvider>
@@ -347,7 +351,7 @@ describe("WorkflowShell failed step display", () => {
           <WorkflowShell
             ticket={makeTicket()}
             projectDir="/test"
-            onBack={vi.fn()}
+            onNavigateToBacklog={vi.fn()}
             onRefreshTicket={vi.fn().mockResolvedValue(undefined)}
           />
         </WorkflowProvider>

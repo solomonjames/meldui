@@ -9,7 +9,80 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-and-typecheck:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      rust: ${{ steps.filter.outputs.rust }}
+      agent: ${{ steps.filter.outputs.agent }}
+      ci: ${{ steps.filter.outputs.ci }}
+      global_config: ${{ steps.filter.outputs.global_config }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'src/**'
+              - '!src/agent/**'
+              - 'tsconfig*.json'
+              - 'vite.config.ts'
+              - 'vitest.config.ts'
+              - 'eslint.config.js'
+              - 'components.json'
+              - 'index.html'
+              - 'scripts/**'
+            rust:
+              - 'src-tauri/**'
+            agent:
+              - 'src/agent/**'
+            ci:
+              - '.github/workflows/ci.yml'
+            global_config:
+              - 'package.json'
+              - 'bun.lockb'
+
+  frontend-lint:
+    needs: detect-changes
+    if: >-
+      always() &&
+      needs.detect-changes.result == 'success' &&
+      (needs.detect-changes.outputs.frontend == 'true' ||
+       needs.detect-changes.outputs.agent == 'true' ||
+       needs.detect-changes.outputs.ci == 'true' ||
+       needs.detect-changes.outputs.global_config == 'true') ||
+      needs.detect-changes.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Install agent dependencies
+        run: cd src/agent && bun install
+
+      - name: Check version sync
+        run: bun run version:check
+
+      - name: Lint (ESLint)
+        run: bun run lint
+
+      - name: Type check (TypeScript)
+        run: npx tsc --noEmit
+
+  rust-lint:
+    needs: detect-changes
+    if: >-
+      always() &&
+      needs.detect-changes.result == 'success' &&
+      (needs.detect-changes.outputs.rust == 'true' ||
+       needs.detect-changes.outputs.agent == 'true' ||
+       needs.detect-changes.outputs.ci == 'true' ||
+       needs.detect-changes.outputs.global_config == 'true') ||
+      needs.detect-changes.result == 'failure'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,12 +107,6 @@ jobs:
       - name: Check version sync
         run: bun run version:check
 
-      - name: Lint (ESLint)
-        run: bun run lint
-
-      - name: Type check (TypeScript)
-        run: npx tsc --noEmit
-
       - name: Format check (Rust)
         run: cd src-tauri && cargo fmt -- --check
 
@@ -47,6 +114,15 @@ jobs:
         run: cd src-tauri && cargo check
 
   test-frontend:
+    needs: detect-changes
+    if: >-
+      always() &&
+      needs.detect-changes.result == 'success' &&
+      (needs.detect-changes.outputs.frontend == 'true' ||
+       needs.detect-changes.outputs.agent == 'true' ||
+       needs.detect-changes.outputs.ci == 'true' ||
+       needs.detect-changes.outputs.global_config == 'true') ||
+      needs.detect-changes.result == 'failure'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +139,15 @@ jobs:
         run: bun run test
 
   test-rust:
+    needs: detect-changes
+    if: >-
+      always() &&
+      needs.detect-changes.result == 'success' &&
+      (needs.detect-changes.outputs.rust == 'true' ||
+       needs.detect-changes.outputs.agent == 'true' ||
+       needs.detect-changes.outputs.ci == 'true' ||
+       needs.detect-changes.outputs.global_config == 'true') ||
+      needs.detect-changes.result == 'failure'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

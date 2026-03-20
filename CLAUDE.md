@@ -43,9 +43,53 @@ Package manager is **bun** (not npm/yarn). The agent sidecar has its own `packag
 
 MeldUI is a **Tauri v2** desktop app: a React frontend communicates with a Rust backend via `invoke()` commands.
 
+### Frontend Directory Structure
+
+The frontend uses a 3-layer feature-based architecture:
+
+```
+src/
+  app/                    # App shell & entry points (composition root)
+    App.tsx               # Central orchestrator — imports from features/ and shared/
+    main.tsx              # Root entry, error boundary, theme
+    welcome-screen.tsx    # First-launch / no-project view
+  features/
+    tickets/              # Kanban board, ticket CRUD
+      components/         # BacklogPage, KanbanCard, KanbanColumn, etc.
+      hooks/              # useTickets
+      constants.ts        # TYPE_CONFIG, PRIORITY_CONFIG, STATUS_CONFIG
+    workflow/             # Agent execution, step views
+      components/         # WorkflowShell, StageBar, DebugPanel
+        shared/           # Workflow-internal shared (ToolCard, ActivityBar, etc.)
+        views/            # ChatView, ProgressView, ReviewView, etc.
+      hooks/              # useWorkflow, useWorkflowStreaming, etc.
+      context.tsx         # WorkflowProvider + useWorkflowContext
+    settings/             # Project-level settings
+      components/         # SettingsPage
+      hooks/              # useSettings
+    preferences/          # App-level preferences (separate window)
+      components/         # PreferencesApp, AppearanceSection
+  shared/
+    ui/                   # shadcn components (unchanged)
+    components/           # Cross-feature components (diff/, error/, sections/, chat/)
+    layout/               # AppLayout, AppSidebar, StatusBar
+    hooks/                # useClaude, useDebugLog, useProjectDir, useTheme, useUpdater
+    lib/                  # query-client, invalidation, query-keys, utils, sync/, tickets/
+    types/                # Central type hub (mirrors Rust serde structs)
+    test/                 # Test helpers and mocks
+  agent/                  # Separate sidecar build (excluded from frontend tsc)
+  index.css               # Global stylesheet
+```
+
+**Architecture rules:**
+1. **features/ never import from other features/** — cross-feature data flows through TanStack Query cache or Tauri events
+2. **shared/ never imports from features/ or app/** — shared is the lowest layer
+3. **app/ CAN import from features/ and shared/** — it's the composition root
+4. **All imports use `@/` absolute paths** — no relative imports for project files (node_modules exempt)
+
 ### Frontend → Backend Communication
 
-React hooks in `src/hooks/` call Tauri commands defined in `src-tauri/src/lib.rs`. The Rust side coordinates several modules:
+React hooks in `src/features/*/hooks/` and `src/shared/hooks/` call Tauri commands defined in `src-tauri/src/lib.rs`. The Rust side coordinates several modules:
 
 - **Beads (`bd`)** — issue tracking. `src-tauri/src/beads.rs` spawns the `bd` CLI, parses JSON output into `BeadsIssue` structs.
 - **Tickets** — `src-tauri/src/tickets.rs` handles ticket operations and state management.
@@ -83,7 +127,7 @@ The sidecar is excluded from the frontend `tsc` build via `tsconfig.app.json` `"
 
 ### Type Sharing
 
-Frontend TypeScript types in `src/types/index.ts` manually mirror the Rust serde structs. When adding fields, update both:
+Frontend TypeScript types in `src/shared/types/index.ts` manually mirror the Rust serde structs. When adding fields, update both:
 - Rust struct (with `#[serde(default)]` for optional fields)
 - TypeScript interface
 
@@ -91,15 +135,16 @@ Frontend TypeScript types in `src/types/index.ts` manually mirror the Rust serde
 
 - **React 19** with hooks-only state management (no Redux/Zustand)
 - **Tailwind CSS v4** via `@tailwindcss/vite` plugin (no tailwind.config file — theme is in `src/index.css`)
-- **shadcn** components (base-nova style, neutral base color) in `src/components/ui/`
+- **shadcn** components (base-nova style, neutral base color) in `src/shared/ui/`
 - **@dnd-kit** for kanban drag-and-drop
 - **Lucide React** for icons
 - Path alias: `@/` → `src/`
 
-### Shared Libraries (`src/lib/`)
+### Shared Libraries (`src/shared/lib/`)
 
 - `query-client.ts` — TanStack Query client with staleTime/gcTime/retry defaults
 - `invalidation.ts` — event-driven cache invalidation (Tauri events → query invalidation)
+- `query-keys.ts` — shared query key factories (ticketKeys) used by both features and invalidation
 - `tauri-queries.ts` — helper utilities for Tauri invoke queries
 - `tickets/` — ticket type definitions and helpers
 - `sync/` — beads sync logic
@@ -119,7 +164,7 @@ WebdriverIO tests in `e2e/` with a mock sidecar (`e2e/mock-sidecar/`). Run `bun 
 
 **Beads parent-child relationships**: `bd list --json` doesn't return a `parent_id` field. Sub-tickets have a `dependencies` array with entries where `type === "parent-child"`. The Rust `list_issues()` function derives `parent_id` from this at fetch time.
 
-**Hook pattern**: Each integration has a custom hook wrapping Tauri invoke calls via TanStack Query. Core hooks: `useTickets`, `useClaude`, `useProjectDir`, `useSettings`, `useDebugLog`, `useUpdater`. Workflow is split across `useWorkflow`, `useWorkflowStreaming`, `useWorkflowPermissions`, `useWorkflowFeedback`, `useWorkflowReview`, and `useWorkflowNotifications`.
+**Hook pattern**: Each integration has a custom hook wrapping Tauri invoke calls via TanStack Query. Feature hooks live in `src/features/*/hooks/`, shared hooks in `src/shared/hooks/`. Workflow is split across `useWorkflow`, `useWorkflowStreaming`, `useWorkflowPermissions`, `useWorkflowFeedback`, `useWorkflowReview`, and `useWorkflowNotifications`.
 
 **Agent permission flow**: When the agent needs permission for a dangerous tool (e.g., Bash outside project dir), the sidecar emits a `permission_request` on stdout → Rust emits `agent-permission-request` Tauri event → frontend shows inline dialog → user clicks Allow/Deny → frontend invokes `agent_permission_respond` → Rust writes response to sidecar stdin → `canUseTool` Promise resolves.
 
@@ -127,8 +172,8 @@ WebdriverIO tests in `e2e/` with a mock sidecar (`e2e/mock-sidecar/`). Run `bun 
 
 **Kanban board**: Issues flow through `BacklogPage` → `KanbanColumn` → `KanbanCard`. Columns are defined statically in `backlog-page.tsx`. Cards are draggable between columns, which triggers status updates through beads.
 
-**TanStack Query**: All Tauri `invoke()` calls go through `useQuery`/`useMutation` from `@tanstack/react-query`. Query client config is in `src/lib/query-client.ts`. Cache invalidation is event-driven via `src/lib/invalidation.ts` — Tauri events trigger targeted `queryClient.invalidateQueries()` calls.
+**TanStack Query**: All Tauri `invoke()` calls go through `useQuery`/`useMutation` from `@tanstack/react-query`. Query client config is in `src/shared/lib/query-client.ts`. Cache invalidation is event-driven via `src/shared/lib/invalidation.ts` — Tauri events trigger targeted `queryClient.invalidateQueries()` calls.
 
-**Error boundaries**: `react-error-boundary` wraps the app at two levels — `AppCrashFallback` in `src/main.tsx` (root) and `ViewErrorFallback` for per-view recovery. Components live in `src/components/error/`.
+**Error boundaries**: `react-error-boundary` wraps the app at two levels — `AppCrashFallback` in `src/app/main.tsx` (root) and `ViewErrorFallback` for per-view recovery. Components live in `src/shared/components/error/`.
 
-**Issue config maps**: `TYPE_CONFIG`, `PRIORITY_CONFIG`, and `STATUS_CONFIG` are defined in `ticket-constants.ts` (re-exported from `kanban-card.tsx`) and reused across components for consistent styling of issue types, priorities, and statuses.
+**Issue config maps**: `TYPE_CONFIG`, `PRIORITY_CONFIG`, and `STATUS_CONFIG` are defined in `src/features/tickets/constants.ts` (re-exported from `kanban-card.tsx`) and reused across ticket components for consistent styling of issue types, priorities, and statuses.

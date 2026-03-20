@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import type { ToolActivity } from "@/types";
 import { getToolRenderer } from "./tool-renderers";
 import { TOOL_LABELS } from "./tool-labels";
@@ -13,7 +13,7 @@ export function ToolCard({ activity }: ToolCardProps) {
   const isRunning = activity.status === "running";
   const hasInput = activity.input.length > 0;
 
-  const Renderer = useMemo(() => getToolRenderer(activity.tool_name), [activity.tool_name]);
+  const renderTool = getToolRenderer(activity.tool_name);
 
   // Hide meldui MCP tool cards
   if (activity.tool_name.startsWith("mcp__meldui")) return null;
@@ -39,7 +39,7 @@ export function ToolCard({ activity }: ToolCardProps) {
         <span className="font-medium text-zinc-700 dark:text-zinc-300 shrink-0">
           {TOOL_LABELS[activity.tool_name] ?? activity.tool_name}
         </span>
-        {!expanded && <Renderer activity={activity} expanded={false} />}
+        {!expanded && renderTool({ activity, expanded: false })}
         {hasInput && (
           <svg
             className={`w-3 h-3 ml-auto text-muted-foreground transition-transform shrink-0 ${expanded ? "rotate-180" : ""}`}
@@ -54,7 +54,7 @@ export function ToolCard({ activity }: ToolCardProps) {
       </button>
       {expanded && !showRaw && (
         <div>
-          <Renderer activity={activity} expanded={true} />
+          {renderTool({ activity, expanded: true })}
           <div className="px-3 pb-2">
             <button
               onClick={(e) => { e.stopPropagation(); setShowRaw(true); }}

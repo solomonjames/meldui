@@ -18,6 +18,7 @@ interface DiffReviewViewProps {
   onDeleteComment: (commentId: string) => void;
   onSubmitReview: (submission: ReviewSubmission) => void;
   reviewDisabled?: boolean;
+  reviewRoundKey?: number;
 }
 
 export function DiffReviewView({
@@ -29,6 +30,7 @@ export function DiffReviewView({
   onDeleteComment,
   onSubmitReview,
   reviewDisabled,
+  reviewRoundKey,
 }: DiffReviewViewProps) {
   const [files, setFiles] = useState<DiffFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +42,7 @@ export function DiffReviewView({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setFindingActions([]);
     onGetDiff(worktreePath, worktreeBaseCommit).then((diff) => {
       if (!cancelled) {
         setFiles(diff);
@@ -48,7 +51,7 @@ export function DiffReviewView({
     });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worktreePath, worktreeBaseCommit]);
+  }, [worktreePath, worktreeBaseCommit, reviewRoundKey]);
 
   const handleFindingAction = (findingId: string, action: FindingAction["action"]) => {
     setFindingActions((prev) => {

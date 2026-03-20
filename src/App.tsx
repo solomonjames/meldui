@@ -14,7 +14,9 @@ import { useWorkflow } from "@/hooks/use-workflow";
 import { useProjectDir } from "@/hooks/use-project-dir";
 import { useTheme } from "@/hooks/use-theme";
 import { useUpdater } from "@/hooks/use-updater";
+import { ErrorBoundary } from "react-error-boundary";
 import { Toaster } from "sonner";
+import { ViewErrorFallback } from "@/components/error/view-error-fallback";
 import type { Ticket } from "@/types";
 
 function App() {
@@ -169,34 +171,58 @@ function App() {
       }
     >
       {activePage === "workflow" && activeWorkflowTicket && workflow.currentState ? (
-        <WorkflowProvider workflow={workflow}>
-          <WorkflowShell
-            ticket={activeWorkflowTicket}
-            projectDir={projectDir}
-            onBack={handleBackToBoard}
-            onRefreshTicket={handleRefreshTicket}
-          />
-        </WorkflowProvider>
+        <ErrorBoundary
+          FallbackComponent={ViewErrorFallback}
+          resetKeys={[activePage]}
+          onError={(error, info) =>
+            console.error("[ErrorBoundary:workflow]", error, info.componentStack)
+          }
+        >
+          <WorkflowProvider workflow={workflow}>
+            <WorkflowShell
+              ticket={activeWorkflowTicket}
+              projectDir={projectDir}
+              onBack={handleBackToBoard}
+              onRefreshTicket={handleRefreshTicket}
+            />
+          </WorkflowProvider>
+        </ErrorBoundary>
       ) : activePage === "settings" ? (
-        <SettingsPage projectDir={projectDir} />
+        <ErrorBoundary
+          FallbackComponent={ViewErrorFallback}
+          resetKeys={[activePage]}
+          onError={(error, info) =>
+            console.error("[ErrorBoundary:settings]", error, info.componentStack)
+          }
+        >
+          <SettingsPage projectDir={projectDir} />
+        </ErrorBoundary>
       ) : (
-        <BacklogPage
-          tickets={ticketStore.tickets}
-          loading={ticketStore.loading}
-          error={ticketStore.error}
-          onUpdateTicket={ticketStore.updateTicket}
-          onCloseTicket={ticketStore.closeTicket}
-          onDeleteTicket={ticketStore.deleteTicket}
-          onShowTicket={ticketStore.showTicket}
-          onAddComment={ticketStore.addComment}
-          onRefresh={ticketStore.refreshTickets}
-          onAutoStart={handleAutoStart}
-          workflows={workflow.workflows}
-          onAssignWorkflow={workflow.assignWorkflow}
-          onSuggestWorkflow={workflow.suggestWorkflow}
-          onGetWorkflowState={workflow.getWorkflowState}
-          onStartWorkflow={handleStartWorkflow}
-        />
+        <ErrorBoundary
+          FallbackComponent={ViewErrorFallback}
+          resetKeys={[activePage]}
+          onError={(error, info) =>
+            console.error("[ErrorBoundary:backlog]", error, info.componentStack)
+          }
+        >
+          <BacklogPage
+            tickets={ticketStore.tickets}
+            loading={ticketStore.loading}
+            error={ticketStore.error}
+            onUpdateTicket={ticketStore.updateTicket}
+            onCloseTicket={ticketStore.closeTicket}
+            onDeleteTicket={ticketStore.deleteTicket}
+            onShowTicket={ticketStore.showTicket}
+            onAddComment={ticketStore.addComment}
+            onRefresh={ticketStore.refreshTickets}
+            onAutoStart={handleAutoStart}
+            workflows={workflow.workflows}
+            onAssignWorkflow={workflow.assignWorkflow}
+            onSuggestWorkflow={workflow.suggestWorkflow}
+            onGetWorkflowState={workflow.getWorkflowState}
+            onStartWorkflow={handleStartWorkflow}
+          />
+        </ErrorBoundary>
       )}
       <CreateTicketDialog
         open={createDialogOpen}

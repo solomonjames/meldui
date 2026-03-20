@@ -63,12 +63,14 @@ function AppContent() {
   } = workflow;
 
   const navigateToTicket = useCallback(
-    (ticketId: string) => {
+    async (ticketId: string) => {
       setActiveTicketIdLocal(ticketId);
       setWorkflowActiveTicketId(ticketId);
       setActivePage("ticket");
+      // Fetch workflow state so WorkflowShell renders if a workflow is active
+      await getWorkflowState(ticketId);
     },
-    [setWorkflowActiveTicketId]
+    [setWorkflowActiveTicketId, getWorkflowState]
   );
 
   const handleStartWorkflow = useCallback(
@@ -99,7 +101,6 @@ function AppContent() {
     [getWorkflowState, suggestWf, assignWf, navigateToTicket]
   );
 
-  // Register a no-op refresh callback (TicketPage handles its own refresh via TanStack Query)
   // TicketPage handles its own refresh via TanStack Query — register a stable no-op
   const noopRefresh = useCallback(async () => {}, []);
   useEffect(() => {
@@ -125,8 +126,8 @@ function AppContent() {
   );
 
   const handleTicketClick = useCallback(
-    (ticket: Ticket) => {
-      navigateToTicket(ticket.id);
+    async (ticket: Ticket) => {
+      await navigateToTicket(ticket.id);
     },
     [navigateToTicket]
   );
@@ -157,6 +158,7 @@ function AppContent() {
               onUpdateTicket={ticketStore.updateTicket}
               onShowTicket={ticketStore.showTicket}
               onAddComment={ticketStore.addComment}
+              onUpdateSection={ticketStore.updateSection}
               onAssignWorkflow={workflow.assignWorkflow}
               onSuggestWorkflow={workflow.suggestWorkflow}
               onStartWorkflow={handleStartWorkflow}

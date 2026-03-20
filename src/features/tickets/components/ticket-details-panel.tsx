@@ -160,6 +160,15 @@ export function TicketDetailsPanel({
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [pendingSave, setPendingSave] = useState<Record<string, string>>({});
 
+  // Clear all pending debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      for (const timer of Object.values(debounceRefs.current)) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
+
   // Flash animation for section updates
   const [flashingSectionId, setFlashingSectionId] = useState<string | null>(null);
   const [prevSectionId, setPrevSectionId] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
+
 import { Hash, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import {
@@ -41,6 +42,7 @@ interface TicketPageProps {
   onAddComment: (id: string, text: string) => Promise<void>;
   onAssignWorkflow: (issueId: string, workflowId: string) => Promise<WorkflowState | null>;
   onSuggestWorkflow: (issueId: string) => Promise<WorkflowSuggestion | null>;
+  onUpdateSection: (ticketId: string, sectionId: string, content: unknown) => Promise<void>;
   onStartWorkflow: (ticket: Ticket) => Promise<void>;
   onRefreshTickets: () => Promise<void>;
 }
@@ -54,6 +56,7 @@ export function TicketPage({
   onUpdateTicket,
   onShowTicket,
   onAddComment,
+  onUpdateSection,
   onAssignWorkflow,
   onSuggestWorkflow,
   onStartWorkflow,
@@ -85,15 +88,10 @@ export function TicketPage({
 
   const handleUpdateSection = useCallback(
     async (tId: string, sectionId: string, content: unknown) => {
-      await invoke("ticket_update_section", {
-        projectDir,
-        ticketId: tId,
-        sectionId,
-        content,
-      });
+      await onUpdateSection(tId, sectionId, content);
       await handleRefreshTicket();
     },
-    [projectDir, handleRefreshTicket]
+    [onUpdateSection, handleRefreshTicket]
   );
 
   // Loading state

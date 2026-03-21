@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { events } from "@/bindings";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import type {
-  StreamChunk,
   StepOutputStream,
   ToolActivity,
   ContentBlock,

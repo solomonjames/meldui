@@ -1291,7 +1291,11 @@ fn dispatch_message_to_tauri(
                 .and_then(|p| p.as_str())
                 .unwrap_or("")
                 .to_string();
-            let _ = SubtaskCreated { subtask_id, parent_id }.emit(app_handle);
+            let _ = SubtaskCreated {
+                subtask_id,
+                parent_id,
+            }
+            .emit(app_handle);
         }
         "subtask_updated" => {
             let subtask_id = params
@@ -1304,7 +1308,11 @@ fn dispatch_message_to_tauri(
                 .and_then(|p| p.as_str())
                 .unwrap_or("")
                 .to_string();
-            let _ = SubtaskUpdated { subtask_id, parent_id }.emit(app_handle);
+            let _ = SubtaskUpdated {
+                subtask_id,
+                parent_id,
+            }
+            .emit(app_handle);
         }
         "subtask_closed" => {
             let subtask_id = params
@@ -1317,7 +1325,11 @@ fn dispatch_message_to_tauri(
                 .and_then(|p| p.as_str())
                 .unwrap_or("")
                 .to_string();
-            let _ = SubtaskClosed { subtask_id, parent_id }.emit(app_handle);
+            let _ = SubtaskClosed {
+                subtask_id,
+                parent_id,
+            }
+            .emit(app_handle);
         }
         "tool_progress" => {
             let tool_name = params

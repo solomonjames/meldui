@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { commands } from "@/bindings";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
-  WorkflowDefinition,
   WorkflowState,
   StepExecutionResult,
   WorkflowSuggestion,

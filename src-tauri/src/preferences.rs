@@ -26,6 +26,7 @@ impl Default for AppPreferences {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_app_preferences(app: AppHandle) -> Result<AppPreferences, String> {
     let store = app
         .store(STORE_FILE)
@@ -42,6 +43,7 @@ pub fn get_app_preferences(app: AppHandle) -> Result<AppPreferences, String> {
 const VALID_THEMES: &[&str] = &["light", "dark", "system"];
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Result<(), String> {
     if !VALID_THEMES.contains(&preferences.theme.as_str()) {
         return Err(format!("Invalid theme: {}", preferences.theme));
@@ -69,6 +71,7 @@ pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Resul
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_preferences_window(app: AppHandle) -> Result<(), String> {
     // Singleton: if preferences window already exists, focus it
     if let Some(window) = app.get_webview_window("preferences") {

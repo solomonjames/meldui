@@ -16,6 +16,10 @@ interface WorkflowStartPanelProps {
   onSuggestWorkflow: (issueId: string) => Promise<WorkflowSuggestion | null>;
   onStartWorkflow: (ticket: Ticket) => Promise<void>;
   onRefreshTickets: () => Promise<void>;
+  onUpdateTicket: (
+    id: string,
+    updates: { status?: string }
+  ) => Promise<void>;
 }
 
 export function WorkflowStartPanel({
@@ -25,20 +29,24 @@ export function WorkflowStartPanel({
   onSuggestWorkflow,
   onStartWorkflow,
   onRefreshTickets,
+  onUpdateTicket,
 }: WorkflowStartPanelProps) {
+  const currentWorkflowId = (ticket.metadata?.workflow as { workflow_id?: string })?.workflow_id;
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | undefined>(currentWorkflowId);
   const [starting, setStarting] = useState(false);
 
-  const currentWorkflowId = (ticket.metadata?.workflow as { workflow_id?: string })?.workflow_id;
-  const hasWorkflow = !!currentWorkflowId;
-
   const handleStart = useCallback(async () => {
+    if (!selectedWorkflowId) return;
     setStarting(true);
     try {
+      await onAssignWorkflow(ticket.id, selectedWorkflowId);
+      await onUpdateTicket(ticket.id, { status: "in_progress" });
+      await onRefreshTickets();
       await onStartWorkflow(ticket);
     } finally {
       setStarting(false);
     }
-  }, [ticket, onStartWorkflow]);
+  }, [ticket, selectedWorkflowId, onAssignWorkflow, onUpdateTicket, onRefreshTickets, onStartWorkflow]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
@@ -51,31 +59,26 @@ export function WorkflowStartPanel({
         </div>
 
         <WorkflowSelector
-          currentWorkflowId={currentWorkflowId}
+          selectedWorkflowId={selectedWorkflowId}
           workflows={workflows}
-          onAssign={async (workflowId) => {
-            await onAssignWorkflow(ticket.id, workflowId);
-            await onRefreshTickets();
-          }}
+          onSelect={setSelectedWorkflowId}
           onSuggest={async () => {
             return onSuggestWorkflow(ticket.id);
           }}
         />
 
-        {hasWorkflow && (
-          <Button
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-            disabled={starting}
-            onClick={handleStart}
-          >
-            {starting ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Play className="w-4 h-4 mr-2" />
-            )}
-            Start Workflow
-          </Button>
-        )}
+        <Button
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+          disabled={!selectedWorkflowId || starting}
+          onClick={handleStart}
+        >
+          {starting ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Play className="w-4 h-4 mr-2" />
+          )}
+          Start Workflow
+        </Button>
       </div>
     </div>
   );

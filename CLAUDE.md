@@ -93,7 +93,7 @@ React hooks in `src/features/*/hooks/` and `src/shared/hooks/` call Tauri comman
 
 - **Beads (`bd`)** — issue tracking. `src-tauri/src/beads.rs` spawns the `bd` CLI, parses JSON output into `BeadsIssue` structs.
 - **Tickets** — `src-tauri/src/tickets.rs` handles ticket operations and state management.
-- **Agent sidecar** — AI workflow execution. `src-tauri/src/agent.rs` spawns a compiled Bun binary (`src/agent/`) that wraps `@anthropic-ai/claude-agent-sdk`. Communication is NDJSON over stdin/stdout.
+- **Agent sidecar** — AI workflow execution. `src-tauri/src/agent.rs` spawns a compiled Bun binary (`src/agent/`) that wraps `@anthropic-ai/claude-agent-sdk`. Communication is JSON-RPC 2.0 over a Unix domain socket.
 - **Workflow** — `src-tauri/src/workflow.rs` manages workflow orchestration.
 - **Claude status/login** — `src-tauri/src/claude.rs` handles auth status checks and login only (no longer does streaming).
 - **Settings** — `src-tauri/src/settings.rs` handles app settings persistence.
@@ -103,24 +103,26 @@ Both `bd` and `claude` CLIs are discovered at runtime by searching common instal
 
 ### Agent Sidecar Architecture
 
-The agent sidecar (`src/agent/`) is a separate TypeScript package compiled to a native binary via `bun build --compile`. It wraps the Claude Agent SDK and communicates with Rust via NDJSON:
+The agent sidecar (`src/agent/`) is a separate TypeScript package compiled to a native binary via `bun build --compile`. It wraps the Claude Agent SDK and communicates with Rust via JSON-RPC 2.0 over a Unix domain socket:
 
 ```
 React Frontend (tool cards, permission dialogs, thinking section)
     ↕ Tauri events (workflow-step-output, agent-permission-request)
 Rust Backend (src-tauri/src/agent.rs)
-    ↕ stdin/stdout NDJSON
+    ↕ Unix socket + JSON-RPC 2.0
 Bun Sidecar (src/agent/main.ts → compiled binary)
     ├── ClaudeAgent class (wraps Agent SDK query())
     ├── Beads MCP Server (exposes bd as tools Claude can call)
     └── @anthropic-ai/claude-agent-sdk
 ```
 
+The sidecar creates a Unix socket server on startup, announces `SOCKET_PATH=<path>` on stdout, and Rust connects as a client. Both sides act as simultaneous JSON-RPC client and server, enabling true bidirectional request/response for permissions, feedback, and review flows.
+
 Key files in `src/agent/`:
-- `main.ts` — entry point, reads config from stdin, wires events to stdout
+- `main.ts` — entry point, creates Unix socket server, handles JSON-RPC methods
 - `claude-agent.ts` — wraps `query()` with EventEmitter, handles `canUseTool` permissions
 - `mcp/meldui-server.ts` — in-process MCP server with beads tools (uses `createSdkMcpServer`)
-- `protocol.ts` — NDJSON message type definitions
+- `protocol.ts` — JSON-RPC method names, typed params/results for each RPC method
 - `build.ts` — compiles to `src-tauri/binaries/agent-{arch}-apple-darwin`
 
 The sidecar is excluded from the frontend `tsc` build via `tsconfig.app.json` `"exclude": ["src/agent"]`.

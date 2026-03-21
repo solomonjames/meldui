@@ -108,28 +108,14 @@ pub struct AgentReviewFindingsRequest {
 
 struct PendingPermission {
     json_rpc_id: serde_json::Value,
-    sender: tokio::sync::oneshot::Sender<PermissionDecision>,
 }
 
 struct PendingFeedback {
     json_rpc_id: serde_json::Value,
-    sender: tokio::sync::oneshot::Sender<FeedbackDecision>,
 }
 
 struct PendingReview {
     json_rpc_id: serde_json::Value,
-    sender: tokio::sync::oneshot::Sender<serde_json::Value>,
-}
-
-#[allow(dead_code)]
-pub struct PermissionDecision {
-    pub allowed: bool,
-}
-
-#[allow(dead_code)]
-pub struct FeedbackDecision {
-    pub approved: bool,
-    pub feedback: Option<String>,
 }
 
 /// Active agent handle — holds socket writer and pending request channels.
@@ -185,8 +171,6 @@ impl AgentHandle {
             let decision = if allowed { "allow" } else { "deny" };
             self.send_response(p.json_rpc_id, serde_json::json!({ "decision": decision }))
                 .await?;
-            // Also resolve the oneshot (for any internal waiters)
-            let _ = p.sender.send(PermissionDecision { allowed });
             Ok(())
         } else {
             Err("No pending permission request".to_string())
@@ -207,7 +191,6 @@ impl AgentHandle {
                 serde_json::json!({ "approved": approved, "feedback": feedback }),
             )
             .await?;
-            let _ = p.sender.send(FeedbackDecision { approved, feedback });
             Ok(())
         } else {
             Err("No pending feedback request".to_string())
@@ -227,7 +210,6 @@ impl AgentHandle {
                 serde_json::json!({ "submission": submission }),
             )
             .await?;
-            let _ = p.sender.send(submission);
             Ok(())
         } else {
             Err("No pending review request".to_string())
@@ -840,12 +822,10 @@ pub async fn execute_step(
                         .cloned()
                         .unwrap_or(serde_json::json!({}));
 
-                    let (tx, _rx) = tokio::sync::oneshot::channel();
                     {
                         let mut pending = pending_permission.lock().await;
                         *pending = Some(PendingPermission {
                             json_rpc_id: id,
-                            sender: tx,
                         });
                     }
 
@@ -879,12 +859,10 @@ pub async fn execute_step(
                         .unwrap_or("")
                         .to_string();
 
-                    let (tx, _rx) = tokio::sync::oneshot::channel();
                     {
                         let mut pending = pending_feedback.lock().await;
                         *pending = Some(PendingFeedback {
                             json_rpc_id: id,
-                            sender: tx,
                         });
                     }
 
@@ -921,12 +899,10 @@ pub async fn execute_step(
                         .unwrap_or("")
                         .to_string();
 
-                    let (tx, _rx) = tokio::sync::oneshot::channel();
                     {
                         let mut pending = pending_review.lock().await;
                         *pending = Some(PendingReview {
                             json_rpc_id: id,
-                            sender: tx,
                         });
                     }
 

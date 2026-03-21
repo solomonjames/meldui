@@ -291,22 +291,9 @@ async function main(): Promise<void> {
         });
     });
 
-    // ── Launch agent execution in detached async task ──
-
-    void (async () => {
-      try {
-        await agent.execute(params.prompt, config);
-
-        // completed/failed/stopped events are emitted by ClaudeAgent itself.
-        // Wire them to queryComplete/queryError notifications.
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[sidecar] Unhandled execute error: ${message}\n`);
-        notify(METHOD_NAMES.queryError, { message });
-      }
-    })();
-
-    // Wire completion events (these fire from ClaudeAgent after execute resolves)
+    // ── Wire completion events BEFORE launching execute ──
+    // These must be registered first to avoid a race where execute()
+    // completes before listeners are attached.
     agent.on("completed", ({ response, sessionId }) => {
       notify(METHOD_NAMES.queryComplete, { sessionId, response });
     });
@@ -318,6 +305,17 @@ async function main(): Promise<void> {
     agent.on("stopped", () => {
       notify(METHOD_NAMES.queryComplete, { sessionId: "", response: "" });
     });
+
+    // Launch agent execution in detached async task
+    void (async () => {
+      try {
+        await agent.execute(params.prompt, config);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[sidecar] Unhandled execute error: ${message}\n`);
+        notify(METHOD_NAMES.queryError, { message });
+      }
+    })();
 
     return { status: "started" as const };
   });

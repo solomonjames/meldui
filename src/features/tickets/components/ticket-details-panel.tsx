@@ -10,7 +10,6 @@ import {
   ChevronDown,
   PanelRightClose,
   PanelRightOpen,
-  Check,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -33,6 +32,7 @@ import {
 import { getSectionRenderer } from "@/shared/components/sections/section-registry";
 import "@/shared/components/sections";
 import { SubtaskProgress } from "@/features/tickets/components/subtask-progress";
+import { EditableMarkdownField } from "@/features/tickets/components/editable-markdown-field";
 import { STATUS_CONFIG, TYPE_CONFIG, PRIORITY_CONFIG } from "@/features/tickets/constants";
 import type { Ticket, TicketComment, TicketSection, WorkflowSectionDef } from "@/shared/types";
 import type { SectionType } from "@/shared/types";
@@ -152,9 +152,6 @@ export function TicketDetailsPanel({
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [expandedSections, setExpandedSections] = useState<string[]>(["_details", "_description"]);
-  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-save debounce refs — one timer per field to prevent cross-field cancellation
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -196,14 +193,6 @@ export function TicketDetailsPanel({
     }, 100);
     return () => clearTimeout(timer);
   }, [lastUpdatedSectionId]);
-
-  // Focus textarea when editing
-  useEffect(() => {
-    if (editingSectionId && editTextareaRef.current) {
-      editTextareaRef.current.focus();
-      editTextareaRef.current.selectionStart = editTextareaRef.current.value.length;
-    }
-  }, [editingSectionId]);
 
   // Fetch comments
   const fetchComments = useCallback(async () => {
@@ -279,25 +268,6 @@ export function TicketDetailsPanel({
     }
   };
 
-  const handleSectionEdit = useCallback(
-    async (sectionId: string) => {
-      if (!onUpdateSection) return;
-      const section = ticket.sections?.find((s) => s.id === sectionId);
-      if (section) {
-        const content = section.type === "markdown" ? { text: editValue } : editValue;
-        try {
-          await onUpdateSection(ticket.id, sectionId, content);
-          setEditingSectionId(null);
-        } catch {
-          toast.error("Failed to update section");
-        }
-        return;
-      }
-      setEditingSectionId(null);
-    },
-    [editValue, ticket.id, ticket.sections, onUpdateSection]
-  );
-
   const subTickets = allTickets.filter((t) => t.parent_id === ticket.id);
   const hasSectionDefs = sectionDefs && sectionDefs.length > 0;
 
@@ -337,7 +307,7 @@ export function TicketDetailsPanel({
     if (typeof section.content === "object" && section.content !== null && "text" in (section.content as Record<string, unknown>)) {
       return String((section.content as Record<string, unknown>).text);
     }
-    return JSON.stringify(section.content, null, 2);
+    return typeof section.content === "string" ? section.content : JSON.stringify(section.content, null, 2);
   };
 
   // Collapse toggle button (shown when collapsed)
@@ -524,52 +494,11 @@ export function TicketDetailsPanel({
                 Description
               </AccordionTrigger>
               <AccordionContent>
-                {editingSectionId === "_description" ? (
-                  <div className="space-y-2">
-                    <textarea
-                      ref={editTextareaRef}
-                      className="w-full rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 text-sm resize-y min-h-[200px] focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                      value={editValue}
-                      onChange={(e) => {
-                        setEditValue(e.target.value);
-                        debouncedSave("description", e.target.value);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") setEditingSectionId(null);
-                      }}
-                      placeholder="No description"
-                    />
-                    <div className="flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => setEditingSectionId(null)}
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        Done
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="cursor-pointer rounded-lg p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
-                    onClick={() => {
-                      setEditingSectionId("_description");
-                      setEditValue(pendingSave.description ?? ticket.description ?? "");
-                    }}
-                  >
-                    {(pendingSave.description ?? ticket.description) ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {pendingSave.description ?? ticket.description ?? ""}
-                        </ReactMarkdown>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">No description</p>
-                    )}
-                  </div>
-                )}
+                <EditableMarkdownField
+                  value={pendingSave.description ?? ticket.description ?? ""}
+                  onSave={(value) => debouncedSave("description", value)}
+                  placeholder="No description"
+                />
               </AccordionContent>
             </AccordionItem>
 
@@ -578,7 +507,6 @@ export function TicketDetailsPanel({
               const typedSection = ticket.sections?.find((s) => s.id === def.id) ?? null;
               const isHighlighted = flashingSectionId === def.id;
               const isPersistentHighlight = lastUpdatedSectionId === def.id;
-              const isEditing = editingSectionId === def.id;
 
               return (
                 <AccordionItem
@@ -593,42 +521,14 @@ export function TicketDetailsPanel({
                     {def.label}
                   </AccordionTrigger>
                   <AccordionContent>
-                    {isEditing && typedSection?.type === "markdown" ? (
-                      <div className="space-y-2">
-                        <textarea
-                          ref={editTextareaRef}
-                          className="w-full rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 text-sm resize-y min-h-[200px] focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") {
-                              handleSectionEdit(def.id);
-                            }
+                    {typedSection ? (
+                      typedSection.type === "markdown" ? (
+                        <EditableMarkdownField
+                          value={getSectionText(typedSection)}
+                          onSave={(value) => {
+                            onUpdateSection?.(ticket.id, def.id, { text: value });
                           }}
                         />
-                        <div className="flex justify-end">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                            onClick={() => handleSectionEdit(def.id)}
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            Done
-                          </Button>
-                        </div>
-                      </div>
-                    ) : typedSection ? (
-                      typedSection.type === "markdown" ? (
-                        <div
-                          className="cursor-pointer rounded-lg p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
-                          onClick={() => {
-                            setEditingSectionId(def.id);
-                            setEditValue(getSectionText(typedSection));
-                          }}
-                        >
-                          {renderSectionContent(typedSection)}
-                        </div>
                       ) : (
                         renderSectionContent(typedSection)
                       )

@@ -2,269 +2,341 @@
  * Agent sidecar entry point.
  *
  * Communication protocol:
- *   stdin  (Rust → sidecar): NDJSON commands
- *   stdout (sidecar → Rust): NDJSON events
+ *   Unix domain socket with JSON-RPC 2.0 (newline-delimited)
+ *   Sidecar = socket server, Rust = socket client
  *
- * First stdin line is the execute command with prompt + config.
- * Subsequent stdin lines are permission responses or cancel commands.
+ * Lifecycle:
+ *   1. Sidecar creates Unix socket server at $TMPDIR/meldui-sidecar-<pid>.sock
+ *   2. Prints SOCKET_PATH=<path> to stdout (only stdout use)
+ *   3. Rust connects as client
+ *   4. Bidirectional JSON-RPC: Rust sends query/cancel, sidecar sends notifications/requests
  */
 
+import { createServer, type Socket } from "net";
+import { tmpdir } from "os";
+import { join } from "path";
+import { unlinkSync, existsSync } from "fs";
+import { JSONRPCServerAndClient, JSONRPCServer, JSONRPCClient } from "json-rpc-2.0";
 import { ClaudeAgent } from "./claude-agent.js";
 import { parseAgentConfig } from "./config.js";
 import type {
-  InboundMessage,
+  QueryParams,
+  QueryResult,
+  CancelResult,
+  ToolApprovalResult,
+  FeedbackRequestResult,
+  ReviewRequestResult,
+  MessageNotificationParams,
   OutboundMessage,
-  ExecuteCommand,
 } from "./protocol.js";
+import { METHOD_NAMES } from "./protocol.js";
 import type { PermissionRequestEvent, FeedbackRequestEvent, ReviewRequestEvent, ReviewSubmissionData } from "./types.js";
 
-// ── Output ──
+// ── Socket path ──
 
-function send(msg: OutboundMessage): void {
-  process.stdout.write(JSON.stringify(msg) + "\n");
-}
+const SOCKET_PATH = join(tmpdir(), `meldui-sidecar-${process.pid}.sock`);
 
-// ── Permission tracking ──
+// ── Cleanup ──
 
-const pendingPermissions = new Map<
-  string,
-  (result: "allow" | "always-allow" | "deny") => void
->();
-
-// ── Feedback tracking ──
-
-const pendingFeedback = new Map<
-  string,
-  (response: { approved: boolean; feedback?: string }) => void
->();
-
-// ── Review tracking ──
-
-const pendingReviews = new Map<
-  string,
-  (submission: ReviewSubmissionData) => void
->();
-
-// ── Stdin reader ──
-
-async function* readLines(): AsyncGenerator<string> {
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  for await (const chunk of Bun.stdin.stream()) {
-    buffer += decoder.decode(chunk as Uint8Array, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (line.trim()) {
-        yield line.trim();
-      }
+function cleanup(): void {
+  try {
+    if (existsSync(SOCKET_PATH)) {
+      unlinkSync(SOCKET_PATH);
     }
-  }
-  if (buffer.trim()) {
-    yield buffer.trim();
+  } catch {
+    // Ignore cleanup errors
   }
 }
+
+process.on("SIGINT", () => {
+  cleanup();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  cleanup();
+  process.exit(0);
+});
+
+process.on("exit", cleanup);
+
+// ── ppid watchdog — detect orphan if parent dies ──
+
+const originalPpid = process.ppid;
+const ppidWatchdog = setInterval(() => {
+  if (process.ppid !== originalPpid) {
+    process.stderr.write("[sidecar] Parent process died (ppid changed), exiting\n");
+    cleanup();
+    process.exit(1);
+  }
+}, 2000);
+ppidWatchdog.unref();
 
 // ── Main ──
 
+let activeAgent: ClaudeAgent | null = null;
+
 async function main(): Promise<void> {
-  const lineReader = readLines();
+  // Clean up stale socket if it exists (from previous crash)
+  cleanup();
 
-  // Read first line: execute command
-  const firstLine = await lineReader.next();
-  if (firstLine.done || !firstLine.value) {
-    send({ type: "error", message: "No input received on stdin" });
-    process.exit(1);
-  }
+  const server = createServer();
 
-  let executeCmd: ExecuteCommand;
-  try {
-    const parsed = JSON.parse(firstLine.value) as InboundMessage;
-    if (parsed.type !== "execute") {
-      send({ type: "error", message: `Expected 'execute' command, got '${parsed.type}'` });
-      process.exit(1);
-    }
-    executeCmd = parsed;
-  } catch (err) {
-    send({ type: "error", message: `Failed to parse initial command: ${err}` });
-    process.exit(1);
-  }
-
-  const config = parseAgentConfig(executeCmd.config);
-  const agent = new ClaudeAgent(send);
-
-  // ── Wire agent events to stdout NDJSON ──
-
-  agent.on("chat-session", ({ sessionId }) => {
-    send({ type: "session", session_id: sessionId });
+  server.listen(SOCKET_PATH, () => {
+    // Socket is ready — announce path to Rust
+    process.stdout.write(`SOCKET_PATH=${SOCKET_PATH}\n`);
   });
 
-  agent.on("chat-agent-message", ({ content }) => {
-    send({ type: "text", content });
-  });
-
-  agent.on("tool-use-start", ({ name, id }) => {
-    send({ type: "tool_start", tool_name: name, tool_id: id });
-  });
-
-  agent.on("tool-input-delta", ({ id, partialJson }) => {
-    send({ type: "tool_input", tool_id: id, content: partialJson });
-  });
-
-  agent.on("tool-use-end", ({ id }) => {
-    send({ type: "tool_end", tool_id: id });
-  });
-
-  agent.on("chat-tool-result", ({ toolUseId, content, isError }) => {
-    send({
-      type: "tool_result",
-      tool_id: toolUseId,
-      content,
-      is_error: isError,
+  // Wait for single client connection
+  const socket = await new Promise<Socket>((resolve, reject) => {
+    server.once("connection", (conn) => {
+      // Single-connection enforcement: close listener after first connection
+      server.close();
+      resolve(conn);
     });
+    server.once("error", reject);
   });
 
-  agent.on("thinking-update", ({ text }) => {
-    send({ type: "thinking", content: text });
-  });
+  // ── JSON-RPC setup ──
 
-  agent.on("tool-progress", ({ toolUseId, toolName, elapsedSeconds }) => {
-    send({ type: "tool_progress", tool_use_id: toolUseId, tool_name: toolName, elapsed_seconds: elapsedSeconds });
-  });
+  let sendBuffer = "";
 
-  agent.on("tool-use-summary", ({ summary, toolIds }) => {
-    send({ type: "tool_use_summary", summary, tool_ids: toolIds });
-  });
+  const rpc = new JSONRPCServerAndClient(
+    new JSONRPCServer(),
+    new JSONRPCClient((request) => {
+      const json = JSON.stringify(request) + "\n";
+      return new Promise<void>((resolve, reject) => {
+        socket.write(json, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    })
+  );
 
-  agent.on("subagent-start", ({ taskId, toolUseId, description }) => {
-    send({ type: "subagent_start", task_id: taskId, tool_use_id: toolUseId, description });
-  });
+  // ── Wire socket data to JSON-RPC ──
 
-  agent.on("subagent-progress", ({ taskId, summary, lastToolName, usage }) => {
-    send({ type: "subagent_progress", task_id: taskId, summary, last_tool_name: lastToolName, usage });
-  });
-
-  agent.on("subagent-complete", ({ taskId, status, summary, usage }) => {
-    send({ type: "subagent_complete", task_id: taskId, status, summary, usage });
-  });
-
-  agent.on("files-persisted", ({ files }) => {
-    send({ type: "files_changed", files });
-  });
-
-  agent.on("status-change", ({ isCompacting }) => {
-    send({ type: "compacting", is_compacting: isCompacting });
-  });
-
-  agent.on("permission-request", (event: PermissionRequestEvent) => {
-    pendingPermissions.set(event.requestId, event.resolve);
-    send({
-      type: "permission_request",
-      request_id: event.requestId,
-      tool_name: event.toolName,
-      input: event.input,
-    });
-  });
-
-  agent.on("feedback-request", (event: FeedbackRequestEvent) => {
-    pendingFeedback.set(event.requestId, event.resolve);
-    send({
-      type: "feedback_request",
-      request_id: event.requestId,
-      ticket_id: event.ticketId,
-      summary: event.summary,
-    });
-  });
-
-  agent.on("review-request", (event: ReviewRequestEvent) => {
-    pendingReviews.set(event.requestId, event.resolve);
-    send({
-      type: "review_findings",
-      request_id: event.requestId,
-      ticket_id: event.ticketId,
-      findings: event.findings,
-      summary: event.summary,
-    });
-  });
-
-  agent.on("completed", ({ response, sessionId }) => {
-    send({ type: "result", content: response, session_id: sessionId });
-  });
-
-  agent.on("failed", ({ message }) => {
-    send({ type: "error", message });
-  });
-
-  agent.on("stopped", () => {
-    send({ type: "result", content: "", session_id: "" });
-  });
-
-  // ── Listen for stdin commands (permission responses, cancel) ──
-  // Runs concurrently with execute — handles permission responses and cancel.
-
-  void (async () => {
-    for await (const line of lineReader) {
-      try {
-        const msg = JSON.parse(line) as InboundMessage;
-
-        switch (msg.type) {
-          case "permission_response": {
-            const resolve = pendingPermissions.get(msg.request_id);
-            if (resolve) {
-              resolve(msg.allowed ? "allow" : "deny");
-              pendingPermissions.delete(msg.request_id);
-            }
-            break;
-          }
-          case "feedback_response": {
-            const resolve = pendingFeedback.get(msg.request_id);
-            if (resolve) {
-              resolve({ approved: msg.approved, feedback: msg.feedback });
-              pendingFeedback.delete(msg.request_id);
-            }
-            break;
-          }
-          case "review_response": {
-            const resolve = pendingReviews.get(msg.request_id);
-            if (resolve) {
-              resolve(msg.submission);
-              pendingReviews.delete(msg.request_id);
-            }
-            break;
-          }
-          case "cancel": {
-            agent.stop();
-            break;
-          }
+  socket.on("data", (chunk) => {
+    sendBuffer += chunk.toString();
+    const lines = sendBuffer.split("\n");
+    sendBuffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.trim()) {
+        try {
+          const message = JSON.parse(line);
+          rpc.receiveAndSend(message);
+        } catch (err) {
+          process.stderr.write(`[sidecar] Failed to parse JSON-RPC message: ${err}\n`);
         }
-      } catch {
-        // Ignore malformed stdin lines
       }
     }
-  })();
+  });
 
-  // ── Execute ──
+  socket.on("close", () => {
+    process.stderr.write("[sidecar] Socket closed by client\n");
+    rpc.rejectAllPendingRequests("Connection closed");
+    cleanup();
+    process.exit(0);
+  });
 
-  try {
-    await agent.execute(executeCmd.prompt, config);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[main-catch] Unhandled execute error: ${message}\n`);
-    if (err instanceof Error && err.stack) {
-      process.stderr.write(`[main-stack] ${err.stack}\n`);
+  socket.on("error", (err) => {
+    process.stderr.write(`[sidecar] Socket error: ${err.message}\n`);
+  });
+
+  // ── Helper: send notification ──
+
+  function notify(method: string, params: unknown): void {
+    rpc.notify(method, params);
+  }
+
+  function sendMessage(msg: OutboundMessage): void {
+    notify(METHOD_NAMES.message, msg);
+  }
+
+  // ── Register JSON-RPC methods (Rust → Sidecar) ──
+
+  rpc.addMethod(METHOD_NAMES.query, async (params: QueryParams): Promise<QueryResult> => {
+    const config = parseAgentConfig(params.config);
+    const agent = new ClaudeAgent(sendMessage);
+    activeAgent = agent;
+
+    // ── Wire agent events to JSON-RPC notifications ──
+
+    agent.on("chat-session", ({ sessionId }) => {
+      sendMessage({ type: "session", session_id: sessionId });
+    });
+
+    agent.on("chat-agent-message", ({ content }) => {
+      sendMessage({ type: "text", content });
+    });
+
+    agent.on("tool-use-start", ({ name, id }) => {
+      sendMessage({ type: "tool_start", tool_name: name, tool_id: id });
+    });
+
+    agent.on("tool-input-delta", ({ id, partialJson }) => {
+      sendMessage({ type: "tool_input", tool_id: id, content: partialJson });
+    });
+
+    agent.on("tool-use-end", ({ id }) => {
+      sendMessage({ type: "tool_end", tool_id: id });
+    });
+
+    agent.on("chat-tool-result", ({ toolUseId, content, isError }) => {
+      sendMessage({ type: "tool_result", tool_id: toolUseId, content, is_error: isError });
+    });
+
+    agent.on("thinking-update", ({ text }) => {
+      sendMessage({ type: "thinking", content: text });
+    });
+
+    agent.on("tool-progress", ({ toolUseId, toolName, elapsedSeconds }) => {
+      sendMessage({ type: "tool_progress", tool_use_id: toolUseId, tool_name: toolName, elapsed_seconds: elapsedSeconds });
+    });
+
+    agent.on("tool-use-summary", ({ summary, toolIds }) => {
+      sendMessage({ type: "tool_use_summary", summary, tool_ids: toolIds });
+    });
+
+    agent.on("subagent-start", ({ taskId, toolUseId, description }) => {
+      sendMessage({ type: "subagent_start", task_id: taskId, tool_use_id: toolUseId, description });
+    });
+
+    agent.on("subagent-progress", ({ taskId, summary, lastToolName, usage }) => {
+      sendMessage({ type: "subagent_progress", task_id: taskId, summary, last_tool_name: lastToolName, usage });
+    });
+
+    agent.on("subagent-complete", ({ taskId, status, summary, usage }) => {
+      sendMessage({ type: "subagent_complete", task_id: taskId, status, summary, usage });
+    });
+
+    agent.on("files-persisted", ({ files }) => {
+      sendMessage({ type: "files_changed", files });
+    });
+
+    agent.on("status-change", ({ isCompacting }) => {
+      sendMessage({ type: "compacting", is_compacting: isCompacting });
+    });
+
+    agent.on("permission-request", (event: PermissionRequestEvent) => {
+      // Send JSON-RPC request to Rust with heartbeats while awaiting response
+      const heartbeat = setInterval(() => {
+        sendMessage({ type: "heartbeat" });
+      }, 30_000);
+
+      rpc.request(METHOD_NAMES.toolApproval, {
+        requestId: event.requestId,
+        toolName: event.toolName,
+        input: event.input,
+      } satisfies Record<string, unknown>)
+        .then((result: ToolApprovalResult) => {
+          event.resolve(result.decision);
+        })
+        .catch((err) => {
+          process.stderr.write(`[sidecar] toolApproval request failed: ${err}\n`);
+          event.resolve("deny");
+        })
+        .finally(() => {
+          clearInterval(heartbeat);
+        });
+    });
+
+    agent.on("feedback-request", (event: FeedbackRequestEvent) => {
+      const heartbeat = setInterval(() => {
+        sendMessage({ type: "heartbeat" });
+      }, 30_000);
+
+      rpc.request(METHOD_NAMES.feedbackRequest, {
+        requestId: event.requestId,
+        ticketId: event.ticketId,
+        summary: event.summary,
+      } satisfies Record<string, unknown>)
+        .then((result: FeedbackRequestResult) => {
+          event.resolve({ approved: result.approved, feedback: result.feedback });
+        })
+        .catch((err) => {
+          process.stderr.write(`[sidecar] feedbackRequest failed: ${err}\n`);
+          event.resolve({ approved: false });
+        })
+        .finally(() => {
+          clearInterval(heartbeat);
+        });
+    });
+
+    agent.on("review-request", (event: ReviewRequestEvent) => {
+      const heartbeat = setInterval(() => {
+        sendMessage({ type: "heartbeat" });
+      }, 30_000);
+
+      rpc.request(METHOD_NAMES.reviewRequest, {
+        requestId: event.requestId,
+        ticketId: event.ticketId,
+        findings: event.findings,
+        summary: event.summary,
+      } satisfies Record<string, unknown>)
+        .then((result: ReviewRequestResult) => {
+          event.resolve(result.submission);
+        })
+        .catch((err) => {
+          process.stderr.write(`[sidecar] reviewRequest failed: ${err}\n`);
+          event.resolve({
+            action: "approve",
+            summary: "Review failed due to communication error",
+            comments: [],
+            finding_actions: [],
+          });
+        })
+        .finally(() => {
+          clearInterval(heartbeat);
+        });
+    });
+
+    // ── Launch agent execution in detached async task ──
+
+    void (async () => {
+      try {
+        await agent.execute(params.prompt, config);
+
+        // completed/failed/stopped events are emitted by ClaudeAgent itself.
+        // Wire them to queryComplete/queryError notifications.
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[sidecar] Unhandled execute error: ${message}\n`);
+        notify(METHOD_NAMES.queryError, { message });
+      }
+    })();
+
+    // Wire completion events (these fire from ClaudeAgent after execute resolves)
+    agent.on("completed", ({ response, sessionId }) => {
+      notify(METHOD_NAMES.queryComplete, { sessionId, response });
+    });
+
+    agent.on("failed", ({ message }) => {
+      notify(METHOD_NAMES.queryError, { message });
+    });
+
+    agent.on("stopped", () => {
+      notify(METHOD_NAMES.queryComplete, { sessionId: "", response: "" });
+    });
+
+    return { status: "started" as const };
+  });
+
+  rpc.addMethod(METHOD_NAMES.cancel, async (): Promise<CancelResult> => {
+    if (activeAgent) {
+      activeAgent.stop();
     }
-    send({ type: "error", message });
-  }
+    return { status: "cancelled" as const };
+  });
 
-  // Ensure all stdout is flushed before exiting
-  if (process.stdout.writableNeedDrain) {
-    await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
-  }
-  process.exit(0);
+  // Keep process alive while socket is open
+  await new Promise<void>((resolve) => {
+    socket.on("close", resolve);
+  });
 }
 
 main().catch((err) => {
-  send({ type: "error", message: `Fatal: ${err}` });
+  process.stderr.write(`[sidecar] Fatal: ${err}\n`);
+  cleanup();
   process.exit(1);
 });

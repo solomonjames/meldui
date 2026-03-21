@@ -1,66 +1,13 @@
 /**
- * NDJSON protocol types for stdin/stdout communication
+ * JSON-RPC 2.0 protocol types for Unix socket communication
  * between the Rust backend and the agent sidecar.
+ *
+ * Transport: Newline-delimited JSON-RPC 2.0 over Unix domain socket.
+ * Sidecar = socket server, Rust = socket client.
+ * Both sides act as simultaneous JSON-RPC client + server.
  */
 
-// ── Stdin: Rust → Sidecar ──
-
-export interface ExecuteCommand {
-  type: "execute";
-  prompt: string;
-  config: SidecarConfig;
-}
-
-export interface PermissionResponseCommand {
-  type: "permission_response";
-  request_id: string;
-  allowed: boolean;
-}
-
-export interface CancelCommand {
-  type: "cancel";
-}
-
-export interface FeedbackResponseCommand {
-  type: "feedback_response";
-  request_id: string;
-  approved: boolean;
-  feedback?: string;
-}
-
-export interface ReviewResponseCommand {
-  type: "review_response";
-  request_id: string;
-  submission: ReviewSubmissionPayload;
-}
-
-export interface ReviewSubmissionPayload {
-  action: "approve" | "request_changes";
-  summary: string;
-  comments: ReviewCommentPayload[];
-  finding_actions: FindingActionPayload[];
-}
-
-export interface ReviewCommentPayload {
-  id: string;
-  file_path: string;
-  line_number: number;
-  content: string;
-  suggestion?: string;
-  resolved: boolean;
-}
-
-export interface FindingActionPayload {
-  finding_id: string;
-  action: "fix" | "accept" | "dismiss";
-}
-
-export type InboundMessage =
-  | ExecuteCommand
-  | PermissionResponseCommand
-  | FeedbackResponseCommand
-  | ReviewResponseCommand
-  | CancelCommand;
+// ── Sidecar Config (unchanged — used by config.ts) ──
 
 export interface SidecarConfig {
   project_dir: string;
@@ -73,7 +20,122 @@ export interface SidecarConfig {
   tickets_dir?: string;
 }
 
-// ── Stdout: Sidecar → Rust ──
+// ── JSON-RPC Method Names ──
+
+export const METHOD_NAMES = {
+  // Rust → Sidecar (requests)
+  query: "query",
+  cancel: "cancel",
+
+  // Sidecar → Rust (notifications)
+  message: "message",
+  queryComplete: "queryComplete",
+  queryError: "queryError",
+
+  // Sidecar → Rust (requests — expect response)
+  toolApproval: "toolApproval",
+  feedbackRequest: "feedbackRequest",
+  reviewRequest: "reviewRequest",
+} as const;
+
+// ── Rust → Sidecar: Request Params & Results ──
+
+export interface QueryParams {
+  prompt: string;
+  config: SidecarConfig;
+}
+
+export interface QueryResult {
+  status: "started";
+}
+
+export interface CancelParams {
+  // empty
+}
+
+export interface CancelResult {
+  status: "cancelled";
+}
+
+// ── Sidecar → Rust: Notification Params ──
+
+/**
+ * All streaming message types are wrapped in a `message` notification.
+ * The `type` field discriminates the message kind (same types as the
+ * old OutboundMessage union, minus permission/feedback/review which
+ * are now JSON-RPC requests).
+ */
+export type MessageNotificationParams =
+  | SessionMessage
+  | TextMessage
+  | ToolStartMessage
+  | ToolInputMessage
+  | ToolEndMessage
+  | ToolResultMessage
+  | ThinkingMessage
+  | ResultMessage
+  | ErrorMessage
+  | SectionUpdateMessage
+  | NotificationMessage
+  | StepCompleteMessage
+  | StatusUpdateMessage
+  | HeartbeatMessage
+  | PrUrlReportedMessage
+  | ToolProgressMessage
+  | SubagentStartMessage
+  | SubagentProgressMessage
+  | SubagentCompleteMessage
+  | FilesChangedMessage
+  | ToolUseSummaryMessage
+  | CompactingMessage
+  | SubtaskCreatedMessage
+  | SubtaskUpdatedMessage
+  | SubtaskClosedMessage;
+
+export interface QueryCompleteParams {
+  sessionId: string;
+  response: string;
+}
+
+export interface QueryErrorParams {
+  message: string;
+}
+
+// ── Sidecar → Rust: Reverse Request Params & Results ──
+
+export interface ToolApprovalParams {
+  requestId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+}
+
+export interface ToolApprovalResult {
+  decision: "allow" | "always-allow" | "deny";
+}
+
+export interface FeedbackRequestParams {
+  requestId: string;
+  ticketId: string;
+  summary: string;
+}
+
+export interface FeedbackRequestResult {
+  approved: boolean;
+  feedback?: string;
+}
+
+export interface ReviewRequestParams {
+  requestId: string;
+  ticketId: string;
+  findings: ReviewFindingPayload[];
+  summary: string;
+}
+
+export interface ReviewRequestResult {
+  submission: ReviewSubmissionPayload;
+}
+
+// ── Streaming Message Types (used inside `message` notifications) ──
 
 export interface SessionMessage {
   type: "session";
@@ -109,13 +171,6 @@ export interface ToolResultMessage {
   is_error: boolean;
 }
 
-export interface PermissionRequestMessage {
-  type: "permission_request";
-  request_id: string;
-  tool_name: string;
-  input: Record<string, unknown>;
-}
-
 export interface ThinkingMessage {
   type: "thinking";
   content: string;
@@ -131,8 +186,6 @@ export interface ErrorMessage {
   type: "error";
   message: string;
 }
-
-// ── MeldUI MCP → App events ──
 
 export interface SectionUpdateMessage {
   type: "section_update";
@@ -161,6 +214,10 @@ export interface StatusUpdateMessage {
   status_text: string;
 }
 
+export interface HeartbeatMessage {
+  type: "heartbeat";
+}
+
 export interface PrUrlReportedMessage {
   type: "pr_url_reported";
   ticket_id: string;
@@ -184,38 +241,6 @@ export interface SubtaskClosedMessage {
   subtask_id: string;
   parent_id: string;
 }
-
-export interface FeedbackRequestMessage {
-  type: "feedback_request";
-  request_id: string;
-  ticket_id: string;
-  summary: string;
-}
-
-export interface HeartbeatMessage {
-  type: "heartbeat";
-}
-
-export interface ReviewFindingsMessage {
-  type: "review_findings";
-  request_id: string;
-  ticket_id: string;
-  findings: ReviewFindingPayload[];
-  summary: string;
-}
-
-export interface ReviewFindingPayload {
-  id: string;
-  file_path: string;
-  line_number?: number;
-  severity: "critical" | "warning" | "info";
-  validity: "real" | "noise" | "undecided";
-  title: string;
-  description: string;
-  suggestion?: string;
-}
-
-// ── Agent SDK message types ──
 
 export interface ToolProgressMessage {
   type: "tool_progress";
@@ -263,32 +288,41 @@ export interface CompactingMessage {
   is_compacting: boolean;
 }
 
-export type OutboundMessage =
-  | SessionMessage
-  | TextMessage
-  | ToolStartMessage
-  | ToolInputMessage
-  | ToolEndMessage
-  | ToolResultMessage
-  | PermissionRequestMessage
-  | ThinkingMessage
-  | ResultMessage
-  | ErrorMessage
-  | SectionUpdateMessage
-  | NotificationMessage
-  | StepCompleteMessage
-  | StatusUpdateMessage
-  | FeedbackRequestMessage
-  | HeartbeatMessage
-  | ReviewFindingsMessage
-  | PrUrlReportedMessage
-  | ToolProgressMessage
-  | SubagentStartMessage
-  | SubagentProgressMessage
-  | SubagentCompleteMessage
-  | FilesChangedMessage
-  | ToolUseSummaryMessage
-  | CompactingMessage
-  | SubtaskCreatedMessage
-  | SubtaskUpdatedMessage
-  | SubtaskClosedMessage;
+// ── Review types (used by review flow — unchanged) ──
+
+export interface ReviewSubmissionPayload {
+  action: "approve" | "request_changes";
+  summary: string;
+  comments: ReviewCommentPayload[];
+  finding_actions: FindingActionPayload[];
+}
+
+export interface ReviewCommentPayload {
+  id: string;
+  file_path: string;
+  line_number: number;
+  content: string;
+  suggestion?: string;
+  resolved: boolean;
+}
+
+export interface FindingActionPayload {
+  finding_id: string;
+  action: "fix" | "accept" | "dismiss";
+}
+
+export interface ReviewFindingPayload {
+  id: string;
+  file_path: string;
+  line_number?: number;
+  severity: "critical" | "warning" | "info";
+  validity: "real" | "noise" | "undecided";
+  title: string;
+  description: string;
+  suggestion?: string;
+}
+
+// ── Legacy compatibility: OutboundMessage union ──
+// Used by ClaudeAgent's sendFn signature. These are all types
+// that can be sent as `message` notification params.
+export type OutboundMessage = MessageNotificationParams;

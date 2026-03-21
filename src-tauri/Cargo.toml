@@ -24,10 +24,11 @@ tauri-plugin-log = "2"
 tauri-plugin-shell = "2.3.5"
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
-tokio = { version = "1", features = ["process", "io-util", "sync"] }
+tokio = { version = "1", features = ["process", "io-util", "sync", "net"] }
 serde_yaml = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 unidiff = "0.4.0"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+libc = "0.2"

@@ -2,15 +2,62 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::UnixStream;
 use tokio::process::Command;
 use tokio::sync::Mutex;
 
 use crate::claude::StreamChunk;
 
-/// Config sent to the agent sidecar as the first stdin line.
+// ── JSON-RPC 2.0 Structs ──
+
+#[derive(Debug, Serialize)]
+struct JsonRpcRequest {
+    jsonrpc: &'static str,
+    id: u64,
+    method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    params: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct JsonRpcMessage {
+    #[allow(dead_code)]
+    jsonrpc: Option<String>,
+    // Present if this is a request or notification
+    method: Option<String>,
+    params: Option<serde_json::Value>,
+    // Present if this is a request (not notification)
+    id: Option<serde_json::Value>,
+    // Present if this is a response
+    result: Option<serde_json::Value>,
+    error: Option<JsonRpcError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct JsonRpcError {
+    #[allow(dead_code)]
+    code: i64,
+    message: String,
+    #[allow(dead_code)]
+    data: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonRpcResponse {
+    jsonrpc: &'static str,
+    id: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<serde_json::Value>,
+}
+
+// ── Config sent as `query` params ──
+
 #[derive(Debug, Serialize, Clone)]
 struct SidecarConfig {
     project_dir: String,
@@ -30,33 +77,9 @@ struct SidecarConfig {
     tickets_dir: Option<String>,
 }
 
-/// Execute command sent on stdin first line.
-#[derive(Debug, Serialize)]
-struct ExecuteCommand {
-    #[serde(rename = "type")]
-    cmd_type: String,
-    prompt: String,
-    config: SidecarConfig,
-}
+// ── Event types emitted to frontend (unchanged) ──
 
-/// Permission response sent on stdin.
-#[derive(Debug, Serialize)]
-struct PermissionResponse {
-    #[serde(rename = "type")]
-    cmd_type: String,
-    request_id: String,
-    allowed: bool,
-}
-
-/// Cancel command sent on stdin.
-#[derive(Debug, Serialize)]
-#[allow(dead_code)]
-struct CancelCommand {
-    #[serde(rename = "type")]
-    cmd_type: String,
-}
-
-/// Permission request received from the sidecar on stdout.
+/// Permission request received from the sidecar.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AgentPermissionRequest {
     pub request_id: String,
@@ -64,7 +87,7 @@ pub struct AgentPermissionRequest {
     pub input: serde_json::Value,
 }
 
-/// Feedback request received from the sidecar on stdout.
+/// Feedback request received from the sidecar.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AgentFeedbackRequest {
     pub request_id: String,
@@ -72,27 +95,7 @@ pub struct AgentFeedbackRequest {
     pub summary: String,
 }
 
-/// Feedback response sent on stdin.
-#[derive(Debug, Serialize)]
-struct FeedbackResponse {
-    #[serde(rename = "type")]
-    cmd_type: String,
-    request_id: String,
-    approved: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    feedback: Option<String>,
-}
-
-/// Review response sent on stdin.
-#[derive(Debug, Serialize)]
-struct ReviewResponse {
-    #[serde(rename = "type")]
-    cmd_type: String,
-    request_id: String,
-    submission: serde_json::Value,
-}
-
-/// Review findings request received from the sidecar on stdout.
+/// Review findings request received from the sidecar.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AgentReviewFindingsRequest {
     pub request_id: String,
@@ -101,128 +104,131 @@ pub struct AgentReviewFindingsRequest {
     pub summary: String,
 }
 
-/// Active agent handle — holds the child process stdin for sending commands.
+// ── Pending request types for oneshot channels ──
+
+struct PendingPermission {
+    json_rpc_id: serde_json::Value,
+}
+
+struct PendingFeedback {
+    json_rpc_id: serde_json::Value,
+}
+
+struct PendingReview {
+    json_rpc_id: serde_json::Value,
+}
+
+/// Active agent handle — holds socket writer and pending request channels.
 pub struct AgentHandle {
-    stdin: Arc<Mutex<Option<tokio::process::ChildStdin>>>,
+    socket_writer: Arc<Mutex<tokio::io::WriteHalf<UnixStream>>>,
+    pending_permission: Arc<Mutex<Option<PendingPermission>>>,
+    pending_feedback: Arc<Mutex<Option<PendingFeedback>>>,
+    pending_review: Arc<Mutex<Option<PendingReview>>>,
+    next_id: Arc<AtomicU64>,
 }
 
 impl AgentHandle {
-    /// Send a permission response to the sidecar.
-    pub async fn respond_to_permission(
-        &self,
-        request_id: &str,
-        allowed: bool,
-    ) -> Result<(), String> {
-        let response = PermissionResponse {
-            cmd_type: "permission_response".to_string(),
-            request_id: request_id.to_string(),
-            allowed,
-        };
-        let json =
-            serde_json::to_string(&response).map_err(|e| format!("Serialize error: {}", e))?;
-
-        let mut stdin_guard = self.stdin.lock().await;
-        if let Some(stdin) = stdin_guard.as_mut() {
-            stdin
-                .write_all(format!("{}\n", json).as_bytes())
-                .await
-                .map_err(|e| format!("Failed to write to sidecar stdin: {}", e))?;
-            stdin
-                .flush()
-                .await
-                .map_err(|e| format!("Failed to flush sidecar stdin: {}", e))?;
-        } else {
-            return Err("Agent sidecar stdin not available".to_string());
-        }
-
+    /// Send a JSON-RPC message over the socket.
+    async fn send_raw(&self, json: &str) -> Result<(), String> {
+        let mut writer = self.socket_writer.lock().await;
+        writer
+            .write_all(format!("{}\n", json).as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write to socket: {}", e))?;
+        writer
+            .flush()
+            .await
+            .map_err(|e| format!("Failed to flush socket: {}", e))?;
         Ok(())
     }
 
-    /// Send a feedback response to the sidecar.
+    /// Send a JSON-RPC response.
+    async fn send_response(
+        &self,
+        id: serde_json::Value,
+        result: serde_json::Value,
+    ) -> Result<(), String> {
+        let response = JsonRpcResponse {
+            jsonrpc: "2.0",
+            id,
+            result: Some(result),
+            error: None,
+        };
+        let json =
+            serde_json::to_string(&response).map_err(|e| format!("Serialize error: {}", e))?;
+        self.send_raw(&json).await
+    }
+
+    /// Send a permission response — resolves the pending oneshot channel.
+    pub async fn respond_to_permission(
+        &self,
+        _request_id: &str,
+        allowed: bool,
+    ) -> Result<(), String> {
+        let mut pending = self.pending_permission.lock().await;
+        if let Some(p) = pending.take() {
+            // Send JSON-RPC response to sidecar
+            let decision = if allowed { "allow" } else { "deny" };
+            self.send_response(p.json_rpc_id, serde_json::json!({ "decision": decision }))
+                .await?;
+            Ok(())
+        } else {
+            Err("No pending permission request".to_string())
+        }
+    }
+
+    /// Send a feedback response.
     pub async fn respond_to_feedback(
         &self,
-        request_id: &str,
+        _request_id: &str,
         approved: bool,
         feedback: Option<String>,
     ) -> Result<(), String> {
-        let response = FeedbackResponse {
-            cmd_type: "feedback_response".to_string(),
-            request_id: request_id.to_string(),
-            approved,
-            feedback,
-        };
-        let json =
-            serde_json::to_string(&response).map_err(|e| format!("Serialize error: {}", e))?;
-
-        let mut stdin_guard = self.stdin.lock().await;
-        if let Some(stdin) = stdin_guard.as_mut() {
-            stdin
-                .write_all(format!("{}\n", json).as_bytes())
-                .await
-                .map_err(|e| format!("Failed to write to sidecar stdin: {}", e))?;
-            stdin
-                .flush()
-                .await
-                .map_err(|e| format!("Failed to flush sidecar stdin: {}", e))?;
+        let mut pending = self.pending_feedback.lock().await;
+        if let Some(p) = pending.take() {
+            self.send_response(
+                p.json_rpc_id,
+                serde_json::json!({ "approved": approved, "feedback": feedback }),
+            )
+            .await?;
+            Ok(())
         } else {
-            return Err("Agent sidecar stdin not available".to_string());
+            Err("No pending feedback request".to_string())
         }
-
-        Ok(())
     }
 
-    /// Send a review response to the sidecar.
+    /// Send a review response.
     pub async fn respond_to_review(
         &self,
-        request_id: &str,
+        _request_id: &str,
         submission: serde_json::Value,
     ) -> Result<(), String> {
-        let response = ReviewResponse {
-            cmd_type: "review_response".to_string(),
-            request_id: request_id.to_string(),
-            submission,
-        };
-        let json =
-            serde_json::to_string(&response).map_err(|e| format!("Serialize error: {}", e))?;
-
-        let mut stdin_guard = self.stdin.lock().await;
-        if let Some(stdin) = stdin_guard.as_mut() {
-            stdin
-                .write_all(format!("{}\n", json).as_bytes())
-                .await
-                .map_err(|e| format!("Failed to write to sidecar stdin: {}", e))?;
-            stdin
-                .flush()
-                .await
-                .map_err(|e| format!("Failed to flush sidecar stdin: {}", e))?;
+        let mut pending = self.pending_review.lock().await;
+        if let Some(p) = pending.take() {
+            self.send_response(
+                p.json_rpc_id,
+                serde_json::json!({ "submission": submission }),
+            )
+            .await?;
+            Ok(())
         } else {
-            return Err("Agent sidecar stdin not available".to_string());
+            Err("No pending review request".to_string())
         }
-
-        Ok(())
     }
 
-    /// Send cancel command to the sidecar.
+    /// Send cancel JSON-RPC request.
     #[allow(dead_code)]
     pub async fn cancel(&self) -> Result<(), String> {
-        let cmd = CancelCommand {
-            cmd_type: "cancel".to_string(),
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0",
+            id,
+            method: "cancel".to_string(),
+            params: Some(serde_json::json!({})),
         };
-        let json = serde_json::to_string(&cmd).map_err(|e| format!("Serialize error: {}", e))?;
-
-        let mut stdin_guard = self.stdin.lock().await;
-        if let Some(stdin) = stdin_guard.as_mut() {
-            stdin
-                .write_all(format!("{}\n", json).as_bytes())
-                .await
-                .map_err(|e| format!("Failed to write cancel to sidecar: {}", e))?;
-            stdin
-                .flush()
-                .await
-                .map_err(|e| format!("Failed to flush cancel: {}", e))?;
-        }
-
-        Ok(())
+        let json =
+            serde_json::to_string(&request).map_err(|e| format!("Serialize error: {}", e))?;
+        self.send_raw(&json).await
     }
 }
 
@@ -328,6 +334,40 @@ fn augmented_path() -> String {
     parts.join(":")
 }
 
+/// Clean up stale socket files from dead sidecar processes.
+fn cleanup_stale_sockets() {
+    let tmpdir = env::temp_dir();
+    let entries = match std::fs::read_dir(&tmpdir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let filename = match entry.file_name().into_string() {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        if !filename.starts_with("meldui-sidecar-") || !filename.ends_with(".sock") {
+            continue;
+        }
+        let pid_str = &filename["meldui-sidecar-".len()..filename.len() - ".sock".len()];
+        let pid: i32 = match pid_str.parse() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        // Check if PID is still running via kill(pid, 0) syscall
+        let alive = unsafe { libc::kill(pid as libc::pid_t, 0) == 0 };
+        if !alive {
+            log::info!(
+                "agent: removing stale socket {:?} (pid {} dead)",
+                entry.path(),
+                pid
+            );
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
 /// Determine allowed tools based on step view type.
 pub fn tools_for_view(view: &str) -> Vec<String> {
     match view {
@@ -385,10 +425,13 @@ pub async fn execute_step(
 
     log::info!("agent: using binary at {:?}", agent_bin);
 
+    // Clean up stale sockets from dead processes
+    cleanup_stale_sockets();
+
     // NDJSON capture file for recording sessions (set MELDUI_CAPTURE_NDJSON=path)
     let capture_file = env::var("MELDUI_CAPTURE_NDJSON").ok();
     if let Some(ref path) = capture_file {
-        log::info!("agent: capturing NDJSON to {}", path);
+        log::info!("agent: capturing messages to {}", path);
     }
 
     let config = SidecarConfig {
@@ -408,17 +451,8 @@ pub async fn execute_step(
 
     let tools_summary = config.allowed_tools.as_ref().map(|t| t.join(","));
 
-    let execute_cmd = ExecuteCommand {
-        cmd_type: "execute".to_string(),
-        prompt: prompt.to_string(),
-        config,
-    };
-
-    let execute_json = serde_json::to_string(&execute_cmd)
-        .map_err(|e| format!("Failed to serialize execute command: {}", e))?;
-
     log::info!(
-        "agent: sending execute command for issue {} (session={}, tools={:?}, prompt_len={})",
+        "agent: executing for issue {} (session={}, tools={:?}, prompt_len={})",
         issue_id,
         session_id.unwrap_or("new"),
         tools_summary,
@@ -428,9 +462,11 @@ pub async fn execute_step(
     let start_time = std::time::Instant::now();
 
     // Spawn the sidecar with augmented PATH + forward auth/env vars
+    // stdout is captured only for SOCKET_PATH announcement
+    // stdin is NOT piped (no longer used for IPC)
     let mut cmd = Command::new(&agent_bin);
     cmd.env("PATH", augmented_path())
-        .stdin(Stdio::piped())
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -456,25 +492,76 @@ pub async fn execute_step(
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to spawn agent sidecar: {}", e))?;
-    // Send execute command on stdin
-    let mut stdin = child
-        .stdin
+
+    // ── Read SOCKET_PATH from stdout ──
+
+    let stdout = child
+        .stdout
         .take()
-        .ok_or_else(|| "Failed to capture sidecar stdin".to_string())?;
+        .ok_or_else(|| "Failed to capture sidecar stdout".to_string())?;
 
-    stdin
-        .write_all(format!("{}\n", execute_json).as_bytes())
-        .await
-        .map_err(|e| format!("Failed to write to sidecar stdin: {}", e))?;
-    stdin
-        .flush()
-        .await
-        .map_err(|e| format!("Failed to flush sidecar stdin: {}", e))?;
+    let mut stdout_reader = BufReader::new(stdout);
+    let mut first_line = String::new();
 
-    // Store stdin in agent state for permission responses
-    let stdin_arc = Arc::new(Mutex::new(Some(stdin)));
+    let socket_path = {
+        let read_result = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            stdout_reader.read_line(&mut first_line),
+        )
+        .await;
+
+        match read_result {
+            Err(_) => {
+                let _ = child.kill().await;
+                return Err("Sidecar failed to announce socket path within 10 seconds".to_string());
+            }
+            Ok(Err(e)) => {
+                let _ = child.kill().await;
+                return Err(format!("Failed to read sidecar stdout: {}", e));
+            }
+            Ok(Ok(0)) => {
+                let _ = child.kill().await;
+                return Err("Sidecar exited before announcing socket path".to_string());
+            }
+            Ok(Ok(_)) => {
+                let trimmed = first_line.trim();
+                if let Some(path) = trimmed.strip_prefix("SOCKET_PATH=") {
+                    PathBuf::from(path)
+                } else {
+                    let _ = child.kill().await;
+                    return Err(format!(
+                        "Sidecar printed unexpected first line (expected SOCKET_PATH=...): {}",
+                        &trimmed[..trimmed.len().min(200)]
+                    ));
+                }
+            }
+        }
+    };
+
+    log::info!("agent: connecting to socket at {:?}", socket_path);
+
+    // ── Connect to Unix socket ──
+
+    let stream = UnixStream::connect(&socket_path)
+        .await
+        .map_err(|e| format!("Failed to connect to sidecar socket: {}", e))?;
+
+    let (read_half, write_half) = tokio::io::split(stream);
+    let write_half = Arc::new(Mutex::new(write_half));
+    let next_id = Arc::new(AtomicU64::new(1));
+
+    // ── Set up AgentHandle ──
+
+    let pending_permission: Arc<Mutex<Option<PendingPermission>>> = Arc::new(Mutex::new(None));
+    let pending_feedback: Arc<Mutex<Option<PendingFeedback>>> = Arc::new(Mutex::new(None));
+    let pending_review: Arc<Mutex<Option<PendingReview>>> = Arc::new(Mutex::new(None));
+
     let agent_handle = AgentHandle {
-        stdin: stdin_arc.clone(),
+        socket_writer: write_half.clone(),
+        pending_permission: pending_permission.clone(),
+        pending_feedback: pending_feedback.clone(),
+        pending_review: pending_review.clone(),
+        next_id: next_id.clone(),
     };
 
     // Store the handle in Tauri managed state
@@ -483,13 +570,47 @@ pub async fn execute_step(
         *handle_guard = Some(agent_handle);
     }
 
-    // Read stdout NDJSON
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "Failed to capture sidecar stdout".to_string())?;
+    // ── Send `query` JSON-RPC request ──
 
-    // Also capture stderr for debugging
+    let query_id = next_id.fetch_add(1, Ordering::Relaxed);
+    let query_request = JsonRpcRequest {
+        jsonrpc: "2.0",
+        id: query_id,
+        method: "query".to_string(),
+        params: Some(serde_json::json!({
+            "prompt": prompt,
+            "config": config,
+        })),
+    };
+    let query_json = serde_json::to_string(&query_request)
+        .map_err(|e| format!("Failed to serialize query request: {}", e))?;
+
+    {
+        let mut writer = write_half.lock().await;
+        writer
+            .write_all(format!("{}\n", query_json).as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write query to socket: {}", e))?;
+        writer
+            .flush()
+            .await
+            .map_err(|e| format!("Failed to flush socket: {}", e))?;
+    }
+
+    // Capture to file if enabled
+    if let Some(ref path) = capture_file {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "> {}", query_json);
+        }
+    }
+
+    // ── Also capture stderr for debugging ──
+
     let stderr = child
         .stderr
         .take()
@@ -514,7 +635,8 @@ pub async fn execute_step(
         }
     });
 
-    // Open capture file if MELDUI_CAPTURE_NDJSON is set
+    // ── Open capture file for ongoing writes ──
+
     let mut capture_writer = capture_file.as_ref().and_then(|path| {
         std::fs::OpenOptions::new()
             .create(true)
@@ -523,16 +645,16 @@ pub async fn execute_step(
             .ok()
     });
 
-    let reader = BufReader::new(stdout);
-    let mut lines = reader.lines();
+    // ── Read loop: process JSON-RPC messages from socket ──
+
+    let socket_reader = BufReader::new(read_half);
+    let mut lines = socket_reader.lines();
     let mut response_text = String::new();
     let mut final_session_id = String::new();
 
-    // Use an idle timeout (resets on each message) rather than a hard total timeout.
-    // The sidecar emits heartbeats every 30s while waiting for user input (feedback/
-    // permissions), so the timeout only fires if the sidecar is truly unresponsive.
     let idle_timeout = std::time::Duration::from_secs(120);
     let mut timed_out = false;
+    let mut got_query_response = false;
 
     let read_result: Result<(), String> = 'outer: loop {
         let line_result = tokio::time::timeout(idle_timeout, lines.next_line()).await;
@@ -541,438 +663,262 @@ pub async fn execute_step(
                 timed_out = true;
                 break 'outer Ok(());
             }
-            Ok(Err(e)) => break 'outer Err(format!("Failed to read sidecar output: {}", e)),
+            Ok(Err(e)) => break 'outer Err(format!("Failed to read from socket: {}", e)),
             Ok(Ok(None)) => break 'outer Ok(()),
             Ok(Ok(Some(line))) => line,
         };
-        {
-            if line.trim().is_empty() {
+
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        // Capture received message
+        if let Some(ref mut writer) = capture_writer {
+            use std::io::Write;
+            let _ = writeln!(writer, "{}", &line);
+        }
+
+        let msg: JsonRpcMessage = match serde_json::from_str(&line) {
+            Ok(v) => v,
+            Err(e) => {
+                let _ = app_handle.emit(
+                    "workflow-step-output",
+                    StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "stderr".to_string(),
+                        content: format!(
+                            "Malformed JSON-RPC from sidecar: {} (line: {})",
+                            e,
+                            &line[..line.len().min(200)]
+                        ),
+                    },
+                );
                 continue;
             }
+        };
 
-            // Capture NDJSON line to file if enabled
-            if let Some(ref mut writer) = capture_writer {
-                use std::io::Write;
-                let _ = writeln!(writer, "{}", &line);
-            }
+        // ── Handle JSON-RPC response (to our query/cancel requests) ──
 
-            let json: serde_json::Value = match serde_json::from_str(&line) {
-                Ok(v) => v,
-                Err(e) => {
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "stderr".to_string(),
-                            content: format!(
-                                "Malformed JSON from sidecar: {} (line: {})",
-                                e,
-                                &line[..line.len().min(200)]
-                            ),
-                        },
-                    );
-                    continue;
-                }
-            };
-
-            let msg_type = json
-                .get("type")
-                .and_then(|t| t.as_str())
-                .unwrap_or("unknown");
-
-            // Log full JSON for each message (truncate large content fields)
-            match msg_type {
-                "text" | "tool_input" | "thinking" => {
-                    // High-frequency delta messages — log at debug with truncated content
-                    let content_len = json
-                        .get("content")
-                        .and_then(|c| c.as_str())
-                        .map(|s| s.len())
-                        .unwrap_or(0);
-                    log::debug!(
-                        "agent: NDJSON type={} content_len={}",
-                        msg_type,
-                        content_len
-                    );
-                }
-                "error" => log::error!("agent: NDJSON {}", line),
-                _ => {
-                    let max = line.len().min(1000);
-                    let end = line.floor_char_boundary(max);
-                    log::info!("agent: NDJSON {}", &line[..end]);
+        if msg.method.is_none() && (msg.result.is_some() || msg.error.is_some()) {
+            // This is a response to a request we sent
+            if let Some(ref id) = msg.id {
+                if id.as_u64() == Some(query_id) {
+                    // Response to our `query` request
+                    if let Some(ref err) = msg.error {
+                        break 'outer Err(format!("Query failed: {}", err.message));
+                    }
+                    got_query_response = true;
+                    log::info!("agent: query accepted by sidecar");
                 }
             }
+            continue;
+        }
 
-            match msg_type {
-                "session" => {
-                    if let Some(sid) = json.get("session_id").and_then(|s| s.as_str()) {
+        // ── Handle JSON-RPC notification or request from sidecar ──
+
+        let method = match msg.method.as_deref() {
+            Some(m) => m,
+            None => continue,
+        };
+        let params = msg.params.unwrap_or(serde_json::Value::Null);
+
+        match method {
+            // ── Notifications ──
+            "message" => {
+                let msg_type = params
+                    .get("type")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("unknown");
+
+                // Log message type
+                match msg_type {
+                    "text" | "tool_input" | "thinking" => {
+                        let content_len = params
+                            .get("content")
+                            .and_then(|c| c.as_str())
+                            .map(|s| s.len())
+                            .unwrap_or(0);
+                        log::debug!(
+                            "agent: message type={} content_len={}",
+                            msg_type,
+                            content_len
+                        );
+                    }
+                    "error" => {
+                        log::error!(
+                            "agent: message {}",
+                            serde_json::to_string(&params).unwrap_or_default()
+                        );
+                    }
+                    _ => {
+                        let s = serde_json::to_string(&params).unwrap_or_default();
+                        let max = s.len().min(1000);
+                        let end = s.floor_char_boundary(max);
+                        log::info!("agent: message {}", &s[..end]);
+                    }
+                }
+
+                // Dispatch to Tauri events (same as old NDJSON dispatch)
+                dispatch_message_to_tauri(
+                    msg_type,
+                    &params,
+                    issue_id,
+                    app_handle,
+                    canonical_project_dir.unwrap_or(project_dir),
+                );
+            }
+
+            "queryComplete" => {
+                if let Some(sid) = params.get("sessionId").and_then(|s| s.as_str()) {
+                    if !sid.is_empty() {
                         final_session_id = sid.to_string();
                     }
                 }
-                "text" => {
-                    if let Some(content) = json.get("content").and_then(|c| c.as_str()) {
-                        let _ = app_handle.emit(
-                            "workflow-step-output",
-                            StreamChunk {
-                                issue_id: issue_id.to_string(),
-                                chunk_type: "text".to_string(),
-                                content: content.to_string(),
-                            },
-                        );
-                    }
-                }
-                "tool_start" => {
-                    let tool_name = json
-                        .get("tool_name")
-                        .and_then(|n| n.as_str())
-                        .unwrap_or("unknown");
-                    let tool_id = json.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
-                    let payload = serde_json::json!({
-                        "tool_name": tool_name,
-                        "tool_id": tool_id,
-                    });
+                if let Some(resp) = params.get("response").and_then(|r| r.as_str()) {
+                    response_text = resp.to_string();
                     let _ = app_handle.emit(
                         "workflow-step-output",
                         StreamChunk {
                             issue_id: issue_id.to_string(),
-                            chunk_type: "tool_start".to_string(),
-                            content: payload.to_string(),
+                            chunk_type: "result".to_string(),
+                            content: resp.to_string(),
                         },
                     );
                 }
-                "tool_input" => {
-                    let tool_id = json.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
-                    let content = json.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                    let payload = serde_json::json!({
-                        "tool_id": tool_id,
-                        "content": content,
-                    });
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "tool_input".to_string(),
-                            content: payload.to_string(),
-                        },
-                    );
-                }
-                "tool_end" => {
-                    let tool_id = json.get("tool_id").and_then(|i| i.as_str()).unwrap_or("0");
-                    let payload = serde_json::json!({ "tool_id": tool_id });
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "tool_end".to_string(),
-                            content: payload.to_string(),
-                        },
-                    );
-                }
-                "tool_result" => {
-                    let tool_id = json.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
-                    let content = json.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                    let is_error = json
-                        .get("is_error")
-                        .and_then(|e| e.as_bool())
-                        .unwrap_or(false);
-                    let payload = serde_json::json!({
-                        "tool_id": tool_id,
-                        "content": content,
-                        "is_error": is_error,
-                    });
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "tool_result".to_string(),
-                            content: payload.to_string(),
-                        },
-                    );
-                }
-                "thinking" => {
-                    if let Some(content) = json.get("content").and_then(|c| c.as_str()) {
-                        let _ = app_handle.emit(
-                            "workflow-step-output",
-                            StreamChunk {
-                                issue_id: issue_id.to_string(),
-                                chunk_type: "thinking".to_string(),
-                                content: content.to_string(),
-                            },
-                        );
-                    }
-                }
-                "permission_request" => {
-                    if let Ok(perm_req) =
-                        serde_json::from_value::<AgentPermissionRequest>(json.clone())
-                    {
-                        let _ = app_handle.emit("agent-permission-request", perm_req);
-                    }
-                }
-                "result" => {
-                    if let Some(content) = json.get("content").and_then(|c| c.as_str()) {
-                        response_text = content.to_string();
-                        let _ = app_handle.emit(
-                            "workflow-step-output",
-                            StreamChunk {
-                                issue_id: issue_id.to_string(),
-                                chunk_type: "result".to_string(),
-                                content: content.to_string(),
-                            },
-                        );
-                    }
-                    if let Some(sid) = json.get("session_id").and_then(|s| s.as_str()) {
-                        if !sid.is_empty() {
-                            final_session_id = sid.to_string();
-                        }
-                    }
-                }
-                "error" => {
-                    let message = json
-                        .get("message")
-                        .and_then(|m| m.as_str())
-                        .unwrap_or("Unknown agent error");
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "error".to_string(),
-                            content: message.to_string(),
-                        },
-                    );
-                }
-                // ── MeldUI MCP events (forwarded as dedicated Tauri events) ──
-                "section_update" => {
-                    let ticket_id = json.get("ticket_id").and_then(|t| t.as_str()).unwrap_or("");
-                    let section = json.get("section").and_then(|s| s.as_str()).unwrap_or("");
-                    let content = json.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                    let payload = serde_json::json!({
-                        "ticket_id": ticket_id,
-                        "section": section,
-                        "content": content,
-                    });
-                    let _ = app_handle.emit("meldui-section-update", payload);
-                }
-                "notification" => {
-                    let title = json.get("title").and_then(|t| t.as_str()).unwrap_or("");
-                    let message = json.get("message").and_then(|m| m.as_str()).unwrap_or("");
-                    let level = json.get("level").and_then(|l| l.as_str()).unwrap_or("info");
-                    let payload = serde_json::json!({
-                        "title": title,
-                        "message": message,
-                        "level": level,
-                    });
-                    let _ = app_handle.emit("meldui-notification", payload);
-                }
-                "step_complete" => {
-                    let ticket_id = json.get("ticket_id").and_then(|t| t.as_str()).unwrap_or("");
-                    let summary = json.get("summary").and_then(|s| s.as_str()).unwrap_or("");
+                break 'outer Ok(());
+            }
 
-                    // Advance the workflow to the next step
-                    if !ticket_id.is_empty() {
-                        match crate::workflow::advance_step(
-                            canonical_project_dir.unwrap_or(project_dir),
+            "queryError" => {
+                let message = params
+                    .get("message")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("Unknown agent error");
+                let _ = app_handle.emit(
+                    "workflow-step-output",
+                    StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "error".to_string(),
+                        content: message.to_string(),
+                    },
+                );
+                break 'outer Ok(());
+            }
+
+            // ── Reverse requests (sidecar → Rust, expect response) ──
+            "toolApproval" => {
+                if let Some(id) = msg.id {
+                    let request_id = params
+                        .get("requestId")
+                        .and_then(|r| r.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let tool_name = params
+                        .get("toolName")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let input = params
+                        .get("input")
+                        .cloned()
+                        .unwrap_or(serde_json::json!({}));
+
+                    {
+                        let mut pending = pending_permission.lock().await;
+                        *pending = Some(PendingPermission { json_rpc_id: id });
+                    }
+
+                    // Emit Tauri event for frontend
+                    let _ = app_handle.emit(
+                        "agent-permission-request",
+                        AgentPermissionRequest {
+                            request_id,
+                            tool_name,
+                            input,
+                        },
+                    );
+                }
+            }
+
+            "feedbackRequest" => {
+                if let Some(id) = msg.id {
+                    let request_id = params
+                        .get("requestId")
+                        .and_then(|r| r.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let ticket_id = params
+                        .get("ticketId")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let summary = params
+                        .get("summary")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    {
+                        let mut pending = pending_feedback.lock().await;
+                        *pending = Some(PendingFeedback { json_rpc_id: id });
+                    }
+
+                    let _ = app_handle.emit(
+                        "agent-feedback-request",
+                        AgentFeedbackRequest {
+                            request_id,
                             ticket_id,
-                        ) {
-                            Ok(_state) => {
-                                log::info!(
-                                    "agent: workflow advanced for {} (summary: {})",
-                                    ticket_id,
-                                    summary
-                                );
-                            }
-                            Err(e) => {
-                                log::error!("agent: failed to advance workflow: {}", e);
-                            }
-                        }
-                    }
+                            summary,
+                        },
+                    );
+                }
+            }
 
-                    let payload = serde_json::json!({
-                        "ticket_id": ticket_id,
-                        "summary": summary,
-                    });
-                    let _ = app_handle.emit("meldui-step-complete", payload);
-                }
-                "status_update" => {
-                    let ticket_id = json.get("ticket_id").and_then(|t| t.as_str()).unwrap_or("");
-                    let status_text = json
-                        .get("status_text")
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("");
-                    let payload = serde_json::json!({
-                        "ticket_id": ticket_id,
-                        "status_text": status_text,
-                    });
-                    let _ = app_handle.emit("meldui-status-update", payload);
-                }
-                "feedback_request" => {
-                    if let Ok(feedback_req) =
-                        serde_json::from_value::<AgentFeedbackRequest>(json.clone())
-                    {
-                        let _ = app_handle.emit("agent-feedback-request", feedback_req);
-                    }
-                }
-                "review_findings" => {
-                    if let Ok(review_req) =
-                        serde_json::from_value::<AgentReviewFindingsRequest>(json.clone())
-                    {
-                        let _ = app_handle.emit("agent-review-findings", review_req);
-                    }
-                }
-                "pr_url_reported" => {
-                    let ticket_id = json.get("ticket_id").and_then(|t| t.as_str()).unwrap_or("");
-                    let url = json.get("url").and_then(|u| u.as_str()).unwrap_or("");
-                    let payload = serde_json::json!({
-                        "ticket_id": ticket_id,
-                        "url": url,
-                    });
-                    let _ = app_handle.emit("meldui-pr-url-reported", payload);
-                }
-                "subtask_created" | "subtask_updated" | "subtask_closed" => {
-                    let subtask_id = json
-                        .get("subtask_id")
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("");
-                    let parent_id = json.get("parent_id").and_then(|p| p.as_str()).unwrap_or("");
-                    let payload = serde_json::json!({
-                        "subtask_id": subtask_id,
-                        "parent_id": parent_id,
-                    });
-                    let _ =
-                        app_handle.emit(&format!("meldui-{}", msg_type.replace('_', "-")), payload);
-                }
-                "tool_progress" => {
-                    let tool_name = json.get("tool_name").and_then(|n| n.as_str()).unwrap_or("");
-                    let tool_use_id = json
-                        .get("tool_use_id")
-                        .and_then(|i| i.as_str())
-                        .unwrap_or("");
-                    let elapsed = json
-                        .get("elapsed_seconds")
-                        .and_then(|e| e.as_f64())
-                        .unwrap_or(0.0);
-                    let payload = serde_json::json!({
-                        "tool_name": tool_name,
-                        "tool_use_id": tool_use_id,
-                        "elapsed_seconds": elapsed,
-                    });
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "tool_progress".to_string(),
-                            content: payload.to_string(),
-                        },
-                    );
-                }
-                "subagent_start" => {
-                    let task_id = json.get("task_id").and_then(|t| t.as_str()).unwrap_or("");
-                    let tool_use_id = json
-                        .get("tool_use_id")
-                        .and_then(|i| i.as_str())
-                        .unwrap_or("");
-                    let description = json
-                        .get("description")
-                        .and_then(|d| d.as_str())
-                        .unwrap_or("");
-                    let payload = serde_json::json!({
-                        "task_id": task_id,
-                        "tool_use_id": tool_use_id,
-                        "description": description,
-                    });
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "subagent_start".to_string(),
-                            content: payload.to_string(),
-                        },
-                    );
-                }
-                "subagent_progress" => {
-                    let payload = serde_json::json!({
-                        "task_id": json.get("task_id").and_then(|t| t.as_str()).unwrap_or(""),
-                        "summary": json.get("summary"),
-                        "last_tool_name": json.get("last_tool_name"),
-                        "usage": json.get("usage"),
-                    });
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "subagent_progress".to_string(),
-                            content: payload.to_string(),
-                        },
-                    );
-                }
-                "subagent_complete" => {
-                    let payload = serde_json::json!({
-                        "task_id": json.get("task_id").and_then(|t| t.as_str()).unwrap_or(""),
-                        "status": json.get("status").and_then(|s| s.as_str()).unwrap_or("completed"),
-                        "summary": json.get("summary"),
-                        "usage": json.get("usage"),
-                    });
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "subagent_complete".to_string(),
-                            content: payload.to_string(),
-                        },
-                    );
-                }
-                "files_changed" => {
-                    let files = json.get("files").cloned().unwrap_or(serde_json::json!([]));
-                    let payload = serde_json::json!({ "files": files });
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "files_changed".to_string(),
-                            content: payload.to_string(),
-                        },
-                    );
-                }
-                "tool_use_summary" => {
-                    let summary = json.get("summary").and_then(|s| s.as_str()).unwrap_or("");
-                    let tool_ids = json
-                        .get("tool_ids")
+            "reviewRequest" => {
+                if let Some(id) = msg.id {
+                    let request_id = params
+                        .get("requestId")
+                        .and_then(|r| r.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let ticket_id = params
+                        .get("ticketId")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let findings = params
+                        .get("findings")
                         .cloned()
                         .unwrap_or(serde_json::json!([]));
-                    let payload = serde_json::json!({
-                        "summary": summary,
-                        "tool_ids": tool_ids,
-                    });
+                    let summary = params
+                        .get("summary")
+                        .and_then(|s| s.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    {
+                        let mut pending = pending_review.lock().await;
+                        *pending = Some(PendingReview { json_rpc_id: id });
+                    }
+
                     let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "tool_use_summary".to_string(),
-                            content: payload.to_string(),
+                        "agent-review-findings",
+                        AgentReviewFindingsRequest {
+                            request_id,
+                            ticket_id,
+                            findings,
+                            summary,
                         },
                     );
                 }
-                "compacting" => {
-                    let is_compacting = json
-                        .get("is_compacting")
-                        .and_then(|b| b.as_bool())
-                        .unwrap_or(false);
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "compacting".to_string(),
-                            content: is_compacting.to_string(),
-                        },
-                    );
-                }
-                "heartbeat" => {
-                    // Heartbeat received — idle timeout was already reset by receiving this line
-                    log::debug!("agent: heartbeat received");
-                }
-                _ => {}
+            }
+
+            _ => {
+                log::debug!("agent: unknown JSON-RPC method: {}", method);
             }
         }
     };
+
+    // ── Cleanup ──
 
     if timed_out {
         let timeout_msg = format!(
@@ -987,17 +933,19 @@ pub async fn execute_step(
                 content: timeout_msg.clone(),
             },
         );
-        // Kill the child process
         let _ = child.kill().await;
-        // Clear the agent handle so stale stdin writes don't cause broken pipe
         if let Some(state) = app_handle.try_state::<AgentState>() {
             let mut handle_guard = state.handle.lock().await;
             *handle_guard = None;
         }
+        // Clean up socket file
+        let _ = std::fs::remove_file(&socket_path);
         return Err(timeout_msg);
     }
 
     if let Err(e) = read_result {
+        let _ = child.kill().await;
+        let _ = std::fs::remove_file(&socket_path);
         return Err(e);
     }
 
@@ -1018,13 +966,16 @@ pub async fn execute_step(
         response_text.len()
     );
 
+    // Clean up socket file if sidecar didn't
+    let _ = std::fs::remove_file(&socket_path);
+
     // Clear the agent handle
     if let Some(state) = app_handle.try_state::<AgentState>() {
         let mut handle_guard = state.handle.lock().await;
         *handle_guard = None;
     }
 
-    if !status.success() {
+    if !status.success() && !got_query_response {
         return Err(format!(
             "Agent sidecar exited with status {}{}",
             status,
@@ -1036,8 +987,394 @@ pub async fn execute_step(
         ));
     }
 
-    // Empty result on success exit is OK if errors were already emitted via events.
-    // The sidecar now properly handles SDKResultError and emits error events before exiting.
-
     Ok((response_text, final_session_id))
+}
+
+/// Dispatch a `message` notification's params to the appropriate Tauri event.
+/// This maps directly from the old NDJSON `msg_type` dispatch.
+fn dispatch_message_to_tauri(
+    msg_type: &str,
+    params: &serde_json::Value,
+    issue_id: &str,
+    app_handle: &tauri::AppHandle,
+    canonical_project_dir: &str,
+) {
+    match msg_type {
+        "session" => {
+            // Session ID is tracked in queryComplete, but emit for frontend
+            if let Some(sid) = params.get("session_id").and_then(|s| s.as_str()) {
+                let _ = app_handle.emit(
+                    "workflow-step-output",
+                    StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "session".to_string(),
+                        content: sid.to_string(),
+                    },
+                );
+            }
+        }
+        "text" => {
+            if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
+                let _ = app_handle.emit(
+                    "workflow-step-output",
+                    StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "text".to_string(),
+                        content: content.to_string(),
+                    },
+                );
+            }
+        }
+        "tool_start" => {
+            let tool_name = params
+                .get("tool_name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("unknown");
+            let tool_id = params.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
+            let payload = serde_json::json!({
+                "tool_name": tool_name,
+                "tool_id": tool_id,
+            });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_start".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "tool_input" => {
+            let tool_id = params.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
+            let content = params.get("content").and_then(|c| c.as_str()).unwrap_or("");
+            let payload = serde_json::json!({
+                "tool_id": tool_id,
+                "content": content,
+            });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_input".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "tool_end" => {
+            let tool_id = params
+                .get("tool_id")
+                .and_then(|i| i.as_str())
+                .unwrap_or("0");
+            let payload = serde_json::json!({ "tool_id": tool_id });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_end".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "tool_result" => {
+            let tool_id = params.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
+            let content = params.get("content").and_then(|c| c.as_str()).unwrap_or("");
+            let is_error = params
+                .get("is_error")
+                .and_then(|e| e.as_bool())
+                .unwrap_or(false);
+            let payload = serde_json::json!({
+                "tool_id": tool_id,
+                "content": content,
+                "is_error": is_error,
+            });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_result".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "thinking" => {
+            if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
+                let _ = app_handle.emit(
+                    "workflow-step-output",
+                    StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "thinking".to_string(),
+                        content: content.to_string(),
+                    },
+                );
+            }
+        }
+        "result" => {
+            if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
+                let _ = app_handle.emit(
+                    "workflow-step-output",
+                    StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "result".to_string(),
+                        content: content.to_string(),
+                    },
+                );
+            }
+        }
+        "error" => {
+            let message = params
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown agent error");
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "error".to_string(),
+                    content: message.to_string(),
+                },
+            );
+        }
+        "section_update" => {
+            let ticket_id = params
+                .get("ticket_id")
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+            let section = params.get("section").and_then(|s| s.as_str()).unwrap_or("");
+            let content = params.get("content").and_then(|c| c.as_str()).unwrap_or("");
+            let payload = serde_json::json!({
+                "ticket_id": ticket_id,
+                "section": section,
+                "content": content,
+            });
+            let _ = app_handle.emit("meldui-section-update", payload);
+        }
+        "notification" => {
+            let title = params.get("title").and_then(|t| t.as_str()).unwrap_or("");
+            let message = params.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            let level = params
+                .get("level")
+                .and_then(|l| l.as_str())
+                .unwrap_or("info");
+            let payload = serde_json::json!({
+                "title": title,
+                "message": message,
+                "level": level,
+            });
+            let _ = app_handle.emit("meldui-notification", payload);
+        }
+        "step_complete" => {
+            let ticket_id = params
+                .get("ticket_id")
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+            let summary = params.get("summary").and_then(|s| s.as_str()).unwrap_or("");
+
+            if !ticket_id.is_empty() {
+                match crate::workflow::advance_step(canonical_project_dir, ticket_id) {
+                    Ok(_state) => {
+                        log::info!(
+                            "agent: workflow advanced for {} (summary: {})",
+                            ticket_id,
+                            summary
+                        );
+                    }
+                    Err(e) => {
+                        log::error!("agent: failed to advance workflow: {}", e);
+                    }
+                }
+            }
+
+            let payload = serde_json::json!({
+                "ticket_id": ticket_id,
+                "summary": summary,
+            });
+            let _ = app_handle.emit("meldui-step-complete", payload);
+        }
+        "status_update" => {
+            let ticket_id = params
+                .get("ticket_id")
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+            let status_text = params
+                .get("status_text")
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            let payload = serde_json::json!({
+                "ticket_id": ticket_id,
+                "status_text": status_text,
+            });
+            let _ = app_handle.emit("meldui-status-update", payload);
+        }
+        "feedback_request" => {
+            // This type is now handled as a JSON-RPC reverse request, not a notification.
+            // If it somehow arrives as a message notification, log and ignore.
+            log::warn!("agent: received feedback_request as message notification (should be JSON-RPC request)");
+        }
+        "review_findings" => {
+            // Same as feedback_request — now a JSON-RPC reverse request.
+            log::warn!("agent: received review_findings as message notification (should be JSON-RPC request)");
+        }
+        "pr_url_reported" => {
+            let ticket_id = params
+                .get("ticket_id")
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+            let url = params.get("url").and_then(|u| u.as_str()).unwrap_or("");
+            let payload = serde_json::json!({
+                "ticket_id": ticket_id,
+                "url": url,
+            });
+            let _ = app_handle.emit("meldui-pr-url-reported", payload);
+        }
+        "subtask_created" | "subtask_updated" | "subtask_closed" => {
+            let subtask_id = params
+                .get("subtask_id")
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            let parent_id = params
+                .get("parent_id")
+                .and_then(|p| p.as_str())
+                .unwrap_or("");
+            let payload = serde_json::json!({
+                "subtask_id": subtask_id,
+                "parent_id": parent_id,
+            });
+            let _ = app_handle.emit(&format!("meldui-{}", msg_type.replace('_', "-")), payload);
+        }
+        "tool_progress" => {
+            let tool_name = params
+                .get("tool_name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("");
+            let tool_use_id = params
+                .get("tool_use_id")
+                .and_then(|i| i.as_str())
+                .unwrap_or("");
+            let elapsed = params
+                .get("elapsed_seconds")
+                .and_then(|e| e.as_f64())
+                .unwrap_or(0.0);
+            let payload = serde_json::json!({
+                "tool_name": tool_name,
+                "tool_use_id": tool_use_id,
+                "elapsed_seconds": elapsed,
+            });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_progress".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "subagent_start" => {
+            let task_id = params.get("task_id").and_then(|t| t.as_str()).unwrap_or("");
+            let tool_use_id = params
+                .get("tool_use_id")
+                .and_then(|i| i.as_str())
+                .unwrap_or("");
+            let description = params
+                .get("description")
+                .and_then(|d| d.as_str())
+                .unwrap_or("");
+            let payload = serde_json::json!({
+                "task_id": task_id,
+                "tool_use_id": tool_use_id,
+                "description": description,
+            });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "subagent_start".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "subagent_progress" => {
+            let payload = serde_json::json!({
+                "task_id": params.get("task_id").and_then(|t| t.as_str()).unwrap_or(""),
+                "summary": params.get("summary"),
+                "last_tool_name": params.get("last_tool_name"),
+                "usage": params.get("usage"),
+            });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "subagent_progress".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "subagent_complete" => {
+            let payload = serde_json::json!({
+                "task_id": params.get("task_id").and_then(|t| t.as_str()).unwrap_or(""),
+                "status": params.get("status").and_then(|s| s.as_str()).unwrap_or("completed"),
+                "summary": params.get("summary"),
+                "usage": params.get("usage"),
+            });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "subagent_complete".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "files_changed" => {
+            let files = params
+                .get("files")
+                .cloned()
+                .unwrap_or(serde_json::json!([]));
+            let payload = serde_json::json!({ "files": files });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "files_changed".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "tool_use_summary" => {
+            let summary = params.get("summary").and_then(|s| s.as_str()).unwrap_or("");
+            let tool_ids = params
+                .get("tool_ids")
+                .cloned()
+                .unwrap_or(serde_json::json!([]));
+            let payload = serde_json::json!({
+                "summary": summary,
+                "tool_ids": tool_ids,
+            });
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_use_summary".to_string(),
+                    content: payload.to_string(),
+                },
+            );
+        }
+        "compacting" => {
+            let is_compacting = params
+                .get("is_compacting")
+                .and_then(|b| b.as_bool())
+                .unwrap_or(false);
+            let _ = app_handle.emit(
+                "workflow-step-output",
+                StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "compacting".to_string(),
+                    content: is_compacting.to_string(),
+                },
+            );
+        }
+        "heartbeat" => {
+            log::debug!("agent: heartbeat received");
+        }
+        _ => {}
+    }
 }

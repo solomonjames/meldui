@@ -1,0 +1,2 @@
+# Mark tauri-specta generated bindings as generated code
+src/bindings.ts linguist-generated=true

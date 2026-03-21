@@ -1,12 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { events } from "@/bindings";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import type {
-  NotificationEvent,
-  SectionUpdateEvent,
-  StepCompleteEvent,
-  StatusUpdateEvent,
-} from "@/shared/types";
+import type { NotificationEvent } from "@/shared/types";
 
 export function useWorkflowNotifications(
   activeTicketId: string | null,
@@ -33,10 +28,9 @@ export function useWorkflowNotifications(
 
       const sectionUnlisten = await events.sectionUpdateEvent.listen((event) => {
         if (cancelled) return;
-        const payload = event.payload as SectionUpdateEvent;
         // Trigger ticket refresh so the ticket context panel updates live
-        if (activeTicketId && payload.ticket_id === activeTicketId) {
-          setLastUpdatedSectionId(payload.section_id ?? payload.section);
+        if (activeTicketId && event.payload.ticket_id === activeTicketId) {
+          setLastUpdatedSectionId(event.payload.section_id ?? event.payload.section);
           onRefreshTicketRef.current?.();
         }
       });
@@ -44,15 +38,14 @@ export function useWorkflowNotifications(
 
       const notifyUnlisten = await events.notificationEvent.listen((event) => {
         if (!cancelled) {
-          setNotifications((prev) => [...prev, event.payload as NotificationEvent]);
+          setNotifications((prev) => [...prev, event.payload]);
         }
       });
       unlistens.push(notifyUnlisten);
 
       const stepCompleteUnlisten = await events.stepCompleteEvent.listen((event) => {
         if (cancelled) return;
-        const payload = event.payload as StepCompleteEvent;
-        if (activeTicketId && payload.ticket_id === activeTicketId) {
+        if (activeTicketId && event.payload.ticket_id === activeTicketId) {
           // Refresh workflow state — this triggers re-render and gate/advance logic
           getWorkflowStateRef.current?.(activeTicketId);
         }
@@ -60,9 +53,8 @@ export function useWorkflowNotifications(
       unlistens.push(stepCompleteUnlisten);
 
       const statusUnlisten = await events.statusUpdateEvent.listen((event) => {
-        const payload = event.payload as StatusUpdateEvent;
-        if (!cancelled && activeTicketId && payload.ticket_id === activeTicketId) {
-          setStatusText(payload.status_text);
+        if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
+          setStatusText(event.payload.status_text);
         }
       });
       unlistens.push(statusUnlisten);

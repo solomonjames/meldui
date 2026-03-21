@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { events } from "@/bindings";
 import { ticketKeys } from "@/shared/lib/query-keys";
-import type { SectionUpdateEvent, StepCompleteEvent } from "@/shared/types";
 
 /**
  * Centralized Tauri event → TanStack Query invalidation.
@@ -31,8 +30,7 @@ export function useTauriEventInvalidation(projectDir: string) {
 
     // Section update → invalidate specific ticket detail
     events.sectionUpdateEvent.listen((event) => {
-      const payload = event.payload as SectionUpdateEvent;
-      const ticketId = payload.ticket_id;
+      const ticketId = event.payload.ticket_id;
       if (ticketId) {
         queryClient.invalidateQueries({
           queryKey: ticketKeys.detail(projectDir, ticketId),
@@ -42,8 +40,7 @@ export function useTauriEventInvalidation(projectDir: string) {
 
     // Step complete → invalidate workflow state
     events.stepCompleteEvent.listen((event) => {
-      const payload = event.payload as StepCompleteEvent;
-      const ticketId = payload.ticket_id;
+      const ticketId = event.payload.ticket_id;
       if (ticketId) {
         queryClient.invalidateQueries({
           queryKey: ["workflows", "state", projectDir, ticketId],

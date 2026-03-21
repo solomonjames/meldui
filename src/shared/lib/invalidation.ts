@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { listen } from "@tauri-apps/api/event";
+import { events } from "@/bindings";
 import { ticketKeys } from "@/shared/lib/query-keys";
 import type { SectionUpdateEvent, StepCompleteEvent } from "@/shared/types";
 
@@ -17,21 +17,22 @@ export function useTauriEventInvalidation(projectDir: string) {
     const unlisteners: Array<() => void> = [];
 
     // Subtask events → invalidate ticket list
-    const subtaskEvents = [
-      "meldui-subtask-created",
-      "meldui-subtask-updated",
-      "meldui-subtask-closed",
-    ];
+    events.subtaskCreated.listen(() => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    }).then((unlisten) => unlisteners.push(unlisten));
 
-    for (const event of subtaskEvents) {
-      listen(event, () => {
-        queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
-      }).then((unlisten) => unlisteners.push(unlisten));
-    }
+    events.subtaskUpdated.listen(() => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    }).then((unlisten) => unlisteners.push(unlisten));
+
+    events.subtaskClosed.listen(() => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    }).then((unlisten) => unlisteners.push(unlisten));
 
     // Section update → invalidate specific ticket detail
-    listen<SectionUpdateEvent>("meldui-section-update", (event) => {
-      const ticketId = event.payload.ticket_id;
+    events.sectionUpdateEvent.listen((event) => {
+      const payload = event.payload as SectionUpdateEvent;
+      const ticketId = payload.ticket_id;
       if (ticketId) {
         queryClient.invalidateQueries({
           queryKey: ticketKeys.detail(projectDir, ticketId),
@@ -40,8 +41,9 @@ export function useTauriEventInvalidation(projectDir: string) {
     }).then((unlisten) => unlisteners.push(unlisten));
 
     // Step complete → invalidate workflow state
-    listen<StepCompleteEvent>("meldui-step-complete", (event) => {
-      const ticketId = event.payload.ticket_id;
+    events.stepCompleteEvent.listen((event) => {
+      const payload = event.payload as StepCompleteEvent;
+      const ticketId = payload.ticket_id;
       if (ticketId) {
         queryClient.invalidateQueries({
           queryKey: ["workflows", "state", projectDir, ticketId],

@@ -33,7 +33,7 @@ describe("useWorkflowFeedback", () => {
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("agent-feedback-request", {
+      emitTauriEvent("AgentFeedbackRequest", {
         request_id: "fb-1",
         ticket_id: "issue-1",
         summary: "Review this",
@@ -54,7 +54,7 @@ describe("useWorkflowFeedback", () => {
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("agent-feedback-request", {
+      emitTauriEvent("AgentFeedbackRequest", {
         request_id: "fb-1",
         ticket_id: "issue-OTHER",
         summary: "Wrong ticket",
@@ -73,7 +73,7 @@ describe("useWorkflowFeedback", () => {
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("agent-feedback-request", {
+      emitTauriEvent("AgentFeedbackRequest", {
         request_id: "fb-1",
         ticket_id: "issue-1",
         summary: "Review",
@@ -99,7 +99,7 @@ describe("useWorkflowFeedback", () => {
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("agent-feedback-request", {
+      emitTauriEvent("AgentFeedbackRequest", {
         request_id: "fb-1",
         ticket_id: "issue-1",
         summary: "Review",
@@ -130,7 +130,7 @@ describe("useWorkflowFeedback", () => {
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("agent-feedback-request", {
+      emitTauriEvent("AgentFeedbackRequest", {
         request_id: "fb-1",
         ticket_id: "issue-1",
         summary: "Review",
@@ -157,7 +157,7 @@ describe("useWorkflowFeedback", () => {
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("agent-feedback-request", {
+      emitTauriEvent("AgentFeedbackRequest", {
         request_id: "fb-1",
         ticket_id: "issue-1",
         summary: "Review",

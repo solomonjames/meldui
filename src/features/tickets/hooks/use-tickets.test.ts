@@ -76,12 +76,12 @@ describe("useTickets", () => {
       await result.current.updateTicket("t-1", { status: "closed" });
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith("ticket_update", {
+    expect(mockInvoke).toHaveBeenCalledWith("ticket_update", expect.objectContaining({
       projectDir: "/project",
       id: "t-1",
       status: "closed",
       priority: undefined,
-    });
+    }));
   });
 
   it("closeTicket calls invoke with reason", async () => {

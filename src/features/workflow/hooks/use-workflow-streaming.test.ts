@@ -29,12 +29,12 @@ describe("useWorkflowStreaming", () => {
     await waitFor(() => expect(result.current.streamingReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("workflow-step-output", {
+      emitTauriEvent("StreamChunk", {
         issue_id: "issue-1",
         chunk_type: "text",
         content: "Hello ",
       } as StreamChunk);
-      emitTauriEvent("workflow-step-output", {
+      emitTauriEvent("StreamChunk", {
         issue_id: "issue-1",
         chunk_type: "text",
         content: "World",
@@ -55,7 +55,7 @@ describe("useWorkflowStreaming", () => {
     await waitFor(() => expect(result.current.streamingReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("workflow-step-output", {
+      emitTauriEvent("StreamChunk", {
         issue_id: "issue-OTHER",
         chunk_type: "text",
         content: "Should be ignored",
@@ -75,7 +75,7 @@ describe("useWorkflowStreaming", () => {
     await waitFor(() => expect(result.current.streamingReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("workflow-step-output", {
+      emitTauriEvent("StreamChunk", {
         issue_id: "issue-1",
         chunk_type: "text",
         content: "Should be dropped",
@@ -95,7 +95,7 @@ describe("useWorkflowStreaming", () => {
     await waitFor(() => expect(result.current.streamingReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("workflow-step-output", {
+      emitTauriEvent("StreamChunk", {
         issue_id: "issue-1",
         chunk_type: "error",
         content: "Something went wrong",
@@ -117,7 +117,7 @@ describe("useWorkflowStreaming", () => {
     await waitFor(() => expect(result.current.streamingReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("workflow-step-output", {
+      emitTauriEvent("StreamChunk", {
         issue_id: "issue-1",
         chunk_type: "result",
         content: "Final result",
@@ -138,7 +138,7 @@ describe("useWorkflowStreaming", () => {
     await waitFor(() => expect(result.current.streamingReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("workflow-step-output", {
+      emitTauriEvent("StreamChunk", {
         issue_id: "issue-1",
         chunk_type: "text",
         content: "Hello",
@@ -167,7 +167,7 @@ describe("useWorkflowStreaming", () => {
 
     // Events for issue-1 should now be ignored
     act(() => {
-      emitTauriEvent("workflow-step-output", {
+      emitTauriEvent("StreamChunk", {
         issue_id: "issue-1",
         chunk_type: "text",
         content: "Old ticket event",

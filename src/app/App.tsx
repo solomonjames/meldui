@@ -163,6 +163,7 @@ function AppContent() {
               onSuggestWorkflow={workflow.suggestWorkflow}
               onStartWorkflow={handleStartWorkflow}
               onRefreshTickets={ticketStore.refreshTickets}
+              onDeleteTicket={ticketStore.deleteTicket}
             />
           </WorkflowProvider>
         </ErrorBoundary>

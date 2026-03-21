@@ -45,6 +45,7 @@ interface TicketPageProps {
   onUpdateSection: (ticketId: string, sectionId: string, content: unknown) => Promise<void>;
   onStartWorkflow: (ticket: Ticket) => Promise<void>;
   onRefreshTickets: () => Promise<void>;
+  onDeleteTicket?: (id: string) => Promise<void>;
 }
 
 export function TicketPage({
@@ -61,6 +62,7 @@ export function TicketPage({
   onSuggestWorkflow,
   onStartWorkflow,
   onRefreshTickets,
+  onDeleteTicket,
 }: TicketPageProps) {
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   const queryClient = useQueryClient();
@@ -167,6 +169,7 @@ export function TicketPage({
                   onSuggestWorkflow={onSuggestWorkflow}
                   onStartWorkflow={onStartWorkflow}
                   onRefreshTickets={onRefreshTickets}
+                  onUpdateTicket={onUpdateTicket}
                 />
               )}
             </div>
@@ -185,6 +188,7 @@ export function TicketPage({
                 onShowTicket={onShowTicket}
                 onAddComment={onAddComment}
                 onUpdateSection={handleUpdateSection}
+                onDeleteTicket={onDeleteTicket}
                 sectionDefs={workflowDef?.ticket_sections}
                 lastUpdatedSectionId={workflowCtx.lastUpdatedSectionId}
                 isCollapsed={false}
@@ -204,6 +208,7 @@ export function TicketPage({
               onShowTicket={onShowTicket}
               onAddComment={onAddComment}
               onUpdateSection={handleUpdateSection}
+              onDeleteTicket={onDeleteTicket}
               sectionDefs={workflowDef?.ticket_sections}
               lastUpdatedSectionId={workflowCtx.lastUpdatedSectionId}
               isCollapsed={true}

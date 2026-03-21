@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles, Check, X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import {
   Select,
@@ -11,26 +11,23 @@ import {
 import type { WorkflowDefinition, WorkflowSuggestion } from "@/shared/types";
 
 interface WorkflowSelectorProps {
-  currentWorkflowId?: string;
+  selectedWorkflowId?: string;
   workflows: WorkflowDefinition[];
-  onAssign: (workflowId: string) => Promise<void>;
+  onSelect: (workflowId: string) => void;
   onSuggest: () => Promise<WorkflowSuggestion | null>;
   loading?: boolean;
 }
 
 export function WorkflowSelector({
-  currentWorkflowId,
+  selectedWorkflowId,
   workflows,
-  onAssign,
+  onSelect,
   onSuggest,
   loading,
 }: WorkflowSelectorProps) {
-  const [localId, setLocalId] = useState<string | null>(null);
-  const selectedId = localId ?? currentWorkflowId ?? "";
   const [suggestion, setSuggestion] = useState<WorkflowSuggestion | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   const handleSuggest = async () => {
     setSuggesting(true);
@@ -39,48 +36,18 @@ export function WorkflowSelector({
     const result = await onSuggest();
     if (result) {
       setSuggestion(result);
+      onSelect(result.workflow_id);
     } else {
       setSuggestError("Unable to suggest workflow — please select manually");
     }
     setSuggesting(false);
   };
 
-  const showSaved = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleAcceptSuggestion = async () => {
-    if (!suggestion) return;
-    setLocalId(suggestion.workflow_id);
-    await onAssign(suggestion.workflow_id);
-    setSuggestion(null);
-    showSaved();
-  };
-
-  const handleRejectSuggestion = () => {
-    setSuggestion(null);
-  };
-
-  const handleSelect = async (value: string) => {
-    setLocalId(value);
-    await onAssign(value);
-    showSaved();
-  };
-
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          Workflow
-        </h3>
-        {saved && (
-          <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 animate-in fade-in">
-            <Check className="w-3 h-3" />
-            Saved
-          </span>
-        )}
-      </div>
+      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        Workflow
+      </h3>
 
       {/* Suggestion display */}
       {suggesting && (
@@ -95,39 +62,32 @@ export function WorkflowSelector({
         </p>
       )}
       {suggestion && (
-        <div className="flex items-center gap-2 text-xs bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2">
-          <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+        <div className="flex items-start gap-2 text-xs bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
           <span className="flex-1">
-            Suggested:{" "}
+            Suggested{" "}
             <strong>
               {workflows.find((w) => w.id === suggestion.workflow_id)?.name ??
                 suggestion.workflow_id}
             </strong>
+            {suggestion.reasoning && (
+              <span className="text-muted-foreground"> — {suggestion.reasoning}</span>
+            )}
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 text-emerald-600"
-            onClick={handleAcceptSuggestion}
+          <button
+            onClick={() => setSuggestion(null)}
+            className="shrink-0 p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
           >
-            <Check className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 text-zinc-400"
-            onClick={handleRejectSuggestion}
-          >
-            <X className="w-3.5 h-3.5" />
-          </Button>
+            <X className="w-3 h-3" />
+          </button>
         </div>
       )}
 
       {/* Select + Suggest button */}
       <div className="flex items-center gap-2">
         <Select
-          value={selectedId}
-          onValueChange={(v) => v && handleSelect(v)}
+          value={selectedWorkflowId ?? ""}
+          onValueChange={(v) => v && onSelect(v)}
           disabled={loading}
           items={workflows.map((wf) => ({ value: wf.id, label: wf.name }))}
         >

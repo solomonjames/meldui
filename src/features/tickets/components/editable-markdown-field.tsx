@@ -3,17 +3,28 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check } from "lucide-react";
 import { Button } from "@/shared/ui/button";
-import type { SectionProps } from "@/shared/components/sections/section-registry";
-import type { MarkdownContent } from "@/shared/types";
 
-export function MarkdownSection({ section, onChange }: SectionProps) {
-  const content = section.content as MarkdownContent;
-  const text = content?.text ?? "";
+interface EditableMarkdownFieldProps {
+  value: string;
+  onSave: (value: string) => void;
+  placeholder?: string;
+  minHeight?: string;
+}
+
+export function EditableMarkdownField({
+  value,
+  onSave,
+  placeholder = "No content",
+  minHeight = "200px",
+}: EditableMarkdownFieldProps) {
   const [editing, setEditing] = useState(false);
-  const [localValue, setLocalValue] = useState(text);
+  // In edit mode: controlled by localValue (independent of prop)
+  // In view mode: controlled by viewOverride (if set) or value prop
+  const [localValue, setLocalValue] = useState(value);
   const [viewOverride, setViewOverride] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-focus textarea when entering edit mode
   useEffect(() => {
     if (editing && textareaRef.current) {
       textareaRef.current.focus();
@@ -22,22 +33,23 @@ export function MarkdownSection({ section, onChange }: SectionProps) {
   }, [editing]);
 
   // Clear viewOverride once the prop catches up
-  if (viewOverride !== null && text === viewOverride) {
+  if (viewOverride !== null && value === viewOverride) {
     setViewOverride(null);
   }
 
   const enterEditing = () => {
-    setLocalValue(viewOverride ?? text);
+    setLocalValue(viewOverride ?? value);
     setEditing(true);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     setLocalValue(newValue);
-    onChange({ text: newValue });
+    onSave(newValue);
   };
 
   const exitEditing = () => {
+    // Preserve the last edit so markdown view doesn't flash stale content
     setViewOverride(localValue);
     setEditing(false);
   };
@@ -47,13 +59,14 @@ export function MarkdownSection({ section, onChange }: SectionProps) {
       <div className="space-y-2">
         <textarea
           ref={textareaRef}
-          className="w-full rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 text-sm resize-y min-h-[200px] focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+          className="w-full rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+          style={{ minHeight }}
           value={localValue}
           onChange={handleChange}
           onKeyDown={(e) => {
             if (e.key === "Escape") exitEditing();
           }}
-          placeholder="No content"
+          placeholder={placeholder}
         />
         <div className="flex justify-end">
           <Button
@@ -70,7 +83,7 @@ export function MarkdownSection({ section, onChange }: SectionProps) {
     );
   }
 
-  const displayValue = viewOverride ?? text;
+  const displayValue = viewOverride ?? value;
 
   return (
     <div
@@ -82,7 +95,7 @@ export function MarkdownSection({ section, onChange }: SectionProps) {
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayValue}</ReactMarkdown>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground italic">No content</p>
+        <p className="text-sm text-muted-foreground italic">{placeholder}</p>
       )}
     </div>
   );

@@ -824,9 +824,7 @@ pub async fn execute_step(
 
                     {
                         let mut pending = pending_permission.lock().await;
-                        *pending = Some(PendingPermission {
-                            json_rpc_id: id,
-                        });
+                        *pending = Some(PendingPermission { json_rpc_id: id });
                     }
 
                     // Emit Tauri event for frontend
@@ -861,9 +859,7 @@ pub async fn execute_step(
 
                     {
                         let mut pending = pending_feedback.lock().await;
-                        *pending = Some(PendingFeedback {
-                            json_rpc_id: id,
-                        });
+                        *pending = Some(PendingFeedback { json_rpc_id: id });
                     }
 
                     let _ = app_handle.emit(
@@ -901,9 +897,7 @@ pub async fn execute_step(
 
                     {
                         let mut pending = pending_review.lock().await;
-                        *pending = Some(PendingReview {
-                            json_rpc_id: id,
-                        });
+                        *pending = Some(PendingReview { json_rpc_id: id });
                     }
 
                     let _ = app_handle.emit(

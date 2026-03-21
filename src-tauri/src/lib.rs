@@ -40,12 +40,12 @@ async fn open_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, Str
 // ── Claude commands ──
 
 #[tauri::command]
-async fn claude_status() -> Result<String, String> {
+async fn claude_status() -> Result<claude::ClaudeStatus, String> {
     claude::get_status().await
 }
 
 #[tauri::command]
-async fn claude_login() -> Result<String, String> {
+async fn claude_login() -> Result<claude::ClaudeStatus, String> {
     claude::login().await
 }
 

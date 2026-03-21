@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
+use tauri_specta::Event;
 
 const STORE_FILE: &str = "app-preferences.json";
 const THEME_KEY: &str = "theme";
 const DEFAULT_THEME: &str = "system";
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type, tauri_specta::Event)]
 pub struct AppPreferences {
     #[serde(default = "default_theme")]
     pub theme: String,
@@ -60,7 +61,8 @@ pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Resul
         .map_err(|e| format!("Failed to save preferences: {}", e))?;
 
     // Emit event to all windows for cross-window sync
-    app.emit("preferences-changed", &preferences)
+    preferences
+        .emit(&app)
         .map_err(|e| format!("Failed to emit preferences event: {}", e))?;
 
     Ok(())

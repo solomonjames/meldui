@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct TicketComment {
     pub id: String,
     pub author: String,
@@ -9,7 +9,7 @@ pub struct TicketComment {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct TicketSection {
     pub id: String,
     pub label: String,
@@ -26,7 +26,7 @@ pub struct TicketSection {
     pub updated_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct Ticket {
     pub id: String,
     pub title: String,
@@ -311,7 +311,7 @@ pub fn add_comment(
 }
 
 /// Definition for initializing a ticket section from a workflow.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct TicketSectionDef {
     pub id: String,
     pub label: String,

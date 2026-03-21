@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
 import type { Ticket } from "@/shared/lib/tickets";
 import { ticketKeys } from "@/shared/lib/query-keys";
 
@@ -11,7 +11,7 @@ export function useTickets(projectDir: string) {
   const ticketsQuery = useQuery({
     queryKey: ticketKeys.all(projectDir),
     queryFn: () =>
-      invoke<Ticket[]>("ticket_list", { projectDir, showAll: true }),
+      commands.ticketList({ projectDir, showAll: true }),
     enabled: !!projectDir,
   });
 
@@ -22,7 +22,7 @@ export function useTickets(projectDir: string) {
       ticketType?: string;
       priority?: string;
     }) =>
-      invoke<Ticket>("ticket_create", {
+      commands.ticketCreate({
         projectDir,
         title: vars.title,
         description: vars.description,
@@ -47,13 +47,18 @@ export function useTickets(projectDir: string) {
         acceptance_criteria?: string;
       };
     }) =>
-      invoke("ticket_update", {
+      commands.ticketUpdate({
         projectDir,
         id: vars.id,
-        ...vars.updates,
+        title: vars.updates.title,
+        status: vars.updates.status,
         priority: vars.updates.priority
           ? parseInt(vars.updates.priority, 10)
           : undefined,
+        description: vars.updates.description,
+        notes: vars.updates.notes,
+        design: vars.updates.design,
+        acceptanceCriteria: vars.updates.acceptance_criteria,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
@@ -62,7 +67,7 @@ export function useTickets(projectDir: string) {
 
   const closeTicket = useMutation({
     mutationFn: (vars: { id: string; reason?: string }) =>
-      invoke("ticket_close", { projectDir, id: vars.id, reason: vars.reason }),
+      commands.ticketClose({ projectDir, id: vars.id, reason: vars.reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -70,7 +75,7 @@ export function useTickets(projectDir: string) {
 
   const deleteTicket = useMutation({
     mutationFn: (vars: { id: string }) =>
-      invoke("ticket_delete", { projectDir, id: vars.id }),
+      commands.ticketDelete({ projectDir, id: vars.id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -78,7 +83,7 @@ export function useTickets(projectDir: string) {
 
   const addComment = useMutation({
     mutationFn: (vars: { id: string; text: string }) =>
-      invoke("ticket_add_comment", {
+      commands.ticketAddComment({
         projectDir,
         id: vars.id,
         text: vars.text,
@@ -87,7 +92,7 @@ export function useTickets(projectDir: string) {
 
   const updateSection = useMutation({
     mutationFn: (vars: { ticketId: string; sectionId: string; content: unknown }) =>
-      invoke("ticket_update_section", {
+      commands.ticketUpdateSection({
         projectDir,
         ticketId: vars.ticketId,
         sectionId: vars.sectionId,
@@ -102,7 +107,7 @@ export function useTickets(projectDir: string) {
     try {
       return await queryClient.fetchQuery({
         queryKey: ticketKeys.detail(projectDir, id),
-        queryFn: () => invoke<Ticket>("ticket_show", { projectDir, id }),
+        queryFn: () => commands.ticketShow({ projectDir, id }),
       });
     } catch {
       return null;

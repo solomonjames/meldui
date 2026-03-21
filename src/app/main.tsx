@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ErrorBoundary } from 'react-error-boundary'
-import { invoke } from '@tauri-apps/api/core'
+import { commands } from '@/bindings'
 import '../index.css'
 import App from '@/app/App'
 import { PreferencesApp } from '@/features/preferences/components/preferences-app'
@@ -13,7 +13,7 @@ const isPreferencesWindow =
 // Apply saved theme before React mount to prevent flash
 async function initAndRender() {
   try {
-    const prefs = await invoke<{ theme: string }>('get_app_preferences')
+    const prefs = await commands.getAppPreferences()
     const mode = prefs.theme || 'system'
     const isDark =
       mode === 'dark' ||

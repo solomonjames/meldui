@@ -1,13 +1,9 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { commands, events } from "@/bindings";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 
 export type ThemeMode = "light" | "dark" | "system";
-
-interface AppPreferences {
-  theme: string;
-}
 
 export const preferencesKeys = {
   theme: () => ["preferences", "theme"] as const,
@@ -28,7 +24,7 @@ export function useTheme() {
   const prefsQuery = useQuery({
     queryKey: preferencesKeys.theme(),
     queryFn: async () => {
-      const prefs = await invoke<AppPreferences>("get_app_preferences");
+      const prefs = await commands.getAppPreferences();
       return (prefs.theme as ThemeMode) || "system";
     },
   });
@@ -43,7 +39,7 @@ export function useTheme() {
   // Listen for cross-window sync — invalidate query on external changes
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
-    listen<AppPreferences>("preferences-changed", () => {
+    events.appPreferences.listen(() => {
       queryClient.invalidateQueries({ queryKey: preferencesKeys.theme() });
     }).then((fn) => {
       unlisten = fn;
@@ -65,7 +61,7 @@ export function useTheme() {
 
   const setThemeMutation = useMutation({
     mutationFn: async (mode: ThemeMode) => {
-      await invoke("set_app_preferences", { preferences: { theme: mode } });
+      await commands.setAppPreferences({ preferences: { theme: mode } });
       return mode;
     },
     onSuccess: (mode) => {

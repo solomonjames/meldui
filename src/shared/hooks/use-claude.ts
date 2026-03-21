@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
 import type { ClaudeStatus } from "@/shared/types";
 
 export const claudeKeys = {
@@ -9,14 +9,11 @@ export const claudeKeys = {
 export function useClaude() {
   const statusQuery = useQuery({
     queryKey: claudeKeys.status(),
-    queryFn: async () => {
-      const result = await invoke<string>("claude_status");
-      return JSON.parse(result) as ClaudeStatus;
-    },
+    queryFn: () => commands.claudeStatus() as Promise<ClaudeStatus>,
   });
 
   const loginMutation = useMutation({
-    mutationFn: () => invoke<string>("claude_login"),
+    mutationFn: () => commands.claudeLogin(),
     onSuccess: () => {
       statusQuery.refetch();
     },

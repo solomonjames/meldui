@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { commands, events } from "@/bindings";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import type { ReviewFinding, ReviewComment, ReviewSubmission } from "@/shared/types";
 
 export function useWorkflowReview(
@@ -25,21 +25,13 @@ export function useWorkflowReview(
         unlistenRef.current = null;
       }
 
-      const unlisten = await listen<{
-        request_id: string;
-        ticket_id: string;
-        findings: ReviewFinding[];
-        summary: string;
-      }>(
-        "agent-review-findings",
-        (event) => {
-          if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
-            setReviewFindings(event.payload.findings);
-            setPendingReviewRequestId(event.payload.request_id);
-            setReviewRoundKey(prev => prev + 1);
-          }
+      const unlisten = await events.agentReviewFindingsRequest.listen((event) => {
+        if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
+          setReviewFindings(event.payload.findings as ReviewFinding[]);
+          setPendingReviewRequestId(event.payload.request_id);
+          setReviewRoundKey(prev => prev + 1);
         }
-      );
+      });
 
       if (!cancelled) {
         unlistenRef.current = unlisten;
@@ -83,7 +75,7 @@ export function useWorkflowReview(
     async (submission: ReviewSubmission) => {
       if (!pendingReviewRequestId) return;
       try {
-        await invoke("agent_review_respond", {
+        await commands.agentReviewRespond({
           requestId: pendingReviewRequestId,
           submission,
         });

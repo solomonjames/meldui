@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { commands, events } from "@/bindings";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import type { FeedbackRequestEvent } from "@/shared/types";
 
 export function useWorkflowFeedback(
@@ -22,14 +22,11 @@ export function useWorkflowFeedback(
         unlistenRef.current = null;
       }
 
-      const unlisten = await listen<FeedbackRequestEvent>(
-        "agent-feedback-request",
-        (event) => {
-          if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
-            setPendingFeedback(event.payload);
-          }
+      const unlisten = await events.agentFeedbackRequest.listen((event) => {
+        if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
+          setPendingFeedback(event.payload);
         }
-      );
+      });
 
       if (!cancelled) {
         unlistenRef.current = unlisten;
@@ -53,7 +50,7 @@ export function useWorkflowFeedback(
   const respondToFeedback = useCallback(
     async (requestId: string, approved: boolean, feedback?: string) => {
       try {
-        await invoke("agent_feedback_respond", { requestId, approved, feedback });
+        await commands.agentFeedbackRespond({ requestId, approved, feedback });
         setPendingFeedback(null);
       } catch (err) {
         // Clear stale feedback — the sidecar is likely dead (broken pipe)

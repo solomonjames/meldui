@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
 import type { ProjectSettings } from "@/shared/lib/sync";
 
 export const settingsKeys = {
@@ -11,13 +11,13 @@ export function useSettings(projectDir: string) {
 
   const settingsQuery = useQuery({
     queryKey: settingsKeys.project(projectDir),
-    queryFn: () => invoke<ProjectSettings>("settings_get", { projectDir }),
+    queryFn: () => commands.settingsGet({ projectDir }),
     enabled: !!projectDir,
   });
 
   const updateSettingsMutation = useMutation({
     mutationFn: (newSettings: ProjectSettings) =>
-      invoke("settings_update", { projectDir, settings: newSettings }),
+      commands.settingsUpdate({ projectDir, settings: newSettings }),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: settingsKeys.project(projectDir),
@@ -32,7 +32,7 @@ export function useSettings(projectDir: string) {
     loadSettings: async () => {
       const data = await queryClient.fetchQuery({
         queryKey: settingsKeys.project(projectDir),
-        queryFn: () => invoke<ProjectSettings>("settings_get", { projectDir }),
+        queryFn: () => commands.settingsGet({ projectDir }),
       });
       return data ?? null;
     },

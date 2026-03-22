@@ -332,7 +332,6 @@ export function useWorkflowStreaming(
     };
 
     return channel;
-    // biome-ignore lint/correctness/useExhaustiveDependencies: channel must reinitialize when ticket or step changes
   }, [activeTicketId, executingStepRef.current]);
 
   const getStepOutput = useCallback(

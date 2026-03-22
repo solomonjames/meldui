@@ -17,13 +17,16 @@ export function useTauriEvent<T>(
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
+  const eventRef = useRef(event);
+
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsReady(false);
 
-    event
+    eventRef.current
       .listen((e) => {
         if (!cancelled) handlerRef.current(e.payload);
       })
@@ -34,13 +37,19 @@ export function useTauriEvent<T>(
           unlisten = u;
           setIsReady(true);
         }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error("[useTauriEvent] listen() failed:", err);
+        }
       });
 
     return () => {
       cancelled = true;
       unlisten?.();
     };
-  }, [event]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return isReady;
 }

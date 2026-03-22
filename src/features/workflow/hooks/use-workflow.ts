@@ -175,7 +175,8 @@ export function useWorkflow(projectDir: string) {
         setCurrentState((prev) =>
           prev ? { ...prev, step_status: "in_progress" } : prev
         );
-        const result = await commands.workflowExecuteStep(projectDir, issueId);
+        const channel = streaming.createStreamChannel();
+        const result = await commands.workflowExecuteStep(projectDir, issueId, channel);
 
         executingStepRef.current = null;
         await getWorkflowState(issueId);
@@ -199,7 +200,8 @@ export function useWorkflow(projectDir: string) {
       try {
         setLoading(true);
         setError(null);
-        const suggestion = await commands.workflowSuggest(projectDir, issueId);
+        const channel = streaming.createStreamChannel();
+        const suggestion = await commands.workflowSuggest(projectDir, issueId, channel);
         return suggestion as WorkflowSuggestion;
       } catch {
         setError(`Unable to suggest workflow — please select manually`);
@@ -216,8 +218,10 @@ export function useWorkflow(projectDir: string) {
       issueId: string;
       action: "commit" | "commit_and_pr";
       commitMessage: string;
-    }) =>
-      commands.workflowExecuteCommitAction(projectDir, vars.issueId, vars.action, vars.commitMessage),
+    }) => {
+      const channel = streaming.createStreamChannel();
+      return commands.workflowExecuteCommitAction(projectDir, vars.issueId, vars.action, vars.commitMessage, channel);
+    },
   });
 
   const executeCommitAction = useCallback(

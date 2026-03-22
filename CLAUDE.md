@@ -26,7 +26,13 @@ npx tsc --noEmit                    # Frontend
 cd src-tauri && cargo check          # Rust
 
 # Lint
-bun run lint
+bun run lint                        # Biome (lint)
+bun run lint:fix                    # Biome (lint + auto-fix)
+bun run format:check                # Biome (format check)
+bun run format                      # Biome (format + write)
+
+# Dead code detection
+bun run knip                        # Find unused files/exports/deps
 
 # Rust formatting
 cd src-tauri && cargo fmt -- --check
@@ -184,3 +190,5 @@ WebdriverIO tests in `e2e/` with a mock sidecar (`e2e/mock-sidecar/`). Run `bun 
 **Error boundaries**: `react-error-boundary` wraps the app at two levels — `AppCrashFallback` in `src/app/main.tsx` (root) and `ViewErrorFallback` for per-view recovery. Components live in `src/shared/components/error/`.
 
 **Issue config maps**: `TYPE_CONFIG`, `PRIORITY_CONFIG`, and `STATUS_CONFIG` are defined in `src/features/tickets/constants.ts` (re-exported from `kanban-card.tsx`) and reused across ticket components for consistent styling of issue types, priorities, and statuses.
+
+**Pre-commit hook**: Lefthook runs `biome check` on staged files, `tsc --noEmit` for type checking, and `cargo fmt --check` for Rust files. Runs automatically on commit. Install with `bunx lefthook install` (also runs via `prepare` script on `bun install`).

@@ -33,7 +33,7 @@ describe("useWorkflowReview", () => {
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("AgentReviewFindingsRequest", {
+      emitTauriEvent("agent-review-findings-request", {
         request_id: "review-1",
         ticket_id: "issue-1",
         findings: [
@@ -65,7 +65,7 @@ describe("useWorkflowReview", () => {
     expect(result.current.reviewRoundKey).toBe(0);
 
     act(() => {
-      emitTauriEvent("AgentReviewFindingsRequest", {
+      emitTauriEvent("agent-review-findings-request", {
         request_id: "review-1",
         ticket_id: "issue-1",
         findings: [],
@@ -78,7 +78,7 @@ describe("useWorkflowReview", () => {
     });
 
     act(() => {
-      emitTauriEvent("AgentReviewFindingsRequest", {
+      emitTauriEvent("agent-review-findings-request", {
         request_id: "review-2",
         ticket_id: "issue-1",
         findings: [],
@@ -99,7 +99,7 @@ describe("useWorkflowReview", () => {
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("AgentReviewFindingsRequest", {
+      emitTauriEvent("agent-review-findings-request", {
         request_id: "review-1",
         ticket_id: "issue-OTHER",
         findings: [{ id: "f1", file_path: "src/foo.ts", severity: "warning", validity: "real", title: "Test", description: "Test" }],
@@ -156,7 +156,7 @@ describe("useWorkflowReview", () => {
 
     // Set up review state
     act(() => {
-      emitTauriEvent("AgentReviewFindingsRequest", {
+      emitTauriEvent("agent-review-findings-request", {
         request_id: "review-1",
         ticket_id: "issue-1",
         findings: [{ id: "f1", file_path: "src/foo.ts", severity: "info", validity: "real", title: "Test", description: "Test" }],
@@ -194,7 +194,7 @@ describe("useWorkflowReview", () => {
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("AgentReviewFindingsRequest", {
+      emitTauriEvent("agent-review-findings-request", {
         request_id: "review-1",
         ticket_id: "issue-1",
         findings: [{ id: "f1", file_path: "src/foo.ts", severity: "warning", validity: "real", title: "Test", description: "Test" }],
@@ -234,7 +234,7 @@ describe("useWorkflowReview", () => {
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("AgentReviewFindingsRequest", {
+      emitTauriEvent("agent-review-findings-request", {
         request_id: "review-1",
         ticket_id: "issue-1",
         findings: [],

@@ -33,7 +33,7 @@ describe("useWorkflowPermissions", () => {
     await waitFor(() => expect(result.current.permissionsReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("AgentPermissionRequest", {
+      emitTauriEvent("agent-permission-request", {
         request_id: "perm-1",
         tool_name: "Bash",
         input: { command: "rm -rf" },
@@ -54,7 +54,7 @@ describe("useWorkflowPermissions", () => {
     await waitFor(() => expect(result.current.permissionsReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("AgentPermissionRequest", {
+      emitTauriEvent("agent-permission-request", {
         request_id: "perm-1",
         tool_name: "Bash",
         input: {},
@@ -80,7 +80,7 @@ describe("useWorkflowPermissions", () => {
     await waitFor(() => expect(result.current.permissionsReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("AgentPermissionRequest", {
+      emitTauriEvent("agent-permission-request", {
         request_id: "perm-1",
         tool_name: "Bash",
         input: {},
@@ -111,7 +111,7 @@ describe("useWorkflowPermissions", () => {
     await waitFor(() => expect(result.current.permissionsReady).toBe(true));
 
     act(() => {
-      emitTauriEvent("AgentPermissionRequest", {
+      emitTauriEvent("agent-permission-request", {
         request_id: "perm-1",
         tool_name: "Bash",
         input: {},

@@ -128,8 +128,8 @@ describe("useWorkflow", () => {
     };
 
     act(() => {
-      emitTauriEvent("StreamChunk", chunk1);
-      emitTauriEvent("StreamChunk", chunk2);
+      emitTauriEvent("stream-chunk", chunk1);
+      emitTauriEvent("stream-chunk", chunk2);
     });
 
     await waitFor(() => {
@@ -149,7 +149,7 @@ describe("useWorkflow", () => {
     };
 
     act(() => {
-      emitTauriEvent("StreamChunk", errorChunk);
+      emitTauriEvent("stream-chunk", errorChunk);
     });
 
     await waitFor(() => {
@@ -170,7 +170,7 @@ describe("useWorkflow", () => {
     };
 
     act(() => {
-      emitTauriEvent("StreamChunk", resultChunk);
+      emitTauriEvent("stream-chunk", resultChunk);
     });
 
     await waitFor(() => {
@@ -207,7 +207,7 @@ describe("useWorkflow", () => {
     };
 
     act(() => {
-      emitTauriEvent("StreamChunk", wrongChunk);
+      emitTauriEvent("stream-chunk", wrongChunk);
     });
 
     // Small delay to ensure event would have been processed
@@ -250,7 +250,7 @@ describe("useWorkflow", () => {
 
       // Emit text while executeStep is active — should be captured
       act(() => {
-        emitTauriEvent("StreamChunk", {
+        emitTauriEvent("stream-chunk", {
           issue_id: "issue-1",
           chunk_type: "text",
           content: "During execution",
@@ -271,7 +271,7 @@ describe("useWorkflow", () => {
       // After executeStep completes, executingStepRef is null.
       // New streaming events should be dropped (no active execution).
       act(() => {
-        emitTauriEvent("StreamChunk", {
+        emitTauriEvent("stream-chunk", {
           issue_id: "issue-1",
           chunk_type: "text",
           content: " SHOULD NOT APPEAR",
@@ -305,7 +305,7 @@ describe("useWorkflow", () => {
 
       // Simulate pending feedback being set (as if sidecar requested it before dying)
       act(() => {
-        emitTauriEvent("AgentFeedbackRequest", {
+        emitTauriEvent("agent-feedback-request", {
           request_id: "fb-1",
           ticket_id: "issue-1",
           summary: "Review this",
@@ -337,7 +337,7 @@ describe("useWorkflow", () => {
 
       // Simulate feedback request
       act(() => {
-        emitTauriEvent("AgentFeedbackRequest", {
+        emitTauriEvent("agent-feedback-request", {
           request_id: "fb-1",
           ticket_id: "issue-1",
           summary: "Review this",
@@ -370,7 +370,7 @@ describe("useWorkflow", () => {
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       act(() => {
-        emitTauriEvent("AgentFeedbackRequest", {
+        emitTauriEvent("agent-feedback-request", {
           request_id: "fb-1",
           ticket_id: "issue-1",
           summary: "Review",
@@ -400,7 +400,7 @@ describe("useWorkflow", () => {
 
       // Simulate permission request
       act(() => {
-        emitTauriEvent("AgentPermissionRequest", {
+        emitTauriEvent("agent-permission-request", {
           request_id: "perm-1",
           tool_name: "Bash",
           input: { command: "rm -rf" },

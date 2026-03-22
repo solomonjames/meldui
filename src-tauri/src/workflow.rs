@@ -647,6 +647,7 @@ fn build_step_prompt(
 pub async fn execute_step(
     project_dir: &str,
     ticket_id: &str,
+    on_chunk: tauri::ipc::Channel<crate::claude::StreamChunk>,
     app_handle: tauri::AppHandle,
 ) -> Result<StepExecutionResult, String> {
     // 1. Load workflow state
@@ -729,6 +730,7 @@ pub async fn execute_step(
         &prompt,
         session_id.as_deref(),
         Some(allowed_tools),
+        &on_chunk,
         &app_handle,
         Some(&tickets_dir),
         Some(project_dir),
@@ -811,6 +813,7 @@ pub struct WorkflowSuggestion {
 pub async fn suggest_workflow(
     project_dir: &str,
     ticket_id: &str,
+    on_chunk: tauri::ipc::Channel<crate::claude::StreamChunk>,
     app_handle: tauri::AppHandle,
 ) -> Result<WorkflowSuggestion, String> {
     // Load the ticket
@@ -845,6 +848,7 @@ pub async fn suggest_workflow(
         &prompt,
         None,
         Some(vec!["Read".into(), "Glob".into(), "Grep".into()]),
+        &on_chunk,
         &app_handle,
         None,
         None,
@@ -987,6 +991,7 @@ pub async fn execute_commit_action(
     issue_id: &str,
     action: &str,
     commit_message: &str,
+    on_chunk: tauri::ipc::Channel<crate::claude::StreamChunk>,
     app_handle: tauri::AppHandle,
 ) -> Result<CommitActionResult, String> {
     let prompt = if action == "commit_and_pr" {
@@ -1024,6 +1029,7 @@ pub async fn execute_commit_action(
         &prompt,
         None,
         Some(allowed_tools),
+        &on_chunk,
         &app_handle,
         Some(&tickets_dir),
         Some(project_dir),

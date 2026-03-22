@@ -322,9 +322,10 @@ async fn workflow_state(
 async fn workflow_execute_step(
     project_dir: String,
     issue_id: String,
+    on_chunk: tauri::ipc::Channel<claude::StreamChunk>,
     app: tauri::AppHandle,
 ) -> Result<StepExecutionResult, String> {
-    workflow::execute_step(&project_dir, &issue_id, app).await
+    workflow::execute_step(&project_dir, &issue_id, on_chunk, app).await
 }
 
 #[tauri::command]
@@ -332,9 +333,10 @@ async fn workflow_execute_step(
 async fn workflow_suggest(
     project_dir: String,
     issue_id: String,
+    on_chunk: tauri::ipc::Channel<claude::StreamChunk>,
     app: tauri::AppHandle,
 ) -> Result<WorkflowSuggestion, String> {
-    workflow::suggest_workflow(&project_dir, &issue_id, app).await
+    workflow::suggest_workflow(&project_dir, &issue_id, on_chunk, app).await
 }
 
 #[tauri::command]
@@ -359,9 +361,10 @@ async fn workflow_execute_commit_action(
     issue_id: String,
     action: String,
     commit_message: String,
+    on_chunk: tauri::ipc::Channel<claude::StreamChunk>,
     app: tauri::AppHandle,
 ) -> Result<CommitActionResult, String> {
-    workflow::execute_commit_action(&project_dir, &issue_id, &action, &commit_message, app).await
+    workflow::execute_commit_action(&project_dir, &issue_id, &action, &commit_message, on_chunk, app).await
 }
 
 #[tauri::command]
@@ -379,8 +382,6 @@ pub fn run() {
         NotificationEvent, PrUrlReportedEvent, SectionUpdateEvent, StatusUpdateEvent,
         StepCompleteEvent, SubtaskClosed, SubtaskCreated, SubtaskUpdated,
     };
-    use claude::StreamChunk;
-
     let builder = tauri_specta::Builder::<tauri::Wry>::new()
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .commands(tauri_specta::collect_commands![
@@ -419,7 +420,6 @@ pub fn run() {
             preferences::open_preferences_window,
         ])
         .events(tauri_specta::collect_events![
-            StreamChunk,
             AgentPermissionRequest,
             AgentFeedbackRequest,
             AgentReviewFindingsRequest,

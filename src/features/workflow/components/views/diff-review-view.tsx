@@ -44,6 +44,7 @@ export function DiffReviewView({
   const worktreePath = ticket.metadata?.worktree_path as string | undefined;
   const worktreeBaseCommit = ticket.metadata?.worktree_base_commit as string | undefined;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reviewRoundKey triggers re-fetch on new review rounds
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -57,7 +58,6 @@ export function DiffReviewView({
     return () => {
       cancelled = true;
     };
-    // biome-ignore lint/correctness/useExhaustiveDependencies: reviewRoundKey triggers re-fetch on new review rounds
   }, [worktreePath, worktreeBaseCommit, onGetDiff, reviewRoundKey]);
 
   const handleFindingAction = (findingId: string, action: FindingAction["action"]) => {

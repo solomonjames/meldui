@@ -48,6 +48,7 @@ export function useWorkflowStreaming(
 ) {
   const [stepOutputs, setStepOutputs] = useState<Record<string, StepOutputStream>>({});
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: executingStepRef is read at call time, not memoization time
   const createStreamChannel = useCallback((): Channel<StreamChunk> => {
     const channel = new Channel<StreamChunk>();
 
@@ -332,7 +333,6 @@ export function useWorkflowStreaming(
     };
 
     return channel;
-    // biome-ignore lint/correctness/useExhaustiveDependencies: ref is read at call time, not memoization time
   }, [activeTicketId]);
 
   const getStepOutput = useCallback(

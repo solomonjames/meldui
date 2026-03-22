@@ -15,7 +15,7 @@ import type {
   WorkflowSuggestion,
 } from "@/shared/types";
 
-export const workflowKeys = {
+const workflowKeys = {
   list: (projectDir: string) => ["workflows", "list", projectDir] as const,
   detail: (projectDir: string, workflowId: string) =>
     ["workflows", "detail", projectDir, workflowId] as const,

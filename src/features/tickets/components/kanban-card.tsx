@@ -4,8 +4,6 @@ import { PRIORITY_CONFIG, TYPE_CONFIG } from "@/features/tickets/constants";
 import type { Ticket } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 
-export { PRIORITY_CONFIG, TYPE_CONFIG } from "@/features/tickets/constants";
-
 const NEXT_STATUS: Record<string, string | null> = {
   open: "in_progress",
   in_progress: null,

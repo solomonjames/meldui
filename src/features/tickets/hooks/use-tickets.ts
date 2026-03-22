@@ -3,8 +3,6 @@ import { commands } from "@/bindings";
 import { ticketKeys } from "@/shared/lib/query-keys";
 import type { Ticket } from "@/shared/lib/tickets";
 
-export { ticketKeys };
-
 export function useTickets(projectDir: string) {
   const queryClient = useQueryClient();
 

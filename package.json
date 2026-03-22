@@ -22,7 +22,8 @@
     "e2e:test": "wdio run e2e/wdio.conf.ts",
     "e2e": "bun run e2e:build-mock && bun run tauri:build && bun run e2e:test",
     "version:bump": "bun run scripts/version-bump.ts",
-    "version:check": "bun run scripts/version-check.ts"
+    "version:check": "bun run scripts/version-check.ts",
+    "knip": "knip"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
@@ -68,9 +69,30 @@
     "@wdio/mocha-framework": "^9.26.0",
     "@wdio/spec-reporter": "^9.26.0",
     "jsdom": "^28.1.0",
+    "knip": "^6.0.1",
     "typescript": "~5.9.3",
     "vite": "^8.0.0",
     "vitest": "^4.1.0",
     "webdriverio": "^9.26.0"
+  },
+  "knip": {
+    "ignore": [
+      "src/bindings.ts",
+      "src/agent/**",
+      "e2e/**",
+      "src/shared/ui/**",
+      "src/shared/types/index.ts",
+      "src/shared/lib/sync/types.ts",
+      "src/shared/components/sections/collapsible-section.tsx"
+    ],
+    "ignoreDependencies": [
+      "@tauri-apps/plugin-dialog",
+      "@tauri-apps/plugin-shell",
+      "@wdio/local-runner",
+      "@wdio/mocha-framework",
+      "@wdio/spec-reporter",
+      "webdriverio"
+    ],
+    "ignoreExportsUsedInFile": true
   }
 }

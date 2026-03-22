@@ -5,7 +5,7 @@ import { commands, events } from "@/bindings";
 
 export type ThemeMode = "light" | "dark" | "system";
 
-export const preferencesKeys = {
+const preferencesKeys = {
   theme: () => ["preferences", "theme"] as const,
 };
 

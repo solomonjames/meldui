@@ -158,7 +158,6 @@ The sidecar is excluded from the frontend `tsc` build via `tsconfig.app.json` `"
 - `query-client.ts` — TanStack Query client with staleTime/gcTime/retry defaults
 - `invalidation.ts` — event-driven cache invalidation (Tauri events → query invalidation)
 - `query-keys.ts` — shared query key factories (ticketKeys) used by both features and invalidation
-- `tauri-queries.ts` — helper utilities for Tauri invoke queries
 - `tickets/` — ticket type definitions and helpers
 - `sync/` — beads sync logic
 - `utils.ts` — general utilities (cn, etc.)

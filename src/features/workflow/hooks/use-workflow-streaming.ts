@@ -332,7 +332,7 @@ export function useWorkflowStreaming(
     };
 
     return channel;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // biome-ignore lint/correctness/useExhaustiveDependencies: channel must reinitialize when ticket or step changes
   }, [activeTicketId, executingStepRef.current]);
 
   const getStepOutput = useCallback(

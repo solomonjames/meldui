@@ -15,16 +15,16 @@ export function useTauriEvent<T>(
 ): boolean {
   const [isReady, setIsReady] = useState(false);
   const handlerRef = useRef(handler);
-  handlerRef.current = handler;
-
   const eventRef = useRef(event);
+
+  // Keep handler ref in sync (inside useEffect to satisfy React Compiler)
+  useEffect(() => {
+    handlerRef.current = handler;
+  });
 
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsReady(false);
 
     eventRef.current
       .listen((e) => {
@@ -48,7 +48,6 @@ export function useTauriEvent<T>(
       cancelled = true;
       unlisten?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return isReady;

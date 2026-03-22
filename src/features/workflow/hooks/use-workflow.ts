@@ -37,6 +37,7 @@ export function useWorkflow(projectDir: string) {
   const executingStepRef = useRef<string | null>(null);
   const onRefreshTicketRef = useRef<(() => Promise<void>) | null>(null);
   const getWorkflowStateRef = useRef<((issueId: string) => Promise<unknown>) | null>(null);
+  const createStreamChannelRef = useRef<ReturnType<typeof useWorkflowStreaming>["createStreamChannel"]>(null!);
 
   useEffect(() => {
     currentStepRef.current = currentState?.current_step_id ?? null;
@@ -44,6 +45,7 @@ export function useWorkflow(projectDir: string) {
 
   // Compose sub-hooks (untouched)
   const streaming = useWorkflowStreaming(activeTicketId, executingStepRef);
+  createStreamChannelRef.current = streaming.createStreamChannel;
   const permissions = useWorkflowPermissions(activeTicketId, setError);
   const feedback = useWorkflowFeedback(activeTicketId, setError);
   const review = useWorkflowReview(activeTicketId, setError);
@@ -175,7 +177,7 @@ export function useWorkflow(projectDir: string) {
         setCurrentState((prev) =>
           prev ? { ...prev, step_status: "in_progress" } : prev
         );
-        const channel = streaming.createStreamChannel();
+        const channel = createStreamChannelRef.current();
         const result = await commands.workflowExecuteStep(projectDir, issueId, channel);
 
         executingStepRef.current = null;
@@ -200,7 +202,7 @@ export function useWorkflow(projectDir: string) {
       try {
         setLoading(true);
         setError(null);
-        const channel = streaming.createStreamChannel();
+        const channel = createStreamChannelRef.current();
         const suggestion = await commands.workflowSuggest(projectDir, issueId, channel);
         return suggestion as WorkflowSuggestion;
       } catch {
@@ -219,7 +221,7 @@ export function useWorkflow(projectDir: string) {
       action: "commit" | "commit_and_pr";
       commitMessage: string;
     }) => {
-      const channel = streaming.createStreamChannel();
+      const channel = createStreamChannelRef.current();
       return commands.workflowExecuteCommitAction(projectDir, vars.issueId, vars.action, vars.commitMessage, channel);
     },
   });

@@ -309,6 +309,7 @@ export function useWorkflowStreaming(
     };
 
     return channel;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTicketId]);
 
   const getStepOutput = useCallback(

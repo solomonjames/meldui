@@ -35,7 +35,7 @@ export function DiffReviewView({
   onDeleteComment,
   onSubmitReview,
   reviewDisabled,
-  reviewRoundKey: _reviewRoundKey,
+  reviewRoundKey,
 }: DiffReviewViewProps) {
   const [files, setFiles] = useState<DiffFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,8 +57,8 @@ export function DiffReviewView({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worktreePath, worktreeBaseCommit, onGetDiff]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: reviewRoundKey triggers re-fetch on new review rounds
+  }, [worktreePath, worktreeBaseCommit, onGetDiff, reviewRoundKey]);
 
   const handleFindingAction = (findingId: string, action: FindingAction["action"]) => {
     setFindingActions((prev) => {

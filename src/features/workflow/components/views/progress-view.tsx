@@ -39,9 +39,10 @@ export function ProgressView({
   const displayText =
     contentBlocks.length === 0 ? stepOutput?.textContent || stepOutput?.resultContent || "" : "";
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll should fire on content changes
   useEffect(() => {
     scrollEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
+  }, [contentBlocks.length, stepOutput?.textContent]);
 
   return (
     <div className="flex flex-col h-full">

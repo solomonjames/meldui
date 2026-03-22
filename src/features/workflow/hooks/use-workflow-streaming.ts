@@ -332,7 +332,8 @@ export function useWorkflowStreaming(
     };
 
     return channel;
-  }, [activeTicketId, executingStepRef.current]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: ref is read at call time, not memoization time
+  }, [activeTicketId]);
 
   const getStepOutput = useCallback(
     (stepId: string): StepOutputStream | undefined => {

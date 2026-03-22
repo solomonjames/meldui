@@ -139,10 +139,11 @@ export function ChatView({
   const isThinking = isExecuting && (stepOutput?.thinkingContent?.length ?? 0) > 0 && !hasContent;
   const isStepComplete = stepOutput?.resultContent != null;
 
-  // Auto-scroll chat panel
+  // Auto-scroll chat panel when new content arrives
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll should fire on content/response changes
   useEffect(() => {
     chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
+  }, [contentBlocks.length, response, pendingFeedback]);
 
   const handleSend = () => {
     if (!input.trim() || isExecuting) return;

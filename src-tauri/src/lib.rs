@@ -364,7 +364,15 @@ async fn workflow_execute_commit_action(
     on_chunk: tauri::ipc::Channel<claude::StreamChunk>,
     app: tauri::AppHandle,
 ) -> Result<CommitActionResult, String> {
-    workflow::execute_commit_action(&project_dir, &issue_id, &action, &commit_message, on_chunk, app).await
+    workflow::execute_commit_action(
+        &project_dir,
+        &issue_id,
+        &action,
+        &commit_message,
+        on_chunk,
+        app,
+    )
+    .await
 }
 
 #[tauri::command]

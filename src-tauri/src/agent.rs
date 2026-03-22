@@ -1061,20 +1061,24 @@ fn dispatch_message_to_tauri(
         "session" => {
             // Session ID is tracked in queryComplete, but emit for frontend
             if let Some(sid) = params.get("session_id").and_then(|s| s.as_str()) {
-                on_chunk.send(StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "session".to_string(),
-                    content: sid.to_string(),
-                }).ok();
+                on_chunk
+                    .send(StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "session".to_string(),
+                        content: sid.to_string(),
+                    })
+                    .ok();
             }
         }
         "text" => {
             if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
-                on_chunk.send(StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "text".to_string(),
-                    content: content.to_string(),
-                }).ok();
+                on_chunk
+                    .send(StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "text".to_string(),
+                        content: content.to_string(),
+                    })
+                    .ok();
             }
         }
         "tool_start" => {
@@ -1087,11 +1091,13 @@ fn dispatch_message_to_tauri(
                 "tool_name": tool_name,
                 "tool_id": tool_id,
             });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "tool_start".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_start".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "tool_input" => {
             let tool_id = params.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
@@ -1100,11 +1106,13 @@ fn dispatch_message_to_tauri(
                 "tool_id": tool_id,
                 "content": content,
             });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "tool_input".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_input".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "tool_end" => {
             let tool_id = params
@@ -1112,11 +1120,13 @@ fn dispatch_message_to_tauri(
                 .and_then(|i| i.as_str())
                 .unwrap_or("0");
             let payload = serde_json::json!({ "tool_id": tool_id });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "tool_end".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_end".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "tool_result" => {
             let tool_id = params.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
@@ -1130,28 +1140,34 @@ fn dispatch_message_to_tauri(
                 "content": content,
                 "is_error": is_error,
             });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "tool_result".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_result".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "thinking" => {
             if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
-                on_chunk.send(StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "thinking".to_string(),
-                    content: content.to_string(),
-                }).ok();
+                on_chunk
+                    .send(StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "thinking".to_string(),
+                        content: content.to_string(),
+                    })
+                    .ok();
             }
         }
         "result" => {
             if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
-                on_chunk.send(StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "result".to_string(),
-                    content: content.to_string(),
-                }).ok();
+                on_chunk
+                    .send(StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "result".to_string(),
+                        content: content.to_string(),
+                    })
+                    .ok();
             }
         }
         "error" => {
@@ -1159,11 +1175,13 @@ fn dispatch_message_to_tauri(
                 .get("message")
                 .and_then(|m| m.as_str())
                 .unwrap_or("Unknown agent error");
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "error".to_string(),
-                content: message.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "error".to_string(),
+                    content: message.to_string(),
+                })
+                .ok();
         }
         "section_update" => {
             let ticket_id = params
@@ -1353,11 +1371,13 @@ fn dispatch_message_to_tauri(
                 "tool_use_id": tool_use_id,
                 "elapsed_seconds": elapsed,
             });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "tool_progress".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_progress".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "subagent_start" => {
             let task_id = params.get("task_id").and_then(|t| t.as_str()).unwrap_or("");
@@ -1374,11 +1394,13 @@ fn dispatch_message_to_tauri(
                 "tool_use_id": tool_use_id,
                 "description": description,
             });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "subagent_start".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "subagent_start".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "subagent_progress" => {
             let payload = serde_json::json!({
@@ -1387,11 +1409,13 @@ fn dispatch_message_to_tauri(
                 "last_tool_name": params.get("last_tool_name"),
                 "usage": params.get("usage"),
             });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "subagent_progress".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "subagent_progress".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "subagent_complete" => {
             let payload = serde_json::json!({
@@ -1400,11 +1424,13 @@ fn dispatch_message_to_tauri(
                 "summary": params.get("summary"),
                 "usage": params.get("usage"),
             });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "subagent_complete".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "subagent_complete".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "files_changed" => {
             let files = params
@@ -1412,11 +1438,13 @@ fn dispatch_message_to_tauri(
                 .cloned()
                 .unwrap_or(serde_json::json!([]));
             let payload = serde_json::json!({ "files": files });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "files_changed".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "files_changed".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "tool_use_summary" => {
             let summary = params.get("summary").and_then(|s| s.as_str()).unwrap_or("");
@@ -1428,22 +1456,26 @@ fn dispatch_message_to_tauri(
                 "summary": summary,
                 "tool_ids": tool_ids,
             });
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "tool_use_summary".to_string(),
-                content: payload.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "tool_use_summary".to_string(),
+                    content: payload.to_string(),
+                })
+                .ok();
         }
         "compacting" => {
             let is_compacting = params
                 .get("is_compacting")
                 .and_then(|b| b.as_bool())
                 .unwrap_or(false);
-            on_chunk.send(StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "compacting".to_string(),
-                content: is_compacting.to_string(),
-            }).ok();
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "compacting".to_string(),
+                    content: is_compacting.to_string(),
+                })
+                .ok();
         }
         "heartbeat" => {
             log::debug!("agent: heartbeat received");

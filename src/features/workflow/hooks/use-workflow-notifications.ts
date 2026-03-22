@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { events } from "@/bindings";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 import type { NotificationEvent } from "@/shared/types";
@@ -6,7 +6,7 @@ import type { NotificationEvent } from "@/shared/types";
 export function useWorkflowNotifications(
   activeTicketId: string | null,
   onRefreshTicketRef: React.MutableRefObject<(() => Promise<void>) | null>,
-  getWorkflowStateRef: React.MutableRefObject<((issueId: string) => Promise<unknown>) | null>
+  getWorkflowStateRef: React.MutableRefObject<((issueId: string) => Promise<unknown>) | null>,
 ) {
   const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
   const [statusText, setStatusText] = useState<string | null>(null);

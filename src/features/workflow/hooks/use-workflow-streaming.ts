@@ -1,18 +1,18 @@
-import { useState, useCallback } from "react";
 import { Channel } from "@tauri-apps/api/core";
+import { useCallback, useState } from "react";
 import type {
-  StepOutputStream,
-  ToolActivity,
   ContentBlock,
-  SubagentActivity,
+  StepOutputStream,
   StreamChunk,
+  SubagentActivity,
+  ToolActivity,
 } from "@/shared/types";
 
 /** Update a ToolActivity inside contentBlocks by tool_id */
 function updateToolInBlocks(
   blocks: ContentBlock[],
   toolId: string,
-  updater: (a: ToolActivity) => ToolActivity
+  updater: (a: ToolActivity) => ToolActivity,
 ): ContentBlock[] {
   return blocks.map((block) => {
     if (block.type !== "tool_group") return block;
@@ -44,10 +44,11 @@ function emptyStepOutput(): StepOutputStream {
 
 export function useWorkflowStreaming(
   activeTicketId: string | null,
-  executingStepRef: React.MutableRefObject<string | null>
+  executingStepRef: React.MutableRefObject<string | null>,
 ) {
   const [stepOutputs, setStepOutputs] = useState<Record<string, StepOutputStream>>({});
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: executingStepRef is read at call time, not memoization time
   const createStreamChannel = useCallback((): Channel<StreamChunk> => {
     const channel = new Channel<StreamChunk>();
 
@@ -66,7 +67,7 @@ export function useWorkflowStreaming(
           case "text": {
             // Insert paragraph break when text resumes after tool use
             if (current.textContent && current.lastChunkType !== "text") {
-              updated.textContent = current.textContent + "\n\n" + chunk.content;
+              updated.textContent = `${current.textContent}\n\n${chunk.content}`;
             } else {
               updated.textContent = current.textContent + chunk.content;
             }
@@ -74,7 +75,10 @@ export function useWorkflowStreaming(
             const blocks = [...current.contentBlocks];
             const lastBlock = blocks[blocks.length - 1];
             if (lastBlock && lastBlock.type === "text") {
-              blocks[blocks.length - 1] = { ...lastBlock, content: lastBlock.content + chunk.content };
+              blocks[blocks.length - 1] = {
+                ...lastBlock,
+                content: lastBlock.content + chunk.content,
+              };
             } else {
               blocks.push({ type: "text", content: chunk.content });
             }
@@ -121,12 +125,20 @@ export function useWorkflowStreaming(
                 const activities = [...current.toolActivities];
                 const idx = activities.findIndex((a) => a.tool_id === tool_id);
                 if (idx >= 0) {
-                  activities[idx] = { ...activities[idx], input: activities[idx].input + inputContent };
+                  activities[idx] = {
+                    ...activities[idx],
+                    input: activities[idx].input + inputContent,
+                  };
                   updated.toolActivities = activities;
                   // Update in contentBlocks too
-                  updated.contentBlocks = updateToolInBlocks(current.contentBlocks, tool_id, (a) => ({
-                    ...a, input: a.input + inputContent,
-                  }));
+                  updated.contentBlocks = updateToolInBlocks(
+                    current.contentBlocks,
+                    tool_id,
+                    (a) => ({
+                      ...a,
+                      input: a.input + inputContent,
+                    }),
+                  );
                 }
               }
             } catch {
@@ -151,9 +163,14 @@ export function useWorkflowStreaming(
                 if (idx >= 0) {
                   activities[idx] = { ...activities[idx], status: "complete" };
                   updated.toolActivities = activities;
-                  updated.contentBlocks = updateToolInBlocks(current.contentBlocks, tool_id, (a) => ({
-                    ...a, status: "complete",
-                  }));
+                  updated.contentBlocks = updateToolInBlocks(
+                    current.contentBlocks,
+                    tool_id,
+                    (a) => ({
+                      ...a,
+                      status: "complete",
+                    }),
+                  );
                   matched = true;
                 }
               }
@@ -177,10 +194,18 @@ export function useWorkflowStreaming(
               const activities = [...current.toolActivities];
               const idx = activities.findIndex((a) => a.tool_id === tool_id);
               if (idx >= 0) {
-                activities[idx] = { ...activities[idx], result: content, is_error, status: "complete" };
+                activities[idx] = {
+                  ...activities[idx],
+                  result: content,
+                  is_error,
+                  status: "complete",
+                };
                 updated.toolActivities = activities;
                 updated.contentBlocks = updateToolInBlocks(current.contentBlocks, tool_id, (a) => ({
-                  ...a, result: content, is_error, status: "complete" as const,
+                  ...a,
+                  result: content,
+                  is_error,
+                  status: "complete" as const,
                 }));
               }
             } catch {
@@ -220,14 +245,12 @@ export function useWorkflowStreaming(
             try {
               const { task_id, summary, last_tool_name, usage } = JSON.parse(chunk.content);
               updated.subagentActivities = current.subagentActivities.map((s) =>
-                s.task_id === task_id
-                  ? { ...s, summary, last_tool_name, usage }
-                  : s
+                s.task_id === task_id ? { ...s, summary, last_tool_name, usage } : s,
               );
               updated.contentBlocks = current.contentBlocks.map((b) =>
                 b.type === "subagent" && b.activity.task_id === task_id
                   ? { ...b, activity: { ...b.activity, summary, last_tool_name, usage } }
-                  : b
+                  : b,
               );
             } catch {
               // ignore
@@ -238,14 +261,12 @@ export function useWorkflowStreaming(
             try {
               const { task_id, status, summary, usage } = JSON.parse(chunk.content);
               updated.subagentActivities = current.subagentActivities.map((s) =>
-                s.task_id === task_id
-                  ? { ...s, status, summary, usage }
-                  : s
+                s.task_id === task_id ? { ...s, status, summary, usage } : s,
               );
               updated.contentBlocks = current.contentBlocks.map((b) =>
                 b.type === "subagent" && b.activity.task_id === task_id
                   ? { ...b, activity: { ...b.activity, status, summary, usage } }
-                  : b
+                  : b,
               );
             } catch {
               // ignore
@@ -270,7 +291,10 @@ export function useWorkflowStreaming(
           case "tool_use_summary": {
             try {
               const { summary, tool_ids } = JSON.parse(chunk.content);
-              updated.toolUseSummaries = [...current.toolUseSummaries, { summary, toolIds: tool_ids ?? [] }];
+              updated.toolUseSummaries = [
+                ...current.toolUseSummaries,
+                { summary, toolIds: tool_ids ?? [] },
+              ];
               // Best-effort: find matching tool_group and set summaryText
               if (Array.isArray(tool_ids) && tool_ids.length > 0) {
                 updated.contentBlocks = current.contentBlocks.map((b) => {
@@ -309,14 +333,13 @@ export function useWorkflowStreaming(
     };
 
     return channel;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTicketId]);
 
   const getStepOutput = useCallback(
     (stepId: string): StepOutputStream | undefined => {
       return stepOutputs[stepId];
     },
-    [stepOutputs]
+    [stepOutputs],
   );
 
   return { stepOutputs, getStepOutput, createStreamChannel, streamingReady: true as const };

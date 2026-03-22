@@ -76,7 +76,7 @@ bun run tauri:build
 | `bun run dev` | Frontend only (Vite on :5173) |
 | `bun run tauri:build` | Build native binary |
 | `bun run agent:build` | Build agent sidecar |
-| `bun run lint` | ESLint |
+| `bun run lint` | Biome |
 | `npx tsc --noEmit` | TypeScript type check |
 | `cd src-tauri && cargo check` | Rust type check |
 | `cd src-tauri && cargo fmt -- --check` | Rust format check |

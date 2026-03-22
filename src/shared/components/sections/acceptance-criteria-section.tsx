@@ -37,6 +37,7 @@ export function AcceptanceCriteriaSection({ section, onChange }: SectionProps) {
         return (
           <div key={item.id} className="flex gap-3">
             <button
+              type="button"
               onClick={() => cycleStatus(idx)}
               className={`text-lg leading-none mt-0.5 shrink-0 cursor-pointer hover:opacity-70 transition-opacity ${statusInfo.color}`}
               title={`Status: ${item.status}. Click to cycle.`}

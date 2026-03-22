@@ -59,12 +59,13 @@ describe("useWorkflow", () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "workflow_list") return Promise.resolve([]);
       if (cmd === "workflow_execute_step") return Promise.reject(new Error("sidecar crashed"));
-      if (cmd === "workflow_state") return Promise.resolve({
-        workflow_id: "wf-1",
-        current_step_id: "step-1",
-        step_status: "pending",
-        step_history: [],
-      });
+      if (cmd === "workflow_state")
+        return Promise.resolve({
+          workflow_id: "wf-1",
+          current_step_id: "step-1",
+          step_status: "pending",
+          step_history: [],
+        });
       return Promise.resolve(null);
     });
 
@@ -89,7 +90,9 @@ describe("useWorkflow", () => {
     mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "workflow_execute_step") {
         capturedChannel = args?.onChunk as MockChannel<StreamChunk>;
-        return new Promise((resolve) => { resolveExecute = resolve; });
+        return new Promise((resolve) => {
+          resolveExecute = resolve;
+        });
       }
       if (cmd === "workflow_state") {
         return Promise.resolve({
@@ -105,14 +108,20 @@ describe("useWorkflow", () => {
     const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
     await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
-    act(() => { result.current.setActiveTicketId("issue-1"); });
+    act(() => {
+      result.current.setActiveTicketId("issue-1");
+    });
     await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
     // Set current step via getWorkflowState
-    await act(async () => { await result.current.getWorkflowState("issue-1"); });
+    await act(async () => {
+      await result.current.getWorkflowState("issue-1");
+    });
 
     // Start a blocking executeStep to set executingStepRef
-    act(() => { result.current.executeStep("issue-1"); });
+    act(() => {
+      result.current.executeStep("issue-1");
+    });
 
     // Wait for the channel to be captured
     await waitFor(() => expect(capturedChannel).not.toBeNull());
@@ -138,9 +147,7 @@ describe("useWorkflow", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.stepOutputs["step-1"]?.textContent).toBe(
-        "Hello World"
-      );
+      expect(result.current.stepOutputs["step-1"]?.textContent).toBe("Hello World");
     });
   });
 
@@ -158,9 +165,7 @@ describe("useWorkflow", () => {
 
     await waitFor(() => {
       const output = result.current.stepOutputs["step-1"];
-      expect(output?.stderrLines).toContainEqual(
-        "[error] Something went wrong"
-      );
+      expect(output?.stderrLines).toContainEqual("[error] Something went wrong");
     });
   });
 
@@ -177,9 +182,7 @@ describe("useWorkflow", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.stepOutputs["step-1"]?.resultContent).toBe(
-        "Final result text"
-      );
+      expect(result.current.stepOutputs["step-1"]?.resultContent).toBe("Final result text");
     });
   });
 
@@ -245,19 +248,22 @@ describe("useWorkflow", () => {
       mockInvoke.mockImplementation((cmd: string) => {
         if (cmd === "workflow_list") return Promise.resolve([]);
         if (cmd === "workflow_execute_step") return Promise.reject(new Error("sidecar timed out"));
-        if (cmd === "workflow_state") return Promise.resolve({
-          workflow_id: "wf-1",
-          current_step_id: "step-1",
-          step_status: { failed: "sidecar timed out" },
-          step_history: [],
-        });
+        if (cmd === "workflow_state")
+          return Promise.resolve({
+            workflow_id: "wf-1",
+            current_step_id: "step-1",
+            step_status: { failed: "sidecar timed out" },
+            step_history: [],
+          });
         return Promise.resolve(null);
       });
 
       const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
-      act(() => { result.current.setActiveTicketId("issue-1"); });
+      act(() => {
+        result.current.setActiveTicketId("issue-1");
+      });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       // Simulate pending feedback being set (as if sidecar requested it before dying)
@@ -289,7 +295,9 @@ describe("useWorkflow", () => {
       const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
-      act(() => { result.current.setActiveTicketId("issue-1"); });
+      act(() => {
+        result.current.setActiveTicketId("issue-1");
+      });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       // Simulate feedback request
@@ -307,7 +315,7 @@ describe("useWorkflow", () => {
 
       // Mock broken pipe error when responding
       mockInvoke.mockRejectedValueOnce(
-        new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)")
+        new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)"),
       );
 
       await act(async () => {
@@ -323,7 +331,9 @@ describe("useWorkflow", () => {
       const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
-      act(() => { result.current.setActiveTicketId("issue-1"); });
+      act(() => {
+        result.current.setActiveTicketId("issue-1");
+      });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       act(() => {
@@ -352,7 +362,9 @@ describe("useWorkflow", () => {
       const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
-      act(() => { result.current.setActiveTicketId("issue-1"); });
+      act(() => {
+        result.current.setActiveTicketId("issue-1");
+      });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
       // Simulate permission request
@@ -369,7 +381,7 @@ describe("useWorkflow", () => {
       });
 
       mockInvoke.mockRejectedValueOnce(
-        new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)")
+        new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)"),
       );
 
       await act(async () => {

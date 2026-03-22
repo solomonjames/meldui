@@ -28,7 +28,7 @@ jobs:
               - 'tsconfig*.json'
               - 'vite.config.ts'
               - 'vitest.config.ts'
-              - 'eslint.config.js'
+              - 'biome.json'
               - 'components.json'
               - 'index.html'
               - 'scripts/**'
@@ -67,8 +67,14 @@ jobs:
       - name: Check version sync
         run: bun run version:check
 
-      - name: Lint (ESLint)
+      - name: Lint (Biome)
         run: bun run lint
+
+      - name: Format check (Biome)
+        run: bun run format:check
+
+      - name: Dead code check (Knip)
+        run: bun run knip -- --reporter github-actions
 
       - name: Type check (TypeScript)
         run: npx tsc --noEmit

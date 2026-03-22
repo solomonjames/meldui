@@ -1,5 +1,5 @@
-import { Sun, Moon, Monitor } from "lucide-react";
-import { useTheme, type ThemeMode } from "@/shared/hooks/use-theme";
+import { Monitor, Moon, Sun } from "lucide-react";
+import { type ThemeMode, useTheme } from "@/shared/hooks/use-theme";
 
 const options: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
   { mode: "light", label: "Light", icon: Sun },
@@ -12,12 +12,11 @@ export function AppearanceSection() {
 
   return (
     <div>
-      <h3 className="text-sm font-medium text-muted-foreground mb-3">
-        Appearance
-      </h3>
+      <h3 className="text-sm font-medium text-muted-foreground mb-3">Appearance</h3>
       <div className="inline-flex rounded-lg border border-border bg-muted p-1 gap-1">
         {options.map(({ mode, label, icon: Icon }) => (
           <button
+            type="button"
             key={mode}
             onClick={() => setTheme(mode)}
             className={`

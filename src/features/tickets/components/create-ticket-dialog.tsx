@@ -1,21 +1,10 @@
 import { useState } from "react";
+import { PRIORITY_CONFIG, TYPE_CONFIG } from "@/features/tickets/constants";
 import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/ui/select";
-import { TYPE_CONFIG, PRIORITY_CONFIG } from "@/features/tickets/constants";
 
 const SEVERITY_NAMES = ["Critical", "High", "Medium", "Low", "Minimal"] as const;
 
@@ -26,7 +15,7 @@ interface CreateTicketDialogProps {
     title: string,
     description?: string,
     ticketType?: string,
-    priority?: string
+    priority?: string,
   ) => Promise<unknown>;
 }
 
@@ -70,11 +59,14 @@ export function CreateTicketDialog({
           />
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="text-sm font-medium mb-1 block">Type</label>
+              <span className="text-sm font-medium mb-1 block">Type</span>
               <Select
                 value={ticketType}
                 onValueChange={(v) => v && setTicketType(v)}
-                items={Object.keys(TYPE_CONFIG).map((key) => ({ value: key, label: key.charAt(0).toUpperCase() + key.slice(1) }))}
+                items={Object.keys(TYPE_CONFIG).map((key) => ({
+                  value: key,
+                  label: key.charAt(0).toUpperCase() + key.slice(1),
+                }))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -95,11 +87,14 @@ export function CreateTicketDialog({
               </Select>
             </div>
             <div className="flex-1">
-              <label className="text-sm font-medium mb-1 block">Priority</label>
+              <span className="text-sm font-medium mb-1 block">Priority</span>
               <Select
                 value={priority}
                 onValueChange={(v) => v && setPriority(v)}
-                items={Object.entries(PRIORITY_CONFIG).map(([key, config]) => ({ value: key, label: `${config.label} ${SEVERITY_NAMES[Number(key)]}` }))}
+                items={Object.entries(PRIORITY_CONFIG).map(([key, config]) => ({
+                  value: key,
+                  label: `${config.label} ${SEVERITY_NAMES[Number(key)]}`,
+                }))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />

@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import type { StepOutputStream } from "@/shared/types";
+import { useEffect, useState } from "react";
 import { TOOL_LABELS } from "@/features/workflow/components/shared/tool-labels";
+import type { StepOutputStream } from "@/shared/types";
 
 interface ActivityBarProps {
   stepOutput?: StepOutputStream;
@@ -9,7 +9,7 @@ interface ActivityBarProps {
 }
 
 function useElapsedTimer(startTime: number | null): number {
-  const computeElapsed = () => startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+  const computeElapsed = () => (startTime ? Math.floor((Date.now() - startTime) / 1000) : 0);
   const [elapsed, setElapsed] = useState(computeElapsed);
 
   useEffect(() => {
@@ -32,11 +32,14 @@ export function ActivityBar({ stepOutput, isExecuting, isWaitingForUser }: Activ
   const activeToolName = stepOutput?.activeToolName ?? null;
   const activeToolStartTime = stepOutput?.activeToolStartTime ?? null;
   const isCompacting = stepOutput?.isCompacting ?? false;
-  const isThinking = isExecuting
-    && (stepOutput?.thinkingContent?.length ?? 0) > 0
-    && !activeToolName
-    && (stepOutput?.toolActivities?.length ?? 0) === 0;
-  const hasRunningSubagent = (stepOutput?.subagentActivities ?? []).some((s) => s.status === "running");
+  const isThinking =
+    isExecuting &&
+    (stepOutput?.thinkingContent?.length ?? 0) > 0 &&
+    !activeToolName &&
+    (stepOutput?.toolActivities?.length ?? 0) === 0;
+  const hasRunningSubagent = (stepOutput?.subagentActivities ?? []).some(
+    (s) => s.status === "running",
+  );
   const elapsed = useElapsedTimer(activeToolStartTime);
 
   const hasResult = stepOutput?.resultContent != null;
@@ -49,7 +52,14 @@ export function ActivityBar({ stepOutput, isExecuting, isWaitingForUser }: Activ
 
   if (isCompacting) {
     icon = (
-      <svg className="w-3.5 h-3.5 text-amber-500 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <svg
+        aria-hidden="true"
+        className="w-3.5 h-3.5 text-amber-500 animate-pulse"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
         <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
       </svg>
     );
@@ -73,9 +83,18 @@ export function ActivityBar({ stepOutput, isExecuting, isWaitingForUser }: Activ
   } else if (isThinking) {
     icon = (
       <div className="flex gap-0.5">
-        <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-        <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-        <span className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+        <span
+          className="w-1 h-1 rounded-full bg-violet-400 animate-bounce"
+          style={{ animationDelay: "0ms" }}
+        />
+        <span
+          className="w-1 h-1 rounded-full bg-violet-400 animate-bounce"
+          style={{ animationDelay: "150ms" }}
+        />
+        <span
+          className="w-1 h-1 rounded-full bg-violet-400 animate-bounce"
+          style={{ animationDelay: "300ms" }}
+        />
       </div>
     );
     text = "Thinking...";

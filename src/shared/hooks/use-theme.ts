@@ -1,19 +1,18 @@
-import { useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { commands, events } from "@/bindings";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { useEffect } from "react";
+import { commands, events } from "@/bindings";
 
 export type ThemeMode = "light" | "dark" | "system";
 
-export const preferencesKeys = {
+const preferencesKeys = {
   theme: () => ["preferences", "theme"] as const,
 };
 
 function applyTheme(mode: ThemeMode) {
   const isDark =
     mode === "dark" ||
-    (mode === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+    (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   document.documentElement.classList.toggle("dark", isDark);
 }
@@ -39,11 +38,13 @@ export function useTheme() {
   // Listen for cross-window sync — invalidate query on external changes
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
-    events.appPreferences.listen(() => {
-      queryClient.invalidateQueries({ queryKey: preferencesKeys.theme() });
-    }).then((fn) => {
-      unlisten = fn;
-    });
+    events.appPreferences
+      .listen(() => {
+        queryClient.invalidateQueries({ queryKey: preferencesKeys.theme() });
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
     return () => {
       unlisten?.();
     };

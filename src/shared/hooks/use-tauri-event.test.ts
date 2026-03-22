@@ -8,7 +8,7 @@ function makeMockEvent<T>(eventName: string) {
   return {
     listen: (cb: (e: { payload: T }) => void) =>
       import("@tauri-apps/api/event").then((mod) =>
-        mod.listen(eventName, cb as (e: { payload: unknown }) => void)
+        mod.listen(eventName, cb as (e: { payload: unknown }) => void),
       ),
   };
 }
@@ -47,10 +47,9 @@ describe("useTauriEvent", () => {
     const handler2 = vi.fn();
     const event = makeMockEvent<string>("test-event");
 
-    const { result, rerender } = renderHook(
-      ({ handler }) => useTauriEvent(event, handler),
-      { initialProps: { handler: handler1 } }
-    );
+    const { result, rerender } = renderHook(({ handler }) => useTauriEvent(event, handler), {
+      initialProps: { handler: handler1 },
+    });
 
     await waitFor(() => expect(result.current).toBe(true));
 
@@ -68,9 +67,7 @@ describe("useTauriEvent", () => {
   it("cleans up listener on unmount", async () => {
     const handler = vi.fn();
     const event = makeMockEvent<string>("test-event");
-    const { result, unmount } = renderHook(() =>
-      useTauriEvent(event, handler)
-    );
+    const { result, unmount } = renderHook(() => useTauriEvent(event, handler));
 
     await waitFor(() => expect(result.current).toBe(true));
 

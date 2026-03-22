@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { Plus, X } from "lucide-react";
-import { Button } from "@/shared/ui/button";
+import { useState } from "react";
 import type { SectionProps } from "@/shared/components/sections/section-registry";
 import type { KeyValueContent, KeyValueEntry } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
 
 export function KeyValueSection({ section, onChange }: SectionProps) {
   const content = section.content as KeyValueContent;
@@ -29,7 +29,9 @@ export function KeyValueSection({ section, onChange }: SectionProps) {
     <div className="space-y-2">
       <div className="grid gap-1">
         {entries.map((entry, idx) => (
+          // biome-ignore lint/a11y/noStaticElementInteractions: double-click to edit pattern
           <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: entries lack stable IDs
             key={idx}
             className="flex items-center gap-2 text-sm group"
             onDoubleClick={() => setEditingIdx(idx)}
@@ -41,14 +43,18 @@ export function KeyValueSection({ section, onChange }: SectionProps) {
                   value={entry.key}
                   onChange={(e) => updateEntry(idx, "key", e.target.value)}
                   placeholder="Key"
-                  onKeyDown={(e) => { if (e.key === "Escape") setEditingIdx(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setEditingIdx(null);
+                  }}
                 />
                 <input
                   className="flex-1 rounded border bg-zinc-50 dark:bg-zinc-900 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/40"
                   value={entry.value}
                   onChange={(e) => updateEntry(idx, "value", e.target.value)}
                   placeholder="Value"
-                  onKeyDown={(e) => { if (e.key === "Escape") setEditingIdx(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setEditingIdx(null);
+                  }}
                 />
                 <Button
                   variant="ghost"

@@ -1,29 +1,23 @@
-import { useMemo } from "react";
-import { Circle, Loader2, CheckCircle2, ShieldAlert, PauseCircle } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Badge } from "@/shared/ui/badge";
-import { ScrollArea } from "@/shared/ui/scroll-area";
+import { CheckCircle2, Circle, Loader2, PauseCircle, ShieldAlert } from "lucide-react";
+import { useMemo } from "react";
 import { KanbanCard } from "@/features/tickets/components/kanban-card";
 import type { Ticket } from "@/shared/types";
+import { Badge } from "@/shared/ui/badge";
+import { ScrollArea } from "@/shared/ui/scroll-area";
 
 interface KanbanColumnProps {
   title: string;
   variant: string;
   count: number;
   tickets: Ticket[];
-  onUpdate: (
-    id: string,
-    updates: { status?: string; priority?: string }
-  ) => Promise<void>;
+  onUpdate: (id: string, updates: { status?: string; priority?: string }) => Promise<void>;
   onClose: (id: string) => Promise<void>;
   onCardClick?: (ticket: Ticket) => void;
 }
 
-const COLUMN_CONFIG: Record<
-  string,
-  { icon: typeof Circle; iconColor: string; badgeBg: string }
-> = {
+const COLUMN_CONFIG: Record<string, { icon: typeof Circle; iconColor: string; badgeBg: string }> = {
   open: {
     icon: Circle,
     iconColor: "text-zinc-400",
@@ -47,8 +41,7 @@ const COLUMN_CONFIG: Record<
   closed: {
     icon: CheckCircle2,
     iconColor: "text-emerald-500",
-    badgeBg:
-      "bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-400",
+    badgeBg: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-400",
   },
 };
 
@@ -71,16 +64,15 @@ export function KanbanColumn({
     <div
       ref={setNodeRef}
       className={`flex flex-col min-w-0 min-h-0 h-full rounded-lg transition-colors ${
-        isOver ? "bg-zinc-200/60 dark:bg-zinc-800/60 ring-2 ring-inset ring-zinc-300 dark:ring-zinc-600" : ""
+        isOver
+          ? "bg-zinc-200/60 dark:bg-zinc-800/60 ring-2 ring-inset ring-zinc-300 dark:ring-zinc-600"
+          : ""
       }`}
     >
       <div className="flex items-center gap-2 pb-3">
         <Icon className={`w-4 h-4 ${config.iconColor}`} />
         <span className="text-sm font-medium">{title}</span>
-        <Badge
-          variant="secondary"
-          className={`text-[11px] px-1.5 py-0 ${config.badgeBg}`}
-        >
+        <Badge variant="secondary" className={`text-[11px] px-1.5 py-0 ${config.badgeBg}`}>
           {count}
         </Badge>
       </div>

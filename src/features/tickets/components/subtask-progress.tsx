@@ -8,7 +8,11 @@ interface SubtaskProgressProps {
   onRemoveSubTicket?: (id: string) => void;
 }
 
-export function SubtaskProgress({ subTickets, onSubTicketClick, onRemoveSubTicket }: SubtaskProgressProps) {
+export function SubtaskProgress({
+  subTickets,
+  onSubTicketClick,
+  onRemoveSubTicket,
+}: SubtaskProgressProps) {
   const total = subTickets.length;
   const closed = subTickets.filter((t) => t.status === "closed").length;
   const pct = total > 0 ? (closed / total) * 100 : 0;
@@ -43,16 +47,16 @@ export function SubtaskProgress({ subTickets, onSubTicketClick, onRemoveSubTicke
               className="group w-full flex items-center gap-2.5 rounded-lg border bg-zinc-50 dark:bg-zinc-900 px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
               <button
+                type="button"
                 onClick={() => onSubTicketClick?.(sub)}
                 className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
               >
                 <span className={`w-2 h-2 rounded-full shrink-0 ${subStatus.dot}`} />
-                <span className="text-sm font-medium truncate flex-1">
-                  {sub.title}
-                </span>
+                <span className="text-sm font-medium truncate flex-1">{sub.title}</span>
               </button>
               {onRemoveSubTicket && (
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onRemoveSubTicket(sub.id);

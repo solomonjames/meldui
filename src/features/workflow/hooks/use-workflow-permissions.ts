@@ -1,11 +1,11 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { commands, events } from "@/bindings";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 import type { PermissionRequest } from "@/shared/types";
 
 export function useWorkflowPermissions(
-  activeTicketId: string | null,
-  setError: (msg: string) => void
+  _activeTicketId: string | null,
+  setError: (msg: string) => void,
 ) {
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
 
@@ -33,7 +33,7 @@ export function useWorkflowPermissions(
         }
       }
     },
-    [setError]
+    [setError],
   );
 
   const clearPending = useCallback(() => {

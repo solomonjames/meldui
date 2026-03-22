@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { Check } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check } from "lucide-react";
-import { Button } from "@/shared/ui/button";
 import type { SectionProps } from "@/shared/components/sections/section-registry";
 import type { MarkdownContent } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
 
 export function MarkdownSection({ section, onChange }: SectionProps) {
   const content = section.content as MarkdownContent;
@@ -73,9 +73,15 @@ export function MarkdownSection({ section, onChange }: SectionProps) {
   const displayValue = viewOverride ?? text;
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: interactive div with complex content
     <div
+      role="button"
+      tabIndex={0}
       className="cursor-pointer rounded-lg p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
       onClick={enterEditing}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") enterEditing();
+      }}
     >
       {displayValue ? (
         <div className="prose prose-sm dark:prose-invert max-w-none">

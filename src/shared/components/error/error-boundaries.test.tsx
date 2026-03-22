@@ -19,9 +19,7 @@ function ThrowingComponent({ message }: { message: string }) {
 
 describe("AppCrashFallback", () => {
   it("renders error message and reload button", () => {
-    render(
-      <AppCrashFallback error={new Error("Fatal crash")} />
-    );
+    render(<AppCrashFallback error={new Error("Fatal crash")} />);
 
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
     expect(screen.getByText("Fatal crash")).toBeInTheDocument();
@@ -35,9 +33,7 @@ describe("AppCrashFallback", () => {
       writable: true,
     });
 
-    render(
-      <AppCrashFallback error={new Error("crash")} />
-    );
+    render(<AppCrashFallback error={new Error("crash")} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Reload" }));
     expect(reloadMock).toHaveBeenCalled();
@@ -46,12 +42,7 @@ describe("AppCrashFallback", () => {
 
 describe("ViewErrorFallback", () => {
   it("renders error message and retry button", () => {
-    render(
-      <ViewErrorFallback
-        error={new Error("View failed")}
-        resetErrorBoundary={vi.fn()}
-      />
-    );
+    render(<ViewErrorFallback error={new Error("View failed")} resetErrorBoundary={vi.fn()} />);
 
     expect(screen.getByText("This view encountered an error")).toBeInTheDocument();
     expect(screen.getByText("View failed")).toBeInTheDocument();
@@ -60,12 +51,7 @@ describe("ViewErrorFallback", () => {
 
   it("calls resetErrorBoundary on retry click", () => {
     const resetFn = vi.fn();
-    render(
-      <ViewErrorFallback
-        error={new Error("oops")}
-        resetErrorBoundary={resetFn}
-      />
-    );
+    render(<ViewErrorFallback error={new Error("oops")} resetErrorBoundary={resetFn} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(resetFn).toHaveBeenCalled();
@@ -77,7 +63,7 @@ describe("ErrorBoundary integration", () => {
     render(
       <ErrorBoundary FallbackComponent={ViewErrorFallback}>
         <ThrowingComponent message="render boom" />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     );
 
     expect(screen.getByText("This view encountered an error")).toBeInTheDocument();
@@ -88,7 +74,7 @@ describe("ErrorBoundary integration", () => {
     render(
       <ErrorBoundary FallbackComponent={AppCrashFallback}>
         <ThrowingComponent message="app boom" />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     );
 
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
@@ -106,13 +92,13 @@ describe("ErrorBoundary integration", () => {
         }}
       >
         <ThrowingComponent message="labeled error" />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     );
 
     expect(onError).toHaveBeenCalledWith(
       "[ErrorBoundary:backlog]",
       "labeled error",
-      expect.any(String)
+      expect.any(String),
     );
   });
 
@@ -125,12 +111,9 @@ describe("ErrorBoundary integration", () => {
     }
 
     const { rerender } = render(
-      <ErrorBoundary
-        FallbackComponent={ViewErrorFallback}
-        resetKeys={["page-a"]}
-      >
+      <ErrorBoundary FallbackComponent={ViewErrorFallback} resetKeys={["page-a"]}>
         <MaybeThrow />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     );
 
     expect(screen.getByText("This view encountered an error")).toBeInTheDocument();
@@ -138,12 +121,9 @@ describe("ErrorBoundary integration", () => {
     // Stop throwing and change resetKeys to trigger reset
     shouldThrow = false;
     rerender(
-      <ErrorBoundary
-        FallbackComponent={ViewErrorFallback}
-        resetKeys={["page-b"]}
-      >
+      <ErrorBoundary FallbackComponent={ViewErrorFallback} resetKeys={["page-b"]}>
         <MaybeThrow />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     );
 
     expect(screen.getByText("recovered")).toBeInTheDocument();
@@ -157,7 +137,7 @@ describe("ErrorBoundary integration", () => {
     render(
       <ErrorBoundary FallbackComponent={ViewErrorFallback}>
         <AlwaysThrow />
-      </ErrorBoundary>
+      </ErrorBoundary>,
     );
 
     expect(screen.getByText("This view encountered an error")).toBeInTheDocument();

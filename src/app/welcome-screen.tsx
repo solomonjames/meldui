@@ -14,13 +14,10 @@ export function WelcomeScreen({ onOpenFolder }: WelcomeScreenProps) {
         </div>
         <h1 className="text-xl font-semibold">Welcome to Meld</h1>
         <p className="text-sm text-muted-foreground">
-          Open a project folder to get started. Meld will discover and manage
-          beads tickets stored in your project.
+          Open a project folder to get started. Meld will discover and manage beads tickets stored
+          in your project.
         </p>
-        <Button
-          onClick={onOpenFolder}
-          className="bg-emerald hover:bg-emerald/90 text-white mt-2"
-        >
+        <Button onClick={onOpenFolder} className="bg-emerald hover:bg-emerald/90 text-white mt-2">
           <FolderOpen className="w-4 h-4 mr-2" />
           Open Project Folder
         </Button>

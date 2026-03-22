@@ -1,24 +1,24 @@
-import { useEffect, useState, useCallback } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "@/shared/lib/query-client";
-import { useTauriEventInvalidation } from "@/shared/lib/invalidation";
-import { AppLayout } from "@/shared/layout/app-layout";
-import { AppSidebar } from "@/shared/layout/app-sidebar";
-import { StatusBar } from "@/shared/layout/status-bar";
+import { useCallback, useEffect, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
+import { Toaster } from "sonner";
+import { TicketPage } from "@/app/ticket-page";
+import { WelcomeScreen } from "@/app/welcome-screen";
+import { SettingsPage } from "@/features/settings/components/settings-page";
 import { BacklogPage } from "@/features/tickets/components/backlog-page";
 import { CreateTicketDialog } from "@/features/tickets/components/create-ticket-dialog";
-import { WelcomeScreen } from "@/app/welcome-screen";
-import { TicketPage } from "@/app/ticket-page";
-import { WorkflowProvider } from "@/features/workflow/context";
-import { SettingsPage } from "@/features/settings/components/settings-page";
 import { useTickets } from "@/features/tickets/hooks/use-tickets";
+import { WorkflowProvider } from "@/features/workflow/context";
 import { useWorkflow } from "@/features/workflow/hooks/use-workflow";
+import { ViewErrorFallback } from "@/shared/components/error/view-error-fallback";
 import { useProjectDir } from "@/shared/hooks/use-project-dir";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { useUpdater } from "@/shared/hooks/use-updater";
-import { ErrorBoundary } from "react-error-boundary";
-import { Toaster } from "sonner";
-import { ViewErrorFallback } from "@/shared/components/error/view-error-fallback";
+import { AppLayout } from "@/shared/layout/app-layout";
+import { AppSidebar } from "@/shared/layout/app-sidebar";
+import { StatusBar } from "@/shared/layout/status-bar";
+import { useTauriEventInvalidation } from "@/shared/lib/invalidation";
+import { queryClient } from "@/shared/lib/query-client";
 import type { Ticket } from "@/shared/types";
 
 function AppContent() {
@@ -70,7 +70,7 @@ function AppContent() {
       // Fetch workflow state so WorkflowShell renders if a workflow is active
       await getWorkflowState(ticketId);
     },
-    [setWorkflowActiveTicketId, getWorkflowState]
+    [setWorkflowActiveTicketId, getWorkflowState],
   );
 
   const handleStartWorkflow = useCallback(
@@ -80,7 +80,7 @@ function AppContent() {
         navigateToTicket(ticket.id);
       }
     },
-    [getWorkflowState, navigateToTicket]
+    [getWorkflowState, navigateToTicket],
   );
 
   const handleAutoStart = useCallback(
@@ -98,7 +98,7 @@ function AppContent() {
       // Navigate to ticket page regardless — user can start workflow from there
       navigateToTicket(ticket.id);
     },
-    [getWorkflowState, suggestWf, assignWf, navigateToTicket]
+    [getWorkflowState, suggestWf, assignWf, navigateToTicket],
   );
 
   // TicketPage handles its own refresh via TanStack Query — register a stable no-op
@@ -122,14 +122,14 @@ function AppContent() {
         setActivePage("settings");
       }
     },
-    [handleNavigateToBacklog]
+    [handleNavigateToBacklog],
   );
 
   const handleTicketClick = useCallback(
     async (ticket: Ticket) => {
       await navigateToTicket(ticket.id);
     },
-    [navigateToTicket]
+    [navigateToTicket],
   );
 
   if (dirLoading) return null;
@@ -220,12 +220,7 @@ function AppContent() {
           activeTicketId={activeTicketId}
         />
       }
-      statusBar={
-        <StatusBar
-          branch="main"
-          version="v0.1.0"
-        />
-      }
+      statusBar={<StatusBar branch="main" version="v0.1.0" />}
     >
       {renderActivePage()}
       <CreateTicketDialog

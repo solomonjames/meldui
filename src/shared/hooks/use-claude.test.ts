@@ -61,7 +61,9 @@ describe("useClaude", () => {
   });
 
   it("does not export sendMessage or clearMessages (dead code removed)", () => {
-    mockInvoke.mockResolvedValueOnce(JSON.stringify({ installed: true, authenticated: true, message: "ok" }));
+    mockInvoke.mockResolvedValueOnce(
+      JSON.stringify({ installed: true, authenticated: true, message: "ok" }),
+    );
 
     const { result } = renderHook(() => useClaude(), { wrapper });
 

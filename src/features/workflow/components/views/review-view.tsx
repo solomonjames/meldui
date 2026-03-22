@@ -1,8 +1,8 @@
+import { Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check } from "lucide-react";
+import type { StepRecord, Ticket } from "@/shared/types";
 import { ScrollArea } from "@/shared/ui/scroll-area";
-import type { Ticket, StepRecord } from "@/shared/types";
 
 interface ReviewViewProps {
   ticket: Ticket;
@@ -36,9 +36,7 @@ export function ReviewView({
                 className="flex items-center gap-2 px-2 py-1.5 rounded text-xs"
               >
                 <Check className="w-3 h-3 text-emerald-500 shrink-0" />
-                <span className="truncate text-muted-foreground">
-                  {record.step_id}
-                </span>
+                <span className="truncate text-muted-foreground">{record.step_id}</span>
               </div>
             ))}
             <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-emerald-50 dark:bg-emerald-900/20">
@@ -59,9 +57,7 @@ export function ReviewView({
         <ScrollArea className="flex-1 p-6">
           {response ? (
             <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {response}
-              </ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{response}</ReactMarkdown>
             </div>
           ) : isExecuting ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -69,9 +65,7 @@ export function ReviewView({
               Running review...
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Waiting for review results...
-            </p>
+            <p className="text-sm text-muted-foreground">Waiting for review results...</p>
           )}
         </ScrollArea>
       </div>

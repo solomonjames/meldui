@@ -1,18 +1,15 @@
-import { useEffect, useCallback, useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { StageBar } from "@/features/workflow/components/stage-bar";
 import { DebugPanel } from "@/features/workflow/components/debug-panel";
+import { StageBar } from "@/features/workflow/components/stage-bar";
 import { ChatView } from "@/features/workflow/components/views/chat-view";
-import { ReviewView } from "@/features/workflow/components/views/review-view";
-import { ProgressView } from "@/features/workflow/components/views/progress-view";
-import { DiffReviewView } from "@/features/workflow/components/views/diff-review-view";
 import { CommitView } from "@/features/workflow/components/views/commit-view";
-import { useDebugLog } from "@/shared/hooks/use-debug-log";
+import { DiffReviewView } from "@/features/workflow/components/views/diff-review-view";
+import { ProgressView } from "@/features/workflow/components/views/progress-view";
+import { ReviewView } from "@/features/workflow/components/views/review-view";
 import { useWorkflowContext } from "@/features/workflow/context";
-import type {
-  Ticket,
-  StepExecutionResult,
-} from "@/shared/types";
+import { useDebugLog } from "@/shared/hooks/use-debug-log";
+import type { StepExecutionResult, Ticket } from "@/shared/types";
 
 interface WorkflowShellProps {
   ticket: Ticket;
@@ -57,12 +54,13 @@ export function WorkflowShell({
   const workflowDef = useWorkflowDefinition();
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
   // Use a ref with a monotonic counter to prevent StrictMode double-fire
-  const executingRef = useRef<{ stepId: string | null; generation: number }>({ stepId: null, generation: 0 });
+  const executingRef = useRef<{ stepId: string | null; generation: number }>({
+    stepId: null,
+    generation: 0,
+  });
   const debug = useDebugLog();
 
-  const currentStep = workflowDef?.steps.find(
-    (s) => s.id === workflowState?.current_step_id
-  );
+  const currentStep = workflowDef?.steps.find((s) => s.id === workflowState?.current_step_id);
 
   // Reset executing guard and clear stale result when step changes.
   // Render-time ref check is the React-recommended pattern for responding to prop changes.
@@ -118,14 +116,14 @@ export function WorkflowShell({
 
   // Auto-execute on pending steps
   useEffect(() => {
-    const guards = { status: workflowState?.step_status, loading, listenersReady, hasStep: !!currentStep };
+    const guards = {
+      status: workflowState?.step_status,
+      loading,
+      listenersReady,
+      hasStep: !!currentStep,
+    };
 
-    if (
-      workflowState?.step_status !== "pending" ||
-      !currentStep ||
-      loading ||
-      !listenersReady
-    ) {
+    if (workflowState?.step_status !== "pending" || !currentStep || loading || !listenersReady) {
       debug.log("lifecycle", `auto-execute skipped: ${JSON.stringify(guards)}`);
       return;
     }
@@ -155,8 +153,19 @@ export function WorkflowShell({
         executingRef.current.stepId = null;
       });
 
-    return () => { cancelled = true; };
-  }, [workflowState?.current_step_id, workflowState?.step_status, loading, listenersReady, currentStep, onExecuteStep, onRefreshTicket, ticket.id, debug]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    workflowState?.step_status,
+    loading,
+    listenersReady,
+    currentStep,
+    onExecuteStep,
+    onRefreshTicket,
+    ticket.id,
+    debug,
+  ]);
 
   if (!workflowDef) {
     return (
@@ -186,6 +195,7 @@ export function WorkflowShell({
               All steps have been completed for {ticket.title}
             </p>
             <button
+              type="button"
               onClick={onNavigateToBacklog}
               className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-medium"
             >
@@ -199,7 +209,8 @@ export function WorkflowShell({
 
   const isExecuting = workflowState.step_status === "in_progress" || loading;
   const isCompleted = workflowState.step_status === "completed";
-  const isFailed = typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
+  const isFailed =
+    typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
   const currentStepOutput = currentStep ? stepOutputs[currentStep.id] : undefined;
   const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
   const reviewDisabled = !pendingReviewRequestId;
@@ -270,16 +281,20 @@ export function WorkflowShell({
       default:
         return (
           <div className="flex items-center justify-center h-full">
-            <p className="text-muted-foreground">
-              Unknown view type: {currentStep.view}
-            </p>
+            <p className="text-muted-foreground">Unknown view type: {currentStep.view}</p>
           </div>
         );
     }
   };
 
   return (
-    <div data-testid="workflow-shell" data-status={typeof workflowState.step_status === 'string' ? workflowState.step_status : 'failed'} className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
+    <div
+      data-testid="workflow-shell"
+      data-status={
+        typeof workflowState.step_status === "string" ? workflowState.step_status : "failed"
+      }
+      className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950"
+    >
       <StageBar
         steps={workflowDef.steps}
         currentStepId={workflowState.current_step_id}
@@ -290,25 +305,30 @@ export function WorkflowShell({
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         </div>
       )}
-      {isFailed && (() => {
-        const failReason = (workflowState.step_status as { failed: string }).failed;
-        const isResumable = failReason.includes("timed out") || failReason.includes("interrupted");
-        return (
-          <div className="px-6 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800 flex items-center gap-3">
-            <div className="flex-1">
-              <p className="text-sm text-red-600 dark:text-red-400">
-                {isResumable ? "Session interrupted — your progress is saved." : `Step failed: ${failReason}`}
-              </p>
+      {isFailed &&
+        (() => {
+          const failReason = (workflowState.step_status as { failed: string }).failed;
+          const isResumable =
+            failReason.includes("timed out") || failReason.includes("interrupted");
+          return (
+            <div className="px-6 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800 flex items-center gap-3">
+              <div className="flex-1">
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {isResumable
+                    ? "Session interrupted — your progress is saved."
+                    : `Step failed: ${failReason}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExecute}
+                className="px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors"
+              >
+                {isResumable ? "Resume" : "Retry"}
+              </button>
             </div>
-            <button
-              onClick={handleExecute}
-              className="px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors"
-            >
-              {isResumable ? "Resume" : "Retry"}
-            </button>
-          </div>
-        );
-      })()}
+          );
+        })()}
       <div className="flex-1 overflow-hidden">{renderView()}</div>
       <DebugPanel
         entries={debug.getEntries()}

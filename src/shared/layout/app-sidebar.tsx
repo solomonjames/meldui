@@ -1,9 +1,9 @@
 import { FolderOpen, LayoutGrid, Settings } from "lucide-react";
 import { MeldLogo } from "@/shared/components/meld-logo";
-import { Button } from "@/shared/ui/button";
-import { Separator } from "@/shared/ui/separator";
-import { ScrollArea } from "@/shared/ui/scroll-area";
 import type { Ticket } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
+import { ScrollArea } from "@/shared/ui/scroll-area";
+import { Separator } from "@/shared/ui/separator";
 
 interface AppSidebarProps {
   activePage: string;
@@ -46,6 +46,7 @@ export function AppSidebar({
       {/* Project indicator */}
       <div className="px-6 pt-4">
         <button
+          type="button"
           onClick={onOpenFolder}
           className="w-full flex items-center gap-1.5 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
         >
@@ -63,9 +64,7 @@ export function AppSidebar({
           className="w-full bg-emerald hover:bg-emerald/90 text-white"
         >
           Create Ticket
-          <kbd className="ml-auto text-[10px] bg-white/20 rounded px-1.5 py-0.5 font-mono">
-            C
-          </kbd>
+          <kbd className="ml-auto text-[10px] bg-white/20 rounded px-1.5 py-0.5 font-mono">C</kbd>
         </Button>
       </div>
 
@@ -75,6 +74,7 @@ export function AppSidebar({
           const isActive = activePage === item.id;
           return (
             <button
+              type="button"
               key={item.id}
               onClick={() => onNavigate(item.id)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
@@ -103,14 +103,13 @@ export function AppSidebar({
         </div>
         <ScrollArea className="flex-1 px-3">
           {activeTickets.length === 0 ? (
-            <p className="px-3 text-xs text-muted-foreground">
-              No active tickets
-            </p>
+            <p className="px-3 text-xs text-muted-foreground">No active tickets</p>
           ) : (
             activeTickets.map((ticket) => {
               const isSelected = activeTicketId === ticket.id;
               return (
                 <button
+                  type="button"
                   key={ticket.id}
                   onClick={() => onTicketClick?.(ticket)}
                   className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
@@ -120,14 +119,18 @@ export function AppSidebar({
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-mono shrink-0 ${isSelected ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                    <span
+                      className={`text-[10px] font-mono shrink-0 ${isSelected ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                    >
                       {ticket.id.slice(0, 12)}
                     </span>
                     <span className="inline-flex items-center rounded-full bg-emerald-muted text-emerald text-[10px] px-1.5 py-0.5 font-medium">
                       in progress
                     </span>
                   </div>
-                  <p className={`text-xs mt-0.5 truncate ${isSelected ? "text-foreground" : ""}`}>{ticket.title}</p>
+                  <p className={`text-xs mt-0.5 truncate ${isSelected ? "text-foreground" : ""}`}>
+                    {ticket.title}
+                  </p>
                 </button>
               );
             })

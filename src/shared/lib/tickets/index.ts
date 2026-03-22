@@ -1,23 +1,23 @@
+export { generateTicketId, isValidTicketId } from "@/shared/lib/tickets/id";
 export type {
-  Ticket,
-  TicketComment,
-  TicketStatus,
-  TicketType,
-  TicketSection,
-  SectionType,
+  AcceptanceCriteriaContent,
   AcceptanceCriterion,
+  ChecklistContent,
   ChecklistItem,
+  KeyValueContent,
   KeyValueEntry,
   MarkdownContent,
-  AcceptanceCriteriaContent,
-  ChecklistContent,
-  KeyValueContent,
+  SectionType,
+  Ticket,
+  TicketComment,
+  TicketSection,
+  TicketStatus,
+  TicketType,
 } from "@/shared/lib/tickets/types";
 export { TICKET_STATUSES, TICKET_TYPES } from "@/shared/lib/tickets/types";
-export { generateTicketId, isValidTicketId } from "@/shared/lib/tickets/id";
 export {
-  validateTicket,
   isValidStatus,
   isValidType,
   type ValidationError,
+  validateTicket,
 } from "@/shared/lib/tickets/validation";

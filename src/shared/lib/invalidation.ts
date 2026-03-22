@@ -1,8 +1,8 @@
-import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useRef } from "react";
 import { events } from "@/bindings";
-import { ticketKeys } from "@/shared/lib/query-keys";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
+import { ticketKeys } from "@/shared/lib/query-keys";
 
 /**
  * Centralized Tauri event → TanStack Query invalidation.

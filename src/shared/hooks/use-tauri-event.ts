@@ -11,7 +11,7 @@ export function useTauriEvent<T>(
   event: {
     listen: (cb: (e: { payload: T }) => void) => Promise<() => void>;
   },
-  handler: (payload: T) => void
+  handler: (payload: T) => void,
 ): boolean {
   const [isReady, setIsReady] = useState(false);
   const handlerRef = useRef(handler);

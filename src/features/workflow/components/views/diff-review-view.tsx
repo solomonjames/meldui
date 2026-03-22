@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { DiffViewer } from "@/shared/components/diff";
 import type {
-  Ticket,
   DiffFile,
+  FindingAction,
   ReviewComment,
   ReviewFinding,
-  FindingAction,
   ReviewSubmission,
+  Ticket,
 } from "@/shared/types";
 
 interface DiffReviewViewProps {
@@ -14,7 +14,12 @@ interface DiffReviewViewProps {
   onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
   reviewFindings: ReviewFinding[];
   reviewComments: ReviewComment[];
-  onAddComment: (filePath: string, lineNumber: number, content: string, suggestion?: string) => void;
+  onAddComment: (
+    filePath: string,
+    lineNumber: number,
+    content: string,
+    suggestion?: string,
+  ) => void;
   onDeleteComment: (commentId: string) => void;
   onSubmitReview: (submission: ReviewSubmission) => void;
   reviewDisabled?: boolean;
@@ -39,6 +44,7 @@ export function DiffReviewView({
   const worktreePath = ticket.metadata?.worktree_path as string | undefined;
   const worktreeBaseCommit = ticket.metadata?.worktree_base_commit as string | undefined;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reviewRoundKey triggers re-fetch on new review rounds
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -49,9 +55,10 @@ export function DiffReviewView({
         setLoading(false);
       }
     });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worktreePath, worktreeBaseCommit, reviewRoundKey]);
+    return () => {
+      cancelled = true;
+    };
+  }, [worktreePath, worktreeBaseCommit, onGetDiff, reviewRoundKey]);
 
   const handleFindingAction = (findingId: string, action: FindingAction["action"]) => {
     setFindingActions((prev) => {

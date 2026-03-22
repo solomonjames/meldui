@@ -27,7 +27,8 @@ function ReadRenderer({ activity, expanded }: RendererProps) {
           {filePath}
           {(offset || limit) && (
             <span className="ml-1.5 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px]">
-              {offset ? `L${offset}` : ""}{offset && limit ? `-${offset + limit}` : limit ? `${limit} lines` : ""}
+              {offset ? `L${offset}` : ""}
+              {offset && limit ? `-${offset + limit}` : limit ? `${limit} lines` : ""}
             </span>
           )}
         </span>
@@ -35,7 +36,8 @@ function ReadRenderer({ activity, expanded }: RendererProps) {
       {expanded && activity.result && (
         <div className="px-3 pb-2 border-t mt-2">
           <pre className="text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap mt-2 max-h-48 overflow-y-auto font-mono">
-            {activity.result.slice(0, 3000)}{activity.result.length > 3000 ? "\n..." : ""}
+            {activity.result.slice(0, 3000)}
+            {activity.result.length > 3000 ? "\n..." : ""}
           </pre>
         </div>
       )}
@@ -80,7 +82,7 @@ function BashRenderer({ activity, expanded }: RendererProps) {
     <>
       {command && (
         <code className="text-xs text-muted-foreground font-mono truncate max-w-[300px] inline-block">
-          {command.length > 80 ? command.slice(0, 80) + "..." : command}
+          {command.length > 80 ? `${command.slice(0, 80)}...` : command}
         </code>
       )}
       {expanded && (
@@ -95,7 +97,8 @@ function BashRenderer({ activity, expanded }: RendererProps) {
           {activity.result && (
             <div className="rounded bg-zinc-900 dark:bg-black p-3 max-h-64 overflow-y-auto">
               <pre className="text-xs font-mono text-emerald-400 whitespace-pre-wrap">
-                {activity.result.slice(0, 3000)}{activity.result.length > 3000 ? "\n..." : ""}
+                {activity.result.slice(0, 3000)}
+                {activity.result.length > 3000 ? "\n..." : ""}
               </pre>
             </div>
           )}
@@ -124,9 +127,16 @@ function GlobRenderer({ activity, expanded }: RendererProps) {
         <div className="px-3 pb-2 border-t mt-2">
           <div className="text-xs text-muted-foreground font-mono max-h-48 overflow-y-auto space-y-0.5">
             {resultLines.slice(0, 50).map((line, i) => (
-              <div key={i}>{line}</div>
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: output lines lack stable IDs
+                key={i}
+              >
+                {line}
+              </div>
             ))}
-            {resultLines.length > 50 && <div className="text-zinc-400">... and {resultLines.length - 50} more</div>}
+            {resultLines.length > 50 && (
+              <div className="text-zinc-400">... and {resultLines.length - 50} more</div>
+            )}
           </div>
         </div>
       )}
@@ -232,9 +242,7 @@ function DefaultRenderer({ activity, expanded }: RendererProps) {
 
   return (
     <>
-      {summary && (
-        <span className="text-xs text-muted-foreground truncate">{summary}</span>
-      )}
+      {summary && <span className="text-xs text-muted-foreground truncate">{summary}</span>}
       {expanded && activity.input && (
         <div className="px-3 pb-2 border-t mt-2">
           <pre className="text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
@@ -247,8 +255,11 @@ function DefaultRenderer({ activity, expanded }: RendererProps) {
           <p className="text-xs font-medium text-zinc-500 mt-2 mb-1">
             Result{activity.is_error ? " (error)" : ""}:
           </p>
-          <pre className={`text-xs overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto ${activity.is_error ? "text-red-500" : "text-muted-foreground"}`}>
-            {activity.result.slice(0, 2000)}{activity.result.length > 2000 ? "..." : ""}
+          <pre
+            className={`text-xs overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto ${activity.is_error ? "text-red-500" : "text-muted-foreground"}`}
+          >
+            {activity.result.slice(0, 2000)}
+            {activity.result.length > 2000 ? "..." : ""}
           </pre>
         </div>
       )}
@@ -270,4 +281,3 @@ const RENDERERS: Record<string, React.FC<RendererProps>> = {
 export function getToolRenderer(toolName: string): React.FC<RendererProps> {
   return RENDERERS[toolName] ?? DefaultRenderer;
 }
-

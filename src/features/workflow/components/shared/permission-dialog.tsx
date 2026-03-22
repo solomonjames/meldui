@@ -17,8 +17,19 @@ export function PermissionDialog({ permission, onRespond }: PermissionDialogProp
     <div className="rounded-lg border-2 border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30 my-2 p-4">
       <div className="flex items-start gap-3">
         <div className="w-5 h-5 rounded-full bg-amber-400 flex items-center justify-center shrink-0 mt-0.5">
-          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg
+            aria-hidden="true"
+            className="w-3 h-3 text-white"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={3}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
         </div>
         <div className="flex-1 min-w-0">
@@ -30,12 +41,14 @@ export function PermissionDialog({ permission, onRespond }: PermissionDialogProp
           </pre>
           <div className="flex gap-2 mt-3">
             <button
+              type="button"
               onClick={() => onRespond(permission.request_id, true)}
               className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"
             >
               Allow
             </button>
             <button
+              type="button"
               onClick={() => onRespond(permission.request_id, false)}
               className="px-3 py-1.5 rounded-md bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-medium hover:bg-zinc-300 dark:hover:bg-zinc-600"
             >

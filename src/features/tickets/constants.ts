@@ -1,15 +1,6 @@
-import {
-  Sparkles,
-  SquareCheckBig,
-  Layers,
-  Wrench,
-  Bug,
-} from "lucide-react";
+import { Bug, Layers, Sparkles, SquareCheckBig, Wrench } from "lucide-react";
 
-export const TYPE_CONFIG: Record<
-  string,
-  { icon: typeof Sparkles; color: string; bg: string }
-> = {
+export const TYPE_CONFIG: Record<string, { icon: typeof Sparkles; color: string; bg: string }> = {
   feature: {
     icon: Sparkles,
     color: "text-emerald-600",

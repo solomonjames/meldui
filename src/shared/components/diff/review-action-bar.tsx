@@ -1,7 +1,7 @@
+import { Check, MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
-import { Check, MessageSquare } from "lucide-react";
 
 interface ReviewActionBarProps {
   commentCount: number;
@@ -46,7 +46,11 @@ export function ReviewActionBar({
           <Textarea
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
-            placeholder={action === "approve" ? "Optional approval summary..." : "Describe what needs to change..."}
+            placeholder={
+              action === "approve"
+                ? "Optional approval summary..."
+                : "Describe what needs to change..."
+            }
             className="min-h-[60px] text-xs resize-none"
             autoFocus
             onKeyDown={(e) => {
@@ -64,7 +68,10 @@ export function ReviewActionBar({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => { setShowSummary(false); setAction(null); }}
+              onClick={() => {
+                setShowSummary(false);
+                setAction(null);
+              }}
               className="h-7 text-xs"
             >
               Cancel
@@ -89,7 +96,9 @@ export function ReviewActionBar({
               </span>
             )}
             {findingCount > 0 && (
-              <span>{findingCount} finding{findingCount !== 1 ? "s" : ""}</span>
+              <span>
+                {findingCount} finding{findingCount !== 1 ? "s" : ""}
+              </span>
             )}
           </div>
           <div className="flex gap-2">

@@ -1,11 +1,11 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { commands, events } from "@/bindings";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 import type { FeedbackRequestEvent } from "@/shared/types";
 
 export function useWorkflowFeedback(
   activeTicketId: string | null,
-  setError: (msg: string) => void
+  setError: (msg: string) => void,
 ) {
   const [pendingFeedback, setPendingFeedback] = useState<FeedbackRequestEvent | null>(null);
 
@@ -31,7 +31,7 @@ export function useWorkflowFeedback(
         }
       }
     },
-    [setError]
+    [setError],
   );
 
   const clearPending = useCallback(() => {

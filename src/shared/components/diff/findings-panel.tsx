@@ -1,6 +1,6 @@
-import { ScrollArea } from "@/shared/ui/scroll-area";
 import { FindingCard } from "@/shared/components/diff/finding-card";
-import type { ReviewFinding, FindingAction } from "@/shared/types";
+import type { FindingAction, ReviewFinding } from "@/shared/types";
+import { ScrollArea } from "@/shared/ui/scroll-area";
 
 interface FindingsPanelProps {
   findings: ReviewFinding[];
@@ -21,13 +21,19 @@ export function FindingsPanel({ findings, findingActions, onFindingAction }: Fin
         </h3>
         <div className="flex gap-2 mt-1">
           {critical.length > 0 && (
-            <span className="text-[10px] text-red-600 dark:text-red-400">{critical.length} critical</span>
+            <span className="text-[10px] text-red-600 dark:text-red-400">
+              {critical.length} critical
+            </span>
           )}
           {warnings.length > 0 && (
-            <span className="text-[10px] text-amber-600 dark:text-amber-400">{warnings.length} warning</span>
+            <span className="text-[10px] text-amber-600 dark:text-amber-400">
+              {warnings.length} warning
+            </span>
           )}
           {infos.length > 0 && (
-            <span className="text-[10px] text-blue-600 dark:text-blue-400">{infos.length} info</span>
+            <span className="text-[10px] text-blue-600 dark:text-blue-400">
+              {infos.length} info
+            </span>
           )}
         </div>
       </div>

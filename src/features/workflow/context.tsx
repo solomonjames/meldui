@@ -12,11 +12,7 @@ export function WorkflowProvider({
   workflow: WorkflowContextValue;
   children: React.ReactNode;
 }) {
-  return (
-    <WorkflowContext.Provider value={workflow}>
-      {children}
-    </WorkflowContext.Provider>
-  );
+  return <WorkflowContext.Provider value={workflow}>{children}</WorkflowContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

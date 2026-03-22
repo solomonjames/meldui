@@ -1,44 +1,41 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { ErrorBoundary } from 'react-error-boundary'
-import { commands } from '@/bindings'
-import '../index.css'
-import App from '@/app/App'
-import { PreferencesApp } from '@/features/preferences/components/preferences-app'
-import { AppCrashFallback } from '@/shared/components/error/app-crash-fallback'
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { ErrorBoundary } from "react-error-boundary";
+import { commands } from "@/bindings";
+import "../index.css";
+import App from "@/app/App";
+import { PreferencesApp } from "@/features/preferences/components/preferences-app";
+import { AppCrashFallback } from "@/shared/components/error/app-crash-fallback";
 
 const isPreferencesWindow =
-  new URLSearchParams(window.location.search).get('window') === 'preferences'
+  new URLSearchParams(window.location.search).get("window") === "preferences";
 
 // Apply saved theme before React mount to prevent flash
 async function initAndRender() {
   try {
-    const prefs = await commands.getAppPreferences()
-    const mode = prefs.theme || 'system'
+    const prefs = await commands.getAppPreferences();
+    const mode = prefs.theme || "system";
     const isDark =
-      mode === 'dark' ||
-      (mode === 'system' &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches)
-    document.documentElement.classList.toggle('dark', isDark)
+      mode === "dark" ||
+      (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.classList.toggle("dark", isDark);
   } catch {
     // Default: follow system preference
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      document.documentElement.classList.add('dark')
+    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      document.documentElement.classList.add("dark");
     }
   }
 
-  createRoot(document.getElementById('root')!).render(
+  createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <ErrorBoundary
         FallbackComponent={AppCrashFallback}
-        onError={(error, info) =>
-          console.error('[ErrorBoundary:root]', error, info.componentStack)
-        }
+        onError={(error, info) => console.error("[ErrorBoundary:root]", error, info.componentStack)}
       >
         {isPreferencesWindow ? <PreferencesApp /> : <App />}
       </ErrorBoundary>
     </StrictMode>,
-  )
+  );
 }
 
-initAndRender()
+initAndRender();

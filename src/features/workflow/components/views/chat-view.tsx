@@ -1,14 +1,14 @@
-import { useState, useRef, useEffect } from "react";
+import { ArrowRight, MessageSquare, Play, Send } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowRight, Play, Send, MessageSquare } from "lucide-react";
+import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
+import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
+import { FilesChanged } from "@/features/workflow/components/shared/files-changed";
+import { SubagentCard } from "@/features/workflow/components/shared/subagent-card";
+import type { FeedbackRequestEvent, StepOutputStream, StepStatus } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
-import type { StepStatus, StepOutputStream, FeedbackRequestEvent } from "@/shared/types";
-import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
-import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
-import { SubagentCard } from "@/features/workflow/components/shared/subagent-card";
-import { FilesChanged } from "@/features/workflow/components/shared/files-changed";
 
 function FeedbackCard({
   request,
@@ -42,9 +42,7 @@ function FeedbackCard({
           <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">
             Ready for Review
           </p>
-          <p className="text-sm text-emerald-800 dark:text-emerald-300">
-            {request.summary}
-          </p>
+          <p className="text-sm text-emerald-800 dark:text-emerald-300">{request.summary}</p>
 
           {!showInput ? (
             <div className="flex gap-2">
@@ -141,7 +139,8 @@ export function ChatView({
   const isThinking = isExecuting && (stepOutput?.thinkingContent?.length ?? 0) > 0 && !hasContent;
   const isStepComplete = stepOutput?.resultContent != null;
 
-  // Auto-scroll chat panel
+  // Auto-scroll chat panel when new content arrives
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll should fire on content/response changes
   useEffect(() => {
     chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [contentBlocks.length, response, pendingFeedback]);
@@ -167,9 +166,7 @@ export function ChatView({
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-medium">{stepName}</h3>
             {statusText && (
-              <span className="text-xs text-muted-foreground animate-pulse">
-                {statusText}
-              </span>
+              <span className="text-xs text-muted-foreground animate-pulse">{statusText}</span>
             )}
           </div>
         </div>
@@ -180,9 +177,18 @@ export function ChatView({
             {isThinking && (
               <div className="flex items-center gap-2.5 text-sm text-muted-foreground py-1">
                 <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
                 </div>
                 <span className="truncate max-w-[250px]">
                   {stepOutput?.thinkingContent && stepOutput.thinkingContent.length > 0
@@ -197,17 +203,25 @@ export function ChatView({
               switch (block.type) {
                 case "text":
                   return (
-                    <div key={`text-${i}`} className="prose prose-sm dark:prose-invert max-w-none mt-2">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {block.content}
-                      </ReactMarkdown>
+                    <div
+                      // biome-ignore lint/suspicious/noArrayIndexKey: content blocks lack stable IDs
+                      key={`text-${i}`}
+                      className="prose prose-sm dark:prose-invert max-w-none mt-2"
+                    >
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.content}</ReactMarkdown>
                     </div>
                   );
                 case "tool_group": {
-                  const isLastGroup = !contentBlocks.slice(i + 1).some((b) => b.type === "tool_group");
-                  const isActive = isExecuting && isLastGroup && block.activities.some((a) => a.status === "running");
+                  const isLastGroup = !contentBlocks
+                    .slice(i + 1)
+                    .some((b) => b.type === "tool_group");
+                  const isActive =
+                    isExecuting &&
+                    isLastGroup &&
+                    block.activities.some((a) => a.status === "running");
                   return (
                     <ActivityGroup
+                      // biome-ignore lint/suspicious/noArrayIndexKey: content blocks lack stable IDs
                       key={`group-${i}`}
                       activities={block.activities}
                       summaryText={block.summaryText}
@@ -216,9 +230,8 @@ export function ChatView({
                   );
                 }
                 case "subagent":
-                  return (
-                    <SubagentCard key={`subagent-${i}`} activity={block.activity} />
-                  );
+                  // biome-ignore lint/suspicious/noArrayIndexKey: content blocks lack stable IDs
+                  return <SubagentCard key={`subagent-${i}`} activity={block.activity} />;
                 default:
                   return null;
               }
@@ -227,9 +240,7 @@ export function ChatView({
             {/* Fallback: render response text if no contentBlocks */}
             {contentBlocks.length === 0 && response.length > 0 && (
               <div className="prose prose-sm dark:prose-invert max-w-none mt-2">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {response}
-                </ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{response}</ReactMarkdown>
               </div>
             )}
 
@@ -250,43 +261,41 @@ export function ChatView({
             {/* ActivityBar below handles processing state */}
             {!isExecuting && stepStatus === "pending" && (
               <div className="flex flex-col items-center justify-center gap-3 py-8">
-                <p className="text-sm text-muted-foreground">
-                  Starting execution...
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onExecute}
-                >
+                <p className="text-sm text-muted-foreground">Starting execution...</p>
+                <Button variant="outline" size="sm" onClick={onExecute}>
                   <Play className="w-3.5 h-3.5 mr-1.5" />
                   Run manually
                 </Button>
               </div>
             )}
-            {!isExecuting && !hasContent && stepOutput?.stderrLines && stepOutput.stderrLines.length > 0 && (
-              <div className="w-full max-w-lg space-y-2">
-                <p className="text-sm font-medium text-red-600 dark:text-red-400">
-                  Agent returned an error:
-                </p>
-                <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 text-xs font-mono text-red-700 dark:text-red-300 max-h-[200px] overflow-y-auto">
-                  {stepOutput.stderrLines.map((line, i) => (
-                    <div key={i}>{line}</div>
-                  ))}
+            {!isExecuting &&
+              !hasContent &&
+              stepOutput?.stderrLines &&
+              stepOutput.stderrLines.length > 0 && (
+                <div className="w-full max-w-lg space-y-2">
+                  <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                    Agent returned an error:
+                  </p>
+                  <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 text-xs font-mono text-red-700 dark:text-red-300 max-h-[200px] overflow-y-auto">
+                    {stepOutput.stderrLines.map((line, i) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: stderr lines lack stable IDs
+                      <div key={i}>{line}</div>
+                    ))}
+                  </div>
+                  <Button variant="outline" size="sm" onClick={onExecute}>
+                    <Play className="w-3.5 h-3.5 mr-1.5" />
+                    Retry
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onExecute}
-                >
-                  <Play className="w-3.5 h-3.5 mr-1.5" />
-                  Retry
-                </Button>
-              </div>
-            )}
+              )}
           </div>
 
           {/* Activity bar — sticky at bottom of scroll area */}
-          <ActivityBar stepOutput={stepOutput} isExecuting={isExecuting} isWaitingForUser={!!pendingFeedback} />
+          <ActivityBar
+            stepOutput={stepOutput}
+            isExecuting={isExecuting}
+            isWaitingForUser={!!pendingFeedback}
+          />
           <div ref={chatScrollRef} />
         </div>
 

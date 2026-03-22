@@ -1,14 +1,8 @@
-import { useState } from "react";
 import { Sparkles, X } from "lucide-react";
-import { Button } from "@/shared/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/ui/select";
+import { useState } from "react";
 import type { WorkflowDefinition, WorkflowSuggestion } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 
 interface WorkflowSelectorProps {
   selectedWorkflowId?: string;
@@ -56,11 +50,7 @@ export function WorkflowSelector({
           Suggesting...
         </div>
       )}
-      {suggestError && (
-        <p className="text-xs text-amber-600 dark:text-amber-400">
-          {suggestError}
-        </p>
-      )}
+      {suggestError && <p className="text-xs text-amber-600 dark:text-amber-400">{suggestError}</p>}
       {suggestion && (
         <div className="flex items-start gap-2 text-xs bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2">
           <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
@@ -75,6 +65,7 @@ export function WorkflowSelector({
             )}
           </span>
           <button
+            type="button"
             onClick={() => setSuggestion(null)}
             className="shrink-0 p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
           >

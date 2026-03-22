@@ -1,41 +1,40 @@
-import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  Hash,
   ArrowUp,
-  Calendar,
-  User,
-  GitPullRequest,
-  Send,
   Bot,
+  Calendar,
   ChevronDown,
+  GitPullRequest,
+  Hash,
   PanelRightClose,
   PanelRightOpen,
+  Send,
+  User,
 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { Button } from "@/shared/ui/button";
-import { ScrollArea } from "@/shared/ui/scroll-area";
+import { getSectionRenderer } from "@/shared/components/sections/section-registry";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/shared/ui/accordion";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/ui/select";
-import { getSectionRenderer } from "@/shared/components/sections/section-registry";
+import { Button } from "@/shared/ui/button";
+import { ScrollArea } from "@/shared/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import "@/shared/components/sections";
-import { SubtaskProgress } from "@/features/tickets/components/subtask-progress";
 import { EditableMarkdownField } from "@/features/tickets/components/editable-markdown-field";
-import { STATUS_CONFIG, TYPE_CONFIG, PRIORITY_CONFIG } from "@/features/tickets/constants";
-import type { Ticket, TicketComment, TicketSection, WorkflowSectionDef } from "@/shared/types";
-import type { SectionType } from "@/shared/types";
+import { SubtaskProgress } from "@/features/tickets/components/subtask-progress";
+import { PRIORITY_CONFIG, STATUS_CONFIG, TYPE_CONFIG } from "@/features/tickets/constants";
+import type {
+  SectionType,
+  Ticket,
+  TicketComment,
+  TicketSection,
+  WorkflowSectionDef,
+} from "@/shared/types";
 
 interface TicketDetailsPanelProps {
   ticket: Ticket;
@@ -49,7 +48,7 @@ interface TicketDetailsPanelProps {
       notes?: string;
       design?: string;
       acceptance_criteria?: string;
-    }
+    },
   ) => Promise<void>;
   onShowTicket: (id: string) => Promise<Ticket | null>;
   onAddComment: (id: string, text: string) => Promise<void>;
@@ -104,8 +103,7 @@ function getInitials(name: string) {
 
 function groupComments(comments: TicketComment[]) {
   const groups: Array<
-    | { type: "human"; comment: TicketComment }
-    | { type: "agent_group"; comments: TicketComment[] }
+    { type: "human"; comment: TicketComment } | { type: "agent_group"; comments: TicketComment[] }
   > = [];
 
   let agentBuffer: TicketComment[] = [];
@@ -189,7 +187,10 @@ export function TicketDetailsPanel({
   useEffect(() => {
     if (!lastUpdatedSectionId) return;
     const timer = setTimeout(() => {
-      sectionRefs.current[lastUpdatedSectionId]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      sectionRefs.current[lastUpdatedSectionId]?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
     }, 100);
     return () => clearTimeout(timer);
   }, [lastUpdatedSectionId]);
@@ -225,7 +226,9 @@ export function TicketDetailsPanel({
             return next;
           });
         } catch {
-          toast.error(`Failed to save ${field}`, { description: "Your changes have been reverted." });
+          toast.error(`Failed to save ${field}`, {
+            description: "Your changes have been reverted.",
+          });
           setPendingSave((prev) => {
             const next = { ...prev };
             delete next[field];
@@ -234,7 +237,7 @@ export function TicketDetailsPanel({
         }
       }, 500);
     },
-    [ticket.id, onUpdateTicket]
+    [ticket.id, onUpdateTicket],
   );
 
   // Immediate save for dropdown changes
@@ -246,7 +249,7 @@ export function TicketDetailsPanel({
         toast.error(`Failed to update ${field}`);
       }
     },
-    [ticket.id, onUpdateTicket]
+    [ticket.id, onUpdateTicket],
   );
 
   const handleAddComment = async () => {
@@ -276,8 +279,8 @@ export function TicketDetailsPanel({
 
   const commentGroups = groupComments(
     [...comments].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    ),
   );
 
   const renderSectionContent = (section: TicketSection) => {
@@ -293,7 +296,9 @@ export function TicketDetailsPanel({
       );
     }
     const text =
-      typeof section.content === "object" && section.content !== null && "text" in (section.content as Record<string, unknown>)
+      typeof section.content === "object" &&
+      section.content !== null &&
+      "text" in (section.content as Record<string, unknown>)
         ? String((section.content as Record<string, unknown>).text)
         : JSON.stringify(section.content);
     return (
@@ -304,22 +309,23 @@ export function TicketDetailsPanel({
   };
 
   const getSectionText = (section: TicketSection): string => {
-    if (typeof section.content === "object" && section.content !== null && "text" in (section.content as Record<string, unknown>)) {
+    if (
+      typeof section.content === "object" &&
+      section.content !== null &&
+      "text" in (section.content as Record<string, unknown>)
+    ) {
       return String((section.content as Record<string, unknown>).text);
     }
-    return typeof section.content === "string" ? section.content : JSON.stringify(section.content, null, 2);
+    return typeof section.content === "string"
+      ? section.content
+      : JSON.stringify(section.content, null, 2);
   };
 
   // Collapse toggle button (shown when collapsed)
   if (isCollapsed) {
     return (
       <div className="flex items-start pt-3 px-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={onToggleCollapse}
-        >
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onToggleCollapse}>
           <PanelRightOpen className="w-4 h-4" />
         </Button>
       </div>
@@ -410,7 +416,9 @@ export function TicketDetailsPanel({
                   {/* Type */}
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Type</span>
-                    <span className={`inline-flex items-center gap-1 font-medium ${typeInfo.color}`}>
+                    <span
+                      className={`inline-flex items-center gap-1 font-medium ${typeInfo.color}`}
+                    >
                       <TypeIcon className="w-3 h-3" />
                       {ticket.ticket_type}
                     </span>
@@ -503,40 +511,43 @@ export function TicketDetailsPanel({
             </AccordionItem>
 
             {/* Workflow sections */}
-            {hasSectionDefs && sectionDefs.map((def) => {
-              const typedSection = ticket.sections?.find((s) => s.id === def.id) ?? null;
-              const isHighlighted = flashingSectionId === def.id;
-              const isPersistentHighlight = lastUpdatedSectionId === def.id;
+            {hasSectionDefs &&
+              sectionDefs.map((def) => {
+                const typedSection = ticket.sections?.find((s) => s.id === def.id) ?? null;
+                const isHighlighted = flashingSectionId === def.id;
+                const isPersistentHighlight = lastUpdatedSectionId === def.id;
 
-              return (
-                <AccordionItem
-                  key={def.id}
-                  value={def.id}
-                  ref={(el) => { sectionRefs.current[def.id] = el; }}
-                  className={`transition-all duration-300 ${
-                    isHighlighted ? "ring-2 ring-emerald-400 rounded-lg" : ""
-                  } ${isPersistentHighlight ? "border-l-2 border-emerald-500" : ""}`}
-                >
-                  <AccordionTrigger className="text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground">
-                    {def.label}
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    {typedSection ? (
-                      typedSection.type === "markdown" ? (
-                        <EditableMarkdownField
-                          value={getSectionText(typedSection)}
-                          onSave={(value) => {
-                            onUpdateSection?.(ticket.id, def.id, { text: value });
-                          }}
-                        />
-                      ) : (
-                        renderSectionContent(typedSection)
-                      )
-                    ) : null}
-                  </AccordionContent>
-                </AccordionItem>
-              );
-            })}
+                return (
+                  <AccordionItem
+                    key={def.id}
+                    value={def.id}
+                    ref={(el) => {
+                      sectionRefs.current[def.id] = el;
+                    }}
+                    className={`transition-all duration-300 ${
+                      isHighlighted ? "ring-2 ring-emerald-400 rounded-lg" : ""
+                    } ${isPersistentHighlight ? "border-l-2 border-emerald-500" : ""}`}
+                  >
+                    <AccordionTrigger className="text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground">
+                      {def.label}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      {typedSection ? (
+                        typedSection.type === "markdown" ? (
+                          <EditableMarkdownField
+                            value={getSectionText(typedSection)}
+                            onSave={(value) => {
+                              onUpdateSection?.(ticket.id, def.id, { text: value });
+                            }}
+                          />
+                        ) : (
+                          renderSectionContent(typedSection)
+                        )
+                      ) : null}
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
 
             {/* Legacy field sections (when no sectionDefs) */}
             {!hasSectionDefs && ticket.design && (
@@ -596,9 +607,7 @@ export function TicketDetailsPanel({
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Activity
               {comments.length > 0 && (
-                <span className="ml-1.5 text-muted-foreground">
-                  ({comments.length})
-                </span>
+                <span className="ml-1.5 text-muted-foreground">({comments.length})</span>
               )}
             </h3>
 
@@ -628,9 +637,8 @@ export function TicketDetailsPanel({
                       </div>
                     );
                   }
-                  return (
-                    <AgentCommentGroup key={`ag-${gi}`} comments={group.comments} />
-                  );
+                  // biome-ignore lint/suspicious/noArrayIndexKey: comment groups lack stable IDs
+                  return <AgentCommentGroup key={`ag-${gi}`} comments={group.comments} />;
                 })}
               </div>
             ) : (
@@ -670,6 +678,7 @@ function AgentCommentGroup({ comments }: { comments: TicketComment[] }) {
   if (comments.length >= 3 && !expanded) {
     return (
       <button
+        type="button"
         onClick={() => setExpanded(true)}
         className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
       >

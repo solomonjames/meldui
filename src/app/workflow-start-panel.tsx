@@ -1,13 +1,8 @@
-import { useState, useCallback } from "react";
-import { Play, Loader2 } from "lucide-react";
-import { Button } from "@/shared/ui/button";
+import { Loader2, Play } from "lucide-react";
+import { useCallback, useState } from "react";
 import { WorkflowSelector } from "@/shared/components/workflow-selector";
-import type {
-  Ticket,
-  WorkflowDefinition,
-  WorkflowSuggestion,
-  WorkflowState,
-} from "@/shared/types";
+import type { Ticket, WorkflowDefinition, WorkflowState, WorkflowSuggestion } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
 
 interface WorkflowStartPanelProps {
   ticket: Ticket;
@@ -16,10 +11,7 @@ interface WorkflowStartPanelProps {
   onSuggestWorkflow: (issueId: string) => Promise<WorkflowSuggestion | null>;
   onStartWorkflow: (ticket: Ticket) => Promise<void>;
   onRefreshTickets: () => Promise<void>;
-  onUpdateTicket: (
-    id: string,
-    updates: { status?: string }
-  ) => Promise<void>;
+  onUpdateTicket: (id: string, updates: { status?: string }) => Promise<void>;
 }
 
 export function WorkflowStartPanel({
@@ -32,7 +24,9 @@ export function WorkflowStartPanel({
   onUpdateTicket,
 }: WorkflowStartPanelProps) {
   const currentWorkflowId = (ticket.metadata?.workflow as { workflow_id?: string })?.workflow_id;
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | undefined>(currentWorkflowId);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | undefined>(
+    currentWorkflowId,
+  );
   const [starting, setStarting] = useState(false);
 
   const handleStart = useCallback(async () => {
@@ -46,7 +40,14 @@ export function WorkflowStartPanel({
     } finally {
       setStarting(false);
     }
-  }, [ticket, selectedWorkflowId, onAssignWorkflow, onUpdateTicket, onRefreshTickets, onStartWorkflow]);
+  }, [
+    ticket,
+    selectedWorkflowId,
+    onAssignWorkflow,
+    onUpdateTicket,
+    onRefreshTickets,
+    onStartWorkflow,
+  ]);
 
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 p-8">

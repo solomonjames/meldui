@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
-import { ChevronRight, Check, Pencil } from "lucide-react";
-import { Button } from "@/shared/ui/button";
+import { Check, ChevronRight, Pencil } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Button } from "@/shared/ui/button";
 
 interface CollapsibleSectionProps {
   label: string;
@@ -39,7 +39,6 @@ export function CollapsibleSection({
     }
   };
 
-
   return (
     <div
       className={`space-y-1.5 ${isAgentGenerated ? "border-l-2 border-emerald-500/30 pl-3" : ""} ${highlighted ? "bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg transition-colors duration-1000" : ""}`}
@@ -65,17 +64,13 @@ export function CollapsibleSection({
             className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
             onClick={() => setEditing(!editing)}
           >
-            {editing ? (
-              <Check className="w-3.5 h-3.5" />
-            ) : (
-              <Pencil className="w-3.5 h-3.5" />
-            )}
+            {editing ? <Check className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
           </Button>
         )}
       </div>
 
-      {isOpen && (
-        children ? (
+      {isOpen &&
+        (children ? (
           <div>{children}</div>
         ) : editing ? (
           <textarea
@@ -87,24 +82,20 @@ export function CollapsibleSection({
             placeholder={`No ${label.toLowerCase()}`}
           />
         ) : (
+          // biome-ignore lint/a11y/noStaticElementInteractions: double-click to edit pattern
           <div
             className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 text-sm cursor-text"
             onDoubleClick={() => setEditing(true)}
           >
             {value ? (
               <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {value}
-                </ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
               </div>
             ) : (
-              <span className="text-muted-foreground">
-                No {label.toLowerCase()}
-              </span>
+              <span className="text-muted-foreground">No {label.toLowerCase()}</span>
             )}
           </div>
-        )
-      )}
+        ))}
     </div>
   );
 }

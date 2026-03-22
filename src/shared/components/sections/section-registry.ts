@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { TicketSection, SectionType } from "@/shared/types";
+import type { SectionType, TicketSection } from "@/shared/types";
 
 export interface SectionProps {
   section: TicketSection;
@@ -15,8 +15,4 @@ export function registerSectionRenderer(type: SectionType, component: ComponentT
 
 export function getSectionRenderer(type: SectionType): ComponentType<SectionProps> | undefined {
   return registry[type];
-}
-
-export function getAllRenderers(): Partial<Record<SectionType, ComponentType<SectionProps>>> {
-  return registry;
 }

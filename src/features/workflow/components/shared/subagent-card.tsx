@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { SubagentActivity } from "@/shared/types";
 import { SubagentModal } from "@/features/workflow/components/shared/subagent-modal";
+import type { SubagentActivity } from "@/shared/types";
 
 interface SubagentCardProps {
   activity: SubagentActivity;
@@ -13,6 +13,7 @@ export function SubagentCard({ activity }: SubagentCardProps) {
   return (
     <>
       <button
+        type="button"
         onClick={() => setModalOpen(true)}
         className={`w-full text-left rounded-lg border my-2 p-3 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
           isRunning
@@ -29,13 +30,27 @@ export function SubagentCard({ activity }: SubagentCardProps) {
             </div>
           ) : activity.status === "completed" ? (
             <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <svg
+                aria-hidden="true"
+                className="w-2.5 h-2.5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={3}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
           ) : (
             <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center shrink-0">
-              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <svg
+                aria-hidden="true"
+                className="w-2.5 h-2.5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={3}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
@@ -44,11 +59,13 @@ export function SubagentCard({ activity }: SubagentCardProps) {
             {activity.description || "Subagent"}
           </span>
           {activity.status !== "running" && (
-            <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${
-              activity.status === "completed"
-                ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
-                : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
-            }`}>
+            <span
+              className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${
+                activity.status === "completed"
+                  ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                  : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+              }`}
+            >
               {activity.status}
             </span>
           )}
@@ -59,16 +76,10 @@ export function SubagentCard({ activity }: SubagentCardProps) {
           </p>
         )}
         {!isRunning && activity.summary && (
-          <p className="text-xs text-muted-foreground mt-1 ml-6 line-clamp-2">
-            {activity.summary}
-          </p>
+          <p className="text-xs text-muted-foreground mt-1 ml-6 line-clamp-2">{activity.summary}</p>
         )}
       </button>
-      <SubagentModal
-        activity={activity}
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-      />
+      <SubagentModal activity={activity} open={modalOpen} onOpenChange={setModalOpen} />
     </>
   );
 }

@@ -1,8 +1,8 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { commands } from "@/bindings";
 import type { ClaudeStatus } from "@/shared/types";
 
-export const claudeKeys = {
+const claudeKeys = {
   status: () => ["claude", "status"] as const,
 };
 

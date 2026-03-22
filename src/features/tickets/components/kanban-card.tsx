@@ -1,10 +1,10 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Button } from "@/shared/ui/button";
-import { TYPE_CONFIG, PRIORITY_CONFIG } from "@/features/tickets/constants";
+import { PRIORITY_CONFIG, TYPE_CONFIG } from "@/features/tickets/constants";
 import type { Ticket } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
 
-export { TYPE_CONFIG, PRIORITY_CONFIG } from "@/features/tickets/constants";
+export { PRIORITY_CONFIG, TYPE_CONFIG } from "@/features/tickets/constants";
 
 const NEXT_STATUS: Record<string, string | null> = {
   open: "in_progress",
@@ -16,16 +16,20 @@ const NEXT_STATUS: Record<string, string | null> = {
 interface KanbanCardProps {
   ticket: Ticket;
   variant: string;
-  onUpdate: (
-    id: string,
-    updates: { status?: string; priority?: string }
-  ) => Promise<void>;
+  onUpdate: (id: string, updates: { status?: string; priority?: string }) => Promise<void>;
   onClose: (id: string) => Promise<void>;
   onClick?: (ticket: Ticket) => void;
   isOverlay?: boolean;
 }
 
-export function KanbanCard({ ticket, variant, onUpdate, onClose, onClick, isOverlay }: KanbanCardProps) {
+export function KanbanCard({
+  ticket,
+  variant,
+  onUpdate,
+  onClose,
+  onClick,
+  isOverlay,
+}: KanbanCardProps) {
   const typeInfo = TYPE_CONFIG[ticket.ticket_type] ?? TYPE_CONFIG.task;
   const priorityInfo = PRIORITY_CONFIG[ticket.priority] ?? PRIORITY_CONFIG[2];
   const TypeIcon = typeInfo.icon;
@@ -33,14 +37,10 @@ export function KanbanCard({ ticket, variant, onUpdate, onClose, onClick, isOver
   const isClosed = variant === "closed";
   const isInProgress = variant === "in_progress";
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: ticket.id, disabled: isOverlay });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: ticket.id,
+    disabled: isOverlay,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -48,13 +48,19 @@ export function KanbanCard({ ticket, variant, onUpdate, onClose, onClick, isOver
   };
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: dnd-kit requires div for drag-and-drop
     <div
+      role="button"
+      tabIndex={0}
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
       onClick={() => {
         if (!isDragging && onClick) onClick(ticket);
+      }}
+      onKeyDown={(e) => {
+        if ((e.key === "Enter" || e.key === " ") && !isDragging && onClick) onClick(ticket);
       }}
       className={`rounded-[10px] border p-3.5 shadow-sm transition-colors cursor-grab active:cursor-grabbing ${
         isDragging ? "opacity-40" : ""
@@ -66,15 +72,11 @@ export function KanbanCard({ ticket, variant, onUpdate, onClose, onClick, isOver
             : "bg-white dark:bg-zinc-800"
       }`}
     >
-      <h4
-        className={`text-sm font-medium leading-snug ${isClosed ? "text-muted-foreground" : ""}`}
-      >
+      <h4 className={`text-sm font-medium leading-snug ${isClosed ? "text-muted-foreground" : ""}`}>
         {ticket.title}
       </h4>
       {ticket.description && (
-        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-          {ticket.description}
-        </p>
+        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{ticket.description}</p>
       )}
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         <span

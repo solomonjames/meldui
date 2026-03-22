@@ -3,10 +3,7 @@ interface StatusBarProps {
   version?: string;
 }
 
-export function StatusBar({
-  branch,
-  version,
-}: StatusBarProps) {
+export function StatusBar({ branch, version }: StatusBarProps) {
   return (
     <div className="h-8 flex items-center px-4 border-t bg-white dark:bg-zinc-900 text-xs text-muted-foreground shrink-0">
       <div className="flex items-center gap-2">
@@ -19,9 +16,7 @@ export function StatusBar({
           </>
         )}
       </div>
-      <div className="ml-auto">
-        {version && <span className="font-mono">{version}</span>}
-      </div>
+      <div className="ml-auto">{version && <span className="font-mono">{version}</span>}</div>
     </div>
   );
 }

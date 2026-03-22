@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { Plus } from "lucide-react";
-import { Button } from "@/shared/ui/button";
+import { useState } from "react";
 import type { SectionProps } from "@/shared/components/sections/section-registry";
 import type { ChecklistContent, ChecklistItem } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
 
 export function ChecklistSection({ section, onChange }: SectionProps) {
   const content = section.content as ChecklistContent;
@@ -44,10 +44,7 @@ export function ChecklistSection({ section, onChange }: SectionProps) {
       )}
       <div className="space-y-1">
         {items.map((item, idx) => (
-          <label
-            key={item.id}
-            className="flex items-center gap-2 text-sm cursor-pointer group"
-          >
+          <label key={item.id} className="flex items-center gap-2 text-sm cursor-pointer group">
             <input
               type="checkbox"
               checked={item.checked}

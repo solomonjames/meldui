@@ -12,10 +12,12 @@ export function ThinkingSection({ content }: ThinkingSectionProps) {
   return (
     <div className="my-2">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
       >
         <svg
+          aria-hidden="true"
           className={`w-3 h-3 transition-transform ${expanded ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"

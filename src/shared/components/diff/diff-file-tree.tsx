@@ -1,6 +1,6 @@
 import { FileCode } from "lucide-react";
-import { ScrollArea } from "@/shared/ui/scroll-area";
 import type { DiffFile } from "@/shared/types";
+import { ScrollArea } from "@/shared/ui/scroll-area";
 
 interface DiffFileTreeProps {
   files: DiffFile[];
@@ -23,6 +23,7 @@ export function DiffFileTree({ files, selectedFile, onSelectFile }: DiffFileTree
           <div className="p-2 space-y-0.5">
             {files.map((file) => (
               <button
+                type="button"
                 key={file.path}
                 onClick={() => onSelectFile(file.path)}
                 className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-left transition-colors ${
@@ -35,7 +36,9 @@ export function DiffFileTree({ files, selectedFile, onSelectFile }: DiffFileTree
                 <span className="truncate flex-1">{file.path}</span>
                 <span className="flex gap-1.5 text-[10px] shrink-0">
                   {file.additions > 0 && (
-                    <span className="text-emerald-600 dark:text-emerald-400">+{file.additions}</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      +{file.additions}
+                    </span>
                   )}
                   {file.deletions > 0 && (
                     <span className="text-red-600 dark:text-red-400">-{file.deletions}</span>

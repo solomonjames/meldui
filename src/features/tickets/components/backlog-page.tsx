@@ -1,19 +1,19 @@
-import { useState, useMemo, useCallback } from "react";
-import { LayoutList } from "lucide-react";
 import {
   DndContext,
+  type DragEndEvent,
   DragOverlay,
-  PointerSensor,
+  type DragStartEvent,
   KeyboardSensor,
+  PointerSensor,
   useSensor,
   useSensors,
-  type DragStartEvent,
-  type DragEndEvent,
 } from "@dnd-kit/core";
-import { Button } from "@/shared/ui/button";
-import { KanbanColumn } from "@/features/tickets/components/kanban-column";
+import { LayoutList } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { KanbanCard } from "@/features/tickets/components/kanban-card";
+import { KanbanColumn } from "@/features/tickets/components/kanban-column";
 import type { Ticket } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
 
 interface BacklogPageProps {
   tickets: Ticket[];
@@ -21,7 +21,7 @@ interface BacklogPageProps {
   error: string | null;
   onUpdateTicket: (
     id: string,
-    updates: { status?: string; priority?: string; description?: string }
+    updates: { status?: string; priority?: string; description?: string },
   ) => Promise<void>;
   onCloseTicket: (id: string, reason?: string) => Promise<void>;
   onRefresh: () => Promise<void>;
@@ -60,7 +60,7 @@ export function BacklogPage({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor)
+    useSensor(KeyboardSensor),
   );
 
   const filteredTickets = useMemo(() => {
@@ -74,7 +74,7 @@ export function BacklogPage({
     });
   }, [tickets, sortMode, typeFilter]);
 
-  const activeTicket = activeId ? tickets.find((t) => t.id === activeId) ?? null : null;
+  const activeTicket = activeId ? (tickets.find((t) => t.id === activeId) ?? null) : null;
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(String(event.active.id));
@@ -107,7 +107,7 @@ export function BacklogPage({
         }
       }
     },
-    [tickets, onUpdateTicket, onCloseTicket, onAutoStart]
+    [tickets, onUpdateTicket, onCloseTicket, onAutoStart],
   );
 
   const handleDragCancel = useCallback(() => {
@@ -126,15 +126,9 @@ export function BacklogPage({
             <h1 className="text-2xl font-semibold">Backlog</h1>
           </div>
           <div className="flex items-center gap-3">
-            {loading && (
-              <span className="text-xs text-muted-foreground">Loading...</span>
-            )}
-            {error && (
-              <span className="text-xs text-destructive">{error}</span>
-            )}
-            <span className="text-sm text-muted-foreground">
-              {activeCount} items
-            </span>
+            {loading && <span className="text-xs text-muted-foreground">Loading...</span>}
+            {error && <span className="text-xs text-destructive">{error}</span>}
+            <span className="text-sm text-muted-foreground">{activeCount} items</span>
             <Button variant="ghost" size="sm" onClick={onRefresh}>
               Refresh
             </Button>
@@ -146,6 +140,7 @@ export function BacklogPage({
           {/* Sort */}
           <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 rounded-lg p-0.5 shadow-sm border">
             <button
+              type="button"
               onClick={() => setSortMode("priority")}
               className={`px-3 py-1 text-xs rounded-md transition-colors ${
                 sortMode === "priority"
@@ -156,6 +151,7 @@ export function BacklogPage({
               Priority
             </button>
             <button
+              type="button"
               onClick={() => setSortMode("date")}
               className={`px-3 py-1 text-xs rounded-md transition-colors ${
                 sortMode === "date"
@@ -171,6 +167,7 @@ export function BacklogPage({
 
           {/* Type filters */}
           <button
+            type="button"
             onClick={() => setTypeFilter(null)}
             className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
               typeFilter === null
@@ -182,6 +179,7 @@ export function BacklogPage({
           </button>
           {TICKET_TYPES.map((type) => (
             <button
+              type="button"
               key={type}
               onClick={() => setTypeFilter(typeFilter === type ? null : type)}
               className={`px-2.5 py-1 text-xs rounded-full capitalize transition-colors ${
@@ -206,9 +204,7 @@ export function BacklogPage({
         >
           <div className="flex gap-5 h-full overflow-x-auto">
             {COLUMNS.map((col) => {
-              const columnTickets = filteredTickets.filter(
-                (t) => t.status === col.key
-              );
+              const columnTickets = filteredTickets.filter((t) => t.status === col.key);
               return (
                 <div key={col.key} className="min-w-[280px] w-[280px] shrink-0 h-full">
                   <KanbanColumn

@@ -9,7 +9,12 @@ interface DiffCommentInputProps {
   onCancel: () => void;
 }
 
-export function DiffCommentInput({ filePath, lineNumber, onSubmit, onCancel }: DiffCommentInputProps) {
+export function DiffCommentInput({
+  filePath,
+  lineNumber,
+  onSubmit,
+  onCancel,
+}: DiffCommentInputProps) {
   const [content, setContent] = useState("");
   const [showSuggestion, setShowSuggestion] = useState(false);
   const [suggestion, setSuggestion] = useState("");
@@ -53,6 +58,7 @@ export function DiffCommentInput({ filePath, lineNumber, onSubmit, onCancel }: D
       )}
       <div className="flex items-center justify-between mt-1.5">
         <button
+          type="button"
           onClick={() => setShowSuggestion(!showSuggestion)}
           className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -62,7 +68,12 @@ export function DiffCommentInput({ filePath, lineNumber, onSubmit, onCancel }: D
           <Button variant="ghost" size="sm" onClick={onCancel} className="h-6 text-xs px-2">
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSubmit} disabled={!content.trim()} className="h-6 text-xs px-2">
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={!content.trim()}
+            className="h-6 text-xs px-2"
+          >
             Add Comment
           </Button>
         </div>

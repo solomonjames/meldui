@@ -1,12 +1,12 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { Settings, Save, RefreshCw } from "lucide-react";
-import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
-import { Textarea } from "@/shared/ui/textarea";
-import { Separator } from "@/shared/ui/separator";
-import { ScrollArea } from "@/shared/ui/scroll-area";
+import { RefreshCw, Save, Settings } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSettings } from "@/features/settings/hooks/use-settings";
 import type { ProjectSettings, SyncSettings, WorktreeSettings } from "@/shared/lib/sync";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { ScrollArea } from "@/shared/ui/scroll-area";
+import { Separator } from "@/shared/ui/separator";
+import { Textarea } from "@/shared/ui/textarea";
 
 interface SettingsPageProps {
   projectDir: string;
@@ -32,41 +32,35 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
     setTimeout(() => setSaved(false), 2000);
   }, [effectiveDraft, updateSettings]);
 
-  const updateSync = useCallback(
-    (patch: Partial<SyncSettings>) => {
-      setDraft((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          sync: {
-            enabled: false,
-            provider: "beads",
-            auto_push: false,
-            config: {},
-            ...prev.sync,
-            ...patch,
-          },
-        };
-      });
-    },
-    []
-  );
+  const updateSync = useCallback((patch: Partial<SyncSettings>) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        sync: {
+          enabled: false,
+          provider: "beads",
+          auto_push: false,
+          config: {},
+          ...prev.sync,
+          ...patch,
+        },
+      };
+    });
+  }, []);
 
-  const updateWorktree = useCallback(
-    (patch: Partial<WorktreeSettings>) => {
-      setDraft((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          worktree: {
-            ...prev.worktree,
-            ...patch,
-          },
-        };
-      });
-    },
-    []
-  );
+  const updateWorktree = useCallback((patch: Partial<WorktreeSettings>) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        worktree: {
+          ...prev.worktree,
+          ...patch,
+        },
+      };
+    });
+  }, []);
 
   if (loading && !settings) {
     return (
@@ -137,8 +131,14 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
                 onChange={(enabled) => updateSync({ enabled })}
               />
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Provider</label>
+                <label
+                  className="text-xs font-medium text-muted-foreground"
+                  htmlFor="sync-provider"
+                >
+                  Provider
+                </label>
                 <Input
+                  id="sync-provider"
                   value={effectiveDraft.sync?.provider ?? "beads"}
                   onChange={(e) => updateSync({ provider: e.target.value })}
                   placeholder="beads"
@@ -164,10 +164,11 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
             </div>
             <Separator />
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="worktree-setup">
                 Setup command
               </label>
               <Textarea
+                id="worktree-setup"
                 value={effectiveDraft.worktree?.setup_command ?? ""}
                 onChange={(e) =>
                   updateWorktree({
@@ -179,7 +180,8 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
               />
               <p className="text-[11px] text-muted-foreground">
                 Shell command to run after creating a worktree. Use this to install dependencies
-                (e.g., <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">bun install</code>,{" "}
+                (e.g.,{" "}
+                <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">bun install</code>,{" "}
                 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">composer install</code>)
                 or set up the environment. Runs in the worktree directory.
               </p>

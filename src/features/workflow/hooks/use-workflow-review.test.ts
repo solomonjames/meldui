@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import {
-  mockInvoke,
-  clearTauriMocks,
-  emitTauriEvent,
-} from "@/shared/test/mocks/tauri";
+import { mockInvoke, clearTauriMocks, emitTauriEvent } from "@/shared/test/mocks/tauri";
 import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
 
 describe("useWorkflowReview", () => {
@@ -16,9 +12,7 @@ describe("useWorkflowReview", () => {
   });
 
   it("reviewReady becomes true after mount", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowReview("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => {
       expect(result.current.reviewReady).toBe(true);
@@ -26,9 +20,7 @@ describe("useWorkflowReview", () => {
   });
 
   it("sets reviewFindings and pendingReviewRequestId when event fires", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowReview("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
@@ -57,9 +49,7 @@ describe("useWorkflowReview", () => {
   });
 
   it("increments reviewRoundKey on each agent-review-findings event", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowReview("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
     expect(result.current.reviewRoundKey).toBe(0);
@@ -92,9 +82,7 @@ describe("useWorkflowReview", () => {
   });
 
   it("ignores review events for different ticket_id", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowReview("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
@@ -102,7 +90,16 @@ describe("useWorkflowReview", () => {
       emitTauriEvent("agent-review-findings-request", {
         request_id: "review-1",
         ticket_id: "issue-OTHER",
-        findings: [{ id: "f1", file_path: "src/foo.ts", severity: "warning", validity: "real", title: "Test", description: "Test" }],
+        findings: [
+          {
+            id: "f1",
+            file_path: "src/foo.ts",
+            severity: "warning",
+            validity: "real",
+            title: "Test",
+            description: "Test",
+          },
+        ],
         summary: "1 finding",
       });
     });
@@ -112,9 +109,7 @@ describe("useWorkflowReview", () => {
   });
 
   it("addReviewComment adds a comment", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowReview("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
@@ -128,9 +123,7 @@ describe("useWorkflowReview", () => {
   });
 
   it("deleteReviewComment removes a comment", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowReview("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
@@ -148,9 +141,7 @@ describe("useWorkflowReview", () => {
   });
 
   it("submitReview with approve clears all review state", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowReview("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
@@ -159,7 +150,16 @@ describe("useWorkflowReview", () => {
       emitTauriEvent("agent-review-findings-request", {
         request_id: "review-1",
         ticket_id: "issue-1",
-        findings: [{ id: "f1", file_path: "src/foo.ts", severity: "info", validity: "real", title: "Test", description: "Test" }],
+        findings: [
+          {
+            id: "f1",
+            file_path: "src/foo.ts",
+            severity: "info",
+            validity: "real",
+            title: "Test",
+            description: "Test",
+          },
+        ],
         summary: "1 finding",
       });
     });
@@ -187,9 +187,7 @@ describe("useWorkflowReview", () => {
   });
 
   it("submitReview with request_changes marks comments resolved", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowReview("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
@@ -197,7 +195,16 @@ describe("useWorkflowReview", () => {
       emitTauriEvent("agent-review-findings-request", {
         request_id: "review-1",
         ticket_id: "issue-1",
-        findings: [{ id: "f1", file_path: "src/foo.ts", severity: "warning", validity: "real", title: "Test", description: "Test" }],
+        findings: [
+          {
+            id: "f1",
+            file_path: "src/foo.ts",
+            severity: "warning",
+            validity: "real",
+            title: "Test",
+            description: "Test",
+          },
+        ],
         summary: "1 finding",
       });
     });
@@ -227,9 +234,7 @@ describe("useWorkflowReview", () => {
   });
 
   it("submitReview handles broken pipe error", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowReview("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
 
@@ -244,9 +249,7 @@ describe("useWorkflowReview", () => {
 
     await waitFor(() => expect(result.current.pendingReviewRequestId).toBe("review-1"));
 
-    mockInvoke.mockRejectedValueOnce(
-      new Error("Broken pipe")
-    );
+    mockInvoke.mockRejectedValueOnce(new Error("Broken pipe"));
 
     await act(async () => {
       await result.current.submitReview({
@@ -259,7 +262,7 @@ describe("useWorkflowReview", () => {
 
     expect(result.current.pendingReviewRequestId).toBeNull();
     expect(setError).toHaveBeenCalledWith(
-      "Agent session expired. Click Resume to continue where you left off."
+      "Agent session expired. Click Resume to continue where you left off.",
     );
   });
 });

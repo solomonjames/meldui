@@ -3,6 +3,5 @@
 
 export const ticketKeys = {
   all: (projectDir: string) => ["tickets", "all", projectDir] as const,
-  detail: (projectDir: string, id: string) =>
-    ["tickets", "detail", projectDir, id] as const,
+  detail: (projectDir: string, id: string) => ["tickets", "detail", projectDir, id] as const,
 };

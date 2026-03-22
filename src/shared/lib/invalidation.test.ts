@@ -1,12 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { clearTauriMocks, emitTauriEvent } from "@/shared/test/mocks/tauri";
-import {
-  createTestQueryClient,
-  createQueryWrapper,
-} from "@/shared/test/helpers/query-wrapper";
+import { createTestQueryClient, createQueryWrapper } from "@/shared/test/helpers/query-wrapper";
 import { useTauriEventInvalidation } from "@/shared/lib/invalidation";
-import { QueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 
 describe("useTauriEventInvalidation", () => {
   let queryClient: QueryClient;

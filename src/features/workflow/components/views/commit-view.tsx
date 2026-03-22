@@ -1,24 +1,24 @@
-import { useState, useEffect, useCallback } from "react";
 import {
-  GitCommit,
-  GitBranch,
   ArrowLeft,
-  Copy,
   Check,
-  FileText,
-  FilePlus,
-  FileX,
-  FilePen,
   ChevronDown,
   ChevronRight,
-  Loader2,
+  Copy,
   ExternalLink,
+  FilePen,
+  FilePlus,
+  type FileText,
+  FileX,
+  GitBranch,
+  GitCommit,
+  Loader2,
   Trash2,
 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import type { BranchInfo, CommitActionResult, DiffFile, Ticket } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
-import { Textarea } from "@/shared/ui/textarea";
 import { ScrollArea } from "@/shared/ui/scroll-area";
-import type { Ticket, DiffFile, BranchInfo, CommitActionResult } from "@/shared/types";
+import { Textarea } from "@/shared/ui/textarea";
 
 interface CommitViewProps {
   ticket: Ticket;
@@ -29,7 +29,7 @@ interface CommitViewProps {
   onExecuteCommitAction: (
     issueId: string,
     action: "commit" | "commit_and_pr",
-    commitMessage: string
+    commitMessage: string,
   ) => Promise<CommitActionResult | null>;
   onCleanupWorktree: (issueId: string) => Promise<void>;
 }
@@ -40,11 +40,12 @@ type ActionState =
   | { status: "success"; result: CommitActionResult }
   | { status: "error"; message: string };
 
-const FILE_STATUS_CONFIG: Record<string, { icon: typeof FileText; label: string; color: string }> = {
-  added: { icon: FilePlus, label: "Added", color: "text-emerald-600" },
-  removed: { icon: FileX, label: "Removed", color: "text-red-500" },
-  modified: { icon: FilePen, label: "Modified", color: "text-amber-500" },
-};
+const FILE_STATUS_CONFIG: Record<string, { icon: typeof FileText; label: string; color: string }> =
+  {
+    added: { icon: FilePlus, label: "Added", color: "text-emerald-600" },
+    removed: { icon: FileX, label: "Removed", color: "text-red-500" },
+    modified: { icon: FilePen, label: "Modified", color: "text-amber-500" },
+  };
 
 export function CommitView({
   ticket,
@@ -103,7 +104,7 @@ export function CommitView({
         setActionState({ status: "error", message: String(err) });
       }
     },
-    [ticket.id, commitMessage, onExecuteCommitAction]
+    [ticket.id, commitMessage, onExecuteCommitAction],
   );
 
   const handleCleanupWorktree = useCallback(async () => {
@@ -131,9 +132,7 @@ export function CommitView({
               <GitBranch className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="font-mono font-medium">{branchInfo.branch}</span>
               {branchInfo.remote_tracking && (
-                <span className="text-muted-foreground">
-                  → {branchInfo.remote_tracking}
-                </span>
+                <span className="text-muted-foreground">→ {branchInfo.remote_tracking}</span>
               )}
             </div>
           )}
@@ -166,6 +165,7 @@ export function CommitView({
                 Commit Message
               </h4>
               <button
+                type="button"
                 onClick={handleCopy}
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -193,6 +193,7 @@ export function CommitView({
           {/* File List */}
           <div className="space-y-2">
             <button
+              type="button"
               onClick={() => setFilesExpanded((prev) => !prev)}
               className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
             >
@@ -278,9 +279,7 @@ export function CommitView({
           )}
           {actionState.status === "error" && (
             <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4">
-              <p className="text-sm text-red-700 dark:text-red-300">
-                {actionState.message}
-              </p>
+              <p className="text-sm text-red-700 dark:text-red-300">{actionState.message}</p>
             </div>
           )}
         </div>
@@ -335,11 +334,7 @@ function StatCard({
   bordered?: boolean;
 }) {
   return (
-    <div
-      className={`flex flex-col items-center gap-2 py-5 px-6 ${
-        bordered ? "border-l" : ""
-      }`}
-    >
+    <div className={`flex flex-col items-center gap-2 py-5 px-6 ${bordered ? "border-l" : ""}`}>
       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
         {label}
       </span>

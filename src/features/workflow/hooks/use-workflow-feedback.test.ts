@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import {
-  mockInvoke,
-  clearTauriMocks,
-  emitTauriEvent,
-} from "@/shared/test/mocks/tauri";
+import { mockInvoke, clearTauriMocks, emitTauriEvent } from "@/shared/test/mocks/tauri";
 import { useWorkflowFeedback } from "@/features/workflow/hooks/use-workflow-feedback";
 
 describe("useWorkflowFeedback", () => {
@@ -16,9 +12,7 @@ describe("useWorkflowFeedback", () => {
   });
 
   it("feedbackReady becomes true after mount", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowFeedback("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowFeedback("issue-1", setError));
 
     await waitFor(() => {
       expect(result.current.feedbackReady).toBe(true);
@@ -26,9 +20,7 @@ describe("useWorkflowFeedback", () => {
   });
 
   it("sets pendingFeedback when event fires with matching ticket_id", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowFeedback("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowFeedback("issue-1", setError));
 
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
@@ -47,9 +39,7 @@ describe("useWorkflowFeedback", () => {
   });
 
   it("ignores feedback events for different ticket_id", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowFeedback("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowFeedback("issue-1", setError));
 
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
@@ -66,9 +56,7 @@ describe("useWorkflowFeedback", () => {
   });
 
   it("respondToFeedback clears pendingFeedback on success", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowFeedback("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowFeedback("issue-1", setError));
 
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
@@ -92,9 +80,7 @@ describe("useWorkflowFeedback", () => {
   });
 
   it("respondToFeedback handles broken pipe error", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowFeedback("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowFeedback("issue-1", setError));
 
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
@@ -109,7 +95,7 @@ describe("useWorkflowFeedback", () => {
     await waitFor(() => expect(result.current.pendingFeedback).not.toBeNull());
 
     mockInvoke.mockRejectedValueOnce(
-      new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)")
+      new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)"),
     );
 
     await act(async () => {
@@ -118,14 +104,12 @@ describe("useWorkflowFeedback", () => {
 
     expect(result.current.pendingFeedback).toBeNull();
     expect(setError).toHaveBeenCalledWith(
-      "Agent session expired. Click Resume to continue where you left off."
+      "Agent session expired. Click Resume to continue where you left off.",
     );
   });
 
   it("respondToFeedback shows generic error for non-broken-pipe failures", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowFeedback("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowFeedback("issue-1", setError));
 
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 
@@ -150,9 +134,7 @@ describe("useWorkflowFeedback", () => {
   });
 
   it("clearPending sets pendingFeedback to null", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowFeedback("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowFeedback("issue-1", setError));
 
     await waitFor(() => expect(result.current.feedbackReady).toBe(true));
 

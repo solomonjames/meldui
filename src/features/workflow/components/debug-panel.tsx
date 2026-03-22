@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { ChevronDown, ChevronUp, Trash2, RefreshCw } from "lucide-react";
-import { Button } from "@/shared/ui/button";
+import { ChevronDown, ChevronUp, RefreshCw, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { DebugEntry } from "@/shared/hooks/use-debug-log";
 import type { StepStatus } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
 
 interface DebugPanelProps {
   entries: DebugEntry[];
@@ -51,6 +51,7 @@ export function DebugPanel({ entries, stateSnapshot, onClear, onRefresh }: Debug
     <div className="border-t bg-zinc-900 text-zinc-200 text-xs font-mono max-h-[300px] flex flex-col">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-700 bg-zinc-800">
         <button
+          type="button"
           onClick={() => setOpen(false)}
           className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200"
         >
@@ -61,8 +62,14 @@ export function DebugPanel({ entries, stateSnapshot, onClear, onRefresh }: Debug
           <span className="text-zinc-500">
             step: <span className="text-zinc-300">{stateSnapshot.currentStepId ?? "none"}</span>
             {" | "}status: <span className="text-zinc-300">{statusStr}</span>
-            {" | "}loading: <span className={stateSnapshot.loading ? "text-yellow-400" : "text-zinc-300"}>{String(stateSnapshot.loading)}</span>
-            {" | "}listeners: <span className={stateSnapshot.listenersReady ? "text-green-400" : "text-red-400"}>{String(stateSnapshot.listenersReady)}</span>
+            {" | "}loading:{" "}
+            <span className={stateSnapshot.loading ? "text-yellow-400" : "text-zinc-300"}>
+              {String(stateSnapshot.loading)}
+            </span>
+            {" | "}listeners:{" "}
+            <span className={stateSnapshot.listenersReady ? "text-green-400" : "text-red-400"}>
+              {String(stateSnapshot.listenersReady)}
+            </span>
           </span>
           <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={onRefresh}>
             <RefreshCw className="w-3 h-3" />
@@ -79,9 +86,15 @@ export function DebugPanel({ entries, stateSnapshot, onClear, onRefresh }: Debug
           entries.map((entry, i) => {
             const time = new Date(entry.timestamp).toISOString().slice(11, 23);
             return (
-              <div key={i} className="flex gap-2">
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: log entries lack stable IDs
+                key={i}
+                className="flex gap-2"
+              >
                 <span className="text-zinc-600 shrink-0">{time}</span>
-                <span className={`shrink-0 w-16 ${CATEGORY_COLORS[entry.category] ?? "text-zinc-400"}`}>
+                <span
+                  className={`shrink-0 w-16 ${CATEGORY_COLORS[entry.category] ?? "text-zinc-400"}`}
+                >
                   [{entry.category}]
                 </span>
                 <span className="text-zinc-300 break-all">{entry.message}</span>

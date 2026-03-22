@@ -1,25 +1,15 @@
-import { useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { commands } from "@/bindings";
-
-import { Hash, ArrowLeft, Loader2 } from "lucide-react";
-import { Button } from "@/shared/ui/button";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/shared/ui/resizable";
-import { TicketDetailsPanel } from "@/features/tickets/components/ticket-details-panel";
+import { ArrowLeft, Hash, Loader2 } from "lucide-react";
+import { useCallback, useState } from "react";
 import { WorkflowStartPanel } from "@/app/workflow-start-panel";
+import { commands } from "@/bindings";
+import { TicketDetailsPanel } from "@/features/tickets/components/ticket-details-panel";
 import { WorkflowShell } from "@/features/workflow/components/workflow-shell";
 import { useWorkflowContext } from "@/features/workflow/context";
 import { ticketKeys } from "@/shared/lib/query-keys";
-import type {
-  Ticket,
-  WorkflowDefinition,
-  WorkflowSuggestion,
-  WorkflowState,
-} from "@/shared/types";
+import type { Ticket, WorkflowDefinition, WorkflowState, WorkflowSuggestion } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/shared/ui/resizable";
 
 interface TicketPageProps {
   ticketId: string;
@@ -36,7 +26,7 @@ interface TicketPageProps {
       notes?: string;
       design?: string;
       acceptance_criteria?: string;
-    }
+    },
   ) => Promise<void>;
   onShowTicket: (id: string) => Promise<Ticket | null>;
   onAddComment: (id: string, text: string) => Promise<void>;
@@ -93,7 +83,7 @@ export function TicketPage({
       await onUpdateSection(tId, sectionId, content);
       await handleRefreshTicket();
     },
-    [onUpdateSection, handleRefreshTicket]
+    [onUpdateSection, handleRefreshTicket],
   );
 
   // Loading state
@@ -134,12 +124,7 @@ export function TicketPage({
     <div className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
       {/* Page header */}
       <div className="px-6 py-3 border-b bg-white dark:bg-zinc-900 flex items-center gap-3 shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0"
-          onClick={onNavigateToBacklog}
-        >
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onNavigateToBacklog}>
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono text-muted-foreground">
@@ -151,7 +136,10 @@ export function TicketPage({
 
       {/* Main content */}
       <div className="flex-1 overflow-hidden relative">
-        <ResizablePanelGroup key={detailsCollapsed ? "collapsed" : "expanded"} direction="horizontal">
+        <ResizablePanelGroup
+          key={detailsCollapsed ? "collapsed" : "expanded"}
+          direction="horizontal"
+        >
           {/* Left: Main content area */}
           <ResizablePanel defaultSize={detailsCollapsed ? 100 : 70} minSize={30}>
             <div className="h-full overflow-hidden">

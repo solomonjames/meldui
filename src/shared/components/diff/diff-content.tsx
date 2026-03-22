@@ -1,8 +1,8 @@
-import { ScrollArea } from "@/shared/ui/scroll-area";
-import { DiffLine } from "@/shared/components/diff/diff-line";
 import { DiffCommentCard } from "@/shared/components/diff/diff-comment-card";
 import { DiffCommentInput } from "@/shared/components/diff/diff-comment-input";
+import { DiffLine } from "@/shared/components/diff/diff-line";
 import type { DiffFile, ReviewComment } from "@/shared/types";
+import { ScrollArea } from "@/shared/ui/scroll-area";
 
 interface DiffContentProps {
   file: DiffFile;
@@ -32,7 +32,9 @@ export function DiffContent({
         <h3 className="text-sm font-medium font-mono">{file.path}</h3>
         <span className="flex gap-2 text-xs">
           {file.additions > 0 && (
-            <span className="text-emerald-600 dark:text-emerald-400 font-medium">+{file.additions}</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+              +{file.additions}
+            </span>
           )}
           {file.deletions > 0 && (
             <span className="text-red-600 dark:text-red-400 font-medium">-{file.deletions}</span>
@@ -44,6 +46,7 @@ export function DiffContent({
       <ScrollArea className="flex-1">
         <div className="py-1">
           {file.hunks.map((hunk, hunkIdx) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: hunks lack stable IDs
             <div key={hunkIdx}>
               {/* Hunk header */}
               <div className="flex items-stretch text-xs font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
@@ -51,24 +54,21 @@ export function DiffContent({
                 <div className="w-10 shrink-0 border-r border-zinc-200 dark:border-zinc-800" />
                 <div className="w-5 shrink-0" />
                 <div className="flex-1 py-0.5 pr-4">
-                  @@ -{hunk.old_start},{hunk.old_count} +{hunk.new_start},{hunk.new_count} @@ {hunk.header}
+                  @@ -{hunk.old_start},{hunk.old_count} +{hunk.new_start},{hunk.new_count} @@{" "}
+                  {hunk.header}
                 </div>
               </div>
 
               {/* Lines + inline comments */}
               {hunk.lines.map((line, lineIdx) => {
                 const lineNumber = line.new_line_no ?? line.old_line_no;
-                const lineComments = fileComments.filter(
-                  (c) => c.line_number === lineNumber
-                );
+                const lineComments = fileComments.filter((c) => c.line_number === lineNumber);
                 const isCommentInput = activeCommentLine === lineNumber;
 
                 return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: diff lines lack stable IDs
                   <div key={`${hunkIdx}-${lineIdx}`}>
-                    <DiffLine
-                      line={line}
-                      onClickLine={onClickLine}
-                    />
+                    <DiffLine line={line} onClickLine={onClickLine} />
                     {/* Existing comments for this line */}
                     {lineComments.map((comment) => (
                       <DiffCommentCard

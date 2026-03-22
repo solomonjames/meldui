@@ -28,7 +28,7 @@ describe("ChatView display states", () => {
         response="Here is the analysis"
         isExecuting={false}
         stepStatus={"completed" as StepStatus}
-      />
+      />,
     );
 
     expect(screen.getByText("Here is the analysis")).toBeInTheDocument();
@@ -41,7 +41,7 @@ describe("ChatView display states", () => {
         response=""
         isExecuting={true}
         stepStatus={"in_progress" as StepStatus}
-      />
+      />,
     );
 
     // Processing state is shown via the ActivityBar component
@@ -55,7 +55,7 @@ describe("ChatView display states", () => {
         response=""
         isExecuting={false}
         stepStatus={"pending" as StepStatus}
-      />
+      />,
     );
 
     expect(screen.getByText("Starting execution...")).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe("ChatView display states", () => {
           toolUseSummaries: [],
           isCompacting: false,
         }}
-      />
+      />,
     );
 
     expect(screen.getByText("Agent returned an error:")).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe("ChatView display states", () => {
           summary: "Captured problem statement and scope",
         }}
         onRespondToFeedback={vi.fn()}
-      />
+      />,
     );
 
     expect(screen.getByText("Ready for Review")).toBeInTheDocument();

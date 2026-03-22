@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import {
-  mockInvoke,
-  clearTauriMocks,
-  emitTauriEvent,
-} from "@/shared/test/mocks/tauri";
+import { mockInvoke, clearTauriMocks, emitTauriEvent } from "@/shared/test/mocks/tauri";
 import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
 
 describe("useWorkflowPermissions", () => {
@@ -16,9 +12,7 @@ describe("useWorkflowPermissions", () => {
   });
 
   it("permissionsReady becomes true after mount", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowPermissions("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowPermissions("issue-1", setError));
 
     await waitFor(() => {
       expect(result.current.permissionsReady).toBe(true);
@@ -26,9 +20,7 @@ describe("useWorkflowPermissions", () => {
   });
 
   it("sets pendingPermission when event fires", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowPermissions("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowPermissions("issue-1", setError));
 
     await waitFor(() => expect(result.current.permissionsReady).toBe(true));
 
@@ -47,9 +39,7 @@ describe("useWorkflowPermissions", () => {
   });
 
   it("respondToPermission clears pendingPermission on success", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowPermissions("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowPermissions("issue-1", setError));
 
     await waitFor(() => expect(result.current.permissionsReady).toBe(true));
 
@@ -73,9 +63,7 @@ describe("useWorkflowPermissions", () => {
   });
 
   it("respondToPermission handles broken pipe error", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowPermissions("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowPermissions("issue-1", setError));
 
     await waitFor(() => expect(result.current.permissionsReady).toBe(true));
 
@@ -90,7 +78,7 @@ describe("useWorkflowPermissions", () => {
     await waitFor(() => expect(result.current.pendingPermission).not.toBeNull());
 
     mockInvoke.mockRejectedValueOnce(
-      new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)")
+      new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)"),
     );
 
     await act(async () => {
@@ -99,14 +87,12 @@ describe("useWorkflowPermissions", () => {
 
     expect(result.current.pendingPermission).toBeNull();
     expect(setError).toHaveBeenCalledWith(
-      "Agent session expired. Click Resume to continue where you left off."
+      "Agent session expired. Click Resume to continue where you left off.",
     );
   });
 
   it("clearPending sets pendingPermission to null", async () => {
-    const { result } = renderHook(() =>
-      useWorkflowPermissions("issue-1", setError)
-    );
+    const { result } = renderHook(() => useWorkflowPermissions("issue-1", setError));
 
     await waitFor(() => expect(result.current.permissionsReady).toBe(true));
 

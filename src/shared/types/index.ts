@@ -1,18 +1,18 @@
 // Re-export Ticket types from lib
 export type {
-  Ticket,
-  TicketComment,
-  TicketStatus,
-  TicketType,
-  TicketSection,
-  SectionType,
+  AcceptanceCriteriaContent,
   AcceptanceCriterion,
+  ChecklistContent,
   ChecklistItem,
+  KeyValueContent,
   KeyValueEntry,
   MarkdownContent,
-  AcceptanceCriteriaContent,
-  ChecklistContent,
-  KeyValueContent,
+  SectionType,
+  Ticket,
+  TicketComment,
+  TicketSection,
+  TicketStatus,
+  TicketType,
 } from "@/shared/lib/tickets";
 
 export interface ClaudeStatus {
@@ -57,9 +57,7 @@ export interface WorkflowStep {
   view: StepViewType;
 }
 
-export type StepInstructions =
-  | { prompt: string }
-  | { file: string };
+export type StepInstructions = { prompt: string } | { file: string };
 
 export interface WorkflowState {
   workflow_id: string;
@@ -68,11 +66,7 @@ export interface WorkflowState {
   step_history: StepRecord[];
 }
 
-export type StepStatus =
-  | "pending"
-  | "in_progress"
-  | "completed"
-  | { failed: string };
+export type StepStatus = "pending" | "in_progress" | "completed" | { failed: string };
 
 export interface StepRecord {
   step_id: string;
@@ -96,10 +90,22 @@ export interface WorkflowSuggestion {
 export interface StreamChunk {
   issue_id: string;
   chunk_type:
-    | "text" | "tool_start" | "tool_input" | "tool_end" | "tool_result"
-    | "thinking" | "result" | "error" | "stderr"
-    | "tool_progress" | "subagent_start" | "subagent_progress" | "subagent_complete"
-    | "files_changed" | "tool_use_summary" | "compacting";
+    | "text"
+    | "tool_start"
+    | "tool_input"
+    | "tool_end"
+    | "tool_result"
+    | "thinking"
+    | "result"
+    | "error"
+    | "stderr"
+    | "tool_progress"
+    | "subagent_start"
+    | "subagent_progress"
+    | "subagent_complete"
+    | "files_changed"
+    | "tool_use_summary"
+    | "compacting";
   content: string;
 }
 

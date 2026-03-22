@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { QueryKey, UseMutationOptions } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
 
 /**
  * Creates useQuery options for a Tauri invoke() call.
@@ -7,7 +7,7 @@ import type { QueryKey, UseMutationOptions } from "@tanstack/react-query";
 export function createTauriQuery<T>(
   queryKey: QueryKey,
   command: string,
-  params?: Record<string, unknown>
+  params?: Record<string, unknown>,
 ) {
   return {
     queryKey,
@@ -20,10 +20,13 @@ export function createTauriQuery<T>(
  */
 export function createTauriMutation<TVariables, TResult = void>(
   command: string,
-  mapVariables?: (vars: TVariables) => Record<string, unknown>
+  mapVariables?: (vars: TVariables) => Record<string, unknown>,
 ): Pick<UseMutationOptions<TResult, Error, TVariables>, "mutationFn"> {
   return {
     mutationFn: (variables: TVariables) =>
-      invoke<TResult>(command, mapVariables ? mapVariables(variables) : (variables as unknown as Record<string, unknown>)),
+      invoke<TResult>(
+        command,
+        mapVariables ? mapVariables(variables) : (variables as unknown as Record<string, unknown>),
+      ),
   };
 }

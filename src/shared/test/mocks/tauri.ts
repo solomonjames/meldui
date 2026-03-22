@@ -39,17 +39,15 @@ export function clearTauriMocks() {
 export const mockInvoke = vi.fn();
 
 /** Mock for `@tauri-apps/api/event` listen */
-export const mockListen = vi.fn(
-  async (event: string, callback: EventCallback) => {
-    const unlisten = () => {
-      const idx = listeners.findIndex((l) => l === listener);
-      if (idx >= 0) listeners.splice(idx, 1);
-    };
-    const listener: MockListener = { event, callback, unlisten };
-    listeners.push(listener);
-    return unlisten;
-  }
-);
+export const mockListen = vi.fn(async (event: string, callback: EventCallback) => {
+  const unlisten = () => {
+    const idx = listeners.indexOf(listener);
+    if (idx >= 0) listeners.splice(idx, 1);
+  };
+  const listener: MockListener = { event, callback, unlisten };
+  listeners.push(listener);
+  return unlisten;
+});
 
 // Wire up vi.mock calls
 vi.mock("@tauri-apps/api/core", () => ({

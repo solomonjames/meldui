@@ -3,11 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { clearTauriMocks } from "@/shared/test/mocks/tauri";
 import { WorkflowShell } from "@/features/workflow/components/workflow-shell";
 import { WorkflowProvider, type WorkflowContextValue } from "@/features/workflow/context";
-import type {
-  Ticket,
-  WorkflowDefinition,
-  WorkflowState,
-} from "@/shared/types";
+import type { Ticket, WorkflowDefinition, WorkflowState } from "@/shared/types";
 
 // Mock child components to keep tests focused on the auto-execute logic
 vi.mock("./stage-bar", () => ({
@@ -19,8 +15,21 @@ vi.mock("./debug-panel", () => ({
 }));
 
 vi.mock("./views/chat-view", () => ({
-  ChatView: ({ isExecuting, response, stepStatus }: { isExecuting: boolean; response: string; stepStatus: string }) => (
-    <div data-testid="chat-view" data-executing={isExecuting} data-response={response} data-status={stepStatus} />
+  ChatView: ({
+    isExecuting,
+    response,
+    stepStatus,
+  }: {
+    isExecuting: boolean;
+    response: string;
+    stepStatus: string;
+  }) => (
+    <div
+      data-testid="chat-view"
+      data-executing={isExecuting}
+      data-response={response}
+      data-status={stepStatus}
+    />
   ),
 }));
 
@@ -99,7 +108,9 @@ function makeWorkflowContext(overrides: Partial<WorkflowContextValue> = {}): Wor
     getWorkflow: vi.fn().mockResolvedValue(makeWorkflowDef()),
     assignWorkflow: vi.fn().mockResolvedValue(null),
     getWorkflowState: vi.fn().mockResolvedValue(null),
-    executeStep: vi.fn().mockResolvedValue({ step_id: "step-1", response: "result", workflow_completed: false }),
+    executeStep: vi
+      .fn()
+      .mockResolvedValue({ step_id: "step-1", response: "result", workflow_completed: false }),
     suggestWorkflow: vi.fn().mockResolvedValue(null),
     getDiff: vi.fn().mockResolvedValue([]),
     getBranchInfo: vi.fn().mockResolvedValue(null),
@@ -137,7 +148,7 @@ describe("WorkflowShell auto-execute", () => {
             onNavigateToBacklog={onNavigateToBacklog}
             onRefreshTicket={onRefreshTicket}
           />
-        </WorkflowProvider>
+        </WorkflowProvider>,
       ),
       ctx,
     };
@@ -176,7 +187,7 @@ describe("WorkflowShell auto-execute", () => {
           onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
-      </WorkflowProvider>
+      </WorkflowProvider>,
     );
 
     await waitFor(() => {
@@ -192,7 +203,7 @@ describe("WorkflowShell auto-execute", () => {
           onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
-      </WorkflowProvider>
+      </WorkflowProvider>,
     );
 
     await new Promise((r) => setTimeout(r, 50));
@@ -209,7 +220,7 @@ describe("WorkflowShell auto-execute", () => {
           onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
-      </WorkflowProvider>
+      </WorkflowProvider>,
     );
 
     // Should not have fired while loading
@@ -226,7 +237,7 @@ describe("WorkflowShell auto-execute", () => {
           onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
-      </WorkflowProvider>
+      </WorkflowProvider>,
     );
 
     await waitFor(() => {
@@ -261,8 +272,20 @@ describe("WorkflowShell step transition cleanup", () => {
       description: "test",
       version: "1.0",
       steps: [
-        { id: "step-1", name: "Understand", description: "First", instructions: { prompt: "p1" }, view: "chat" },
-        { id: "step-2", name: "Investigate", description: "Second", instructions: { prompt: "p2" }, view: "chat" },
+        {
+          id: "step-1",
+          name: "Understand",
+          description: "First",
+          instructions: { prompt: "p1" },
+          view: "chat",
+        },
+        {
+          id: "step-2",
+          name: "Investigate",
+          description: "Second",
+          instructions: { prompt: "p2" },
+          view: "chat",
+        },
       ],
     };
 
@@ -279,7 +302,7 @@ describe("WorkflowShell step transition cleanup", () => {
           onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
-      </WorkflowProvider>
+      </WorkflowProvider>,
     );
 
     // Wait for workflow def to load
@@ -295,7 +318,23 @@ describe("WorkflowShell step transition cleanup", () => {
     // Simulate step-1 completing with a result by re-rendering with step-1 output
     const ctx2 = makeWorkflowContext({
       currentState: makeWorkflowState({ current_step_id: "step-1", step_status: "completed" }),
-      stepOutputs: { "step-1": { textContent: "Step 1 output", toolActivities: [], stderrLines: [], resultContent: null, thinkingContent: "", lastChunkType: "", contentBlocks: [], subagentActivities: [], filesChanged: [], activeToolName: null, activeToolStartTime: null, toolUseSummaries: [], isCompacting: false } },
+      stepOutputs: {
+        "step-1": {
+          textContent: "Step 1 output",
+          toolActivities: [],
+          stderrLines: [],
+          resultContent: null,
+          thinkingContent: "",
+          lastChunkType: "",
+          contentBlocks: [],
+          subagentActivities: [],
+          filesChanged: [],
+          activeToolName: null,
+          activeToolStartTime: null,
+          toolUseSummaries: [],
+          isCompacting: false,
+        },
+      },
       getWorkflow: vi.fn().mockResolvedValue(twoStepDef),
     });
     rerender(
@@ -306,7 +345,7 @@ describe("WorkflowShell step transition cleanup", () => {
           onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
-      </WorkflowProvider>
+      </WorkflowProvider>,
     );
 
     chatView = screen.getByTestId("chat-view");
@@ -315,7 +354,23 @@ describe("WorkflowShell step transition cleanup", () => {
     // Now transition to step-2 (pending) — old output should NOT appear
     const ctx3 = makeWorkflowContext({
       currentState: makeWorkflowState({ current_step_id: "step-2", step_status: "pending" }),
-      stepOutputs: { "step-1": { textContent: "Step 1 output", toolActivities: [], stderrLines: [], resultContent: null, thinkingContent: "", lastChunkType: "", contentBlocks: [], subagentActivities: [], filesChanged: [], activeToolName: null, activeToolStartTime: null, toolUseSummaries: [], isCompacting: false } },
+      stepOutputs: {
+        "step-1": {
+          textContent: "Step 1 output",
+          toolActivities: [],
+          stderrLines: [],
+          resultContent: null,
+          thinkingContent: "",
+          lastChunkType: "",
+          contentBlocks: [],
+          subagentActivities: [],
+          filesChanged: [],
+          activeToolName: null,
+          activeToolStartTime: null,
+          toolUseSummaries: [],
+          isCompacting: false,
+        },
+      },
       getWorkflow: vi.fn().mockResolvedValue(twoStepDef),
     });
     rerender(
@@ -326,7 +381,7 @@ describe("WorkflowShell step transition cleanup", () => {
           onNavigateToBacklog={onNavigateToBacklog}
           onRefreshTicket={onRefreshTicket}
         />
-      </WorkflowProvider>
+      </WorkflowProvider>,
     );
 
     chatView = screen.getByTestId("chat-view");
@@ -342,7 +397,9 @@ describe("WorkflowShell failed step display", () => {
 
   const renderFailed = (reason: string) => {
     const ctx = makeWorkflowContext({
-      currentState: makeWorkflowState({ step_status: { failed: reason } as unknown as WorkflowState["step_status"] }),
+      currentState: makeWorkflowState({
+        step_status: { failed: reason } as unknown as WorkflowState["step_status"],
+      }),
       getWorkflow: vi.fn().mockResolvedValue(makeWorkflowDef()),
     });
     return {
@@ -354,14 +411,16 @@ describe("WorkflowShell failed step display", () => {
             onNavigateToBacklog={vi.fn()}
             onRefreshTicket={vi.fn().mockResolvedValue(undefined)}
           />
-        </WorkflowProvider>
+        </WorkflowProvider>,
       ),
       ctx,
     };
   };
 
   it("shows Resume button for timeout failures", async () => {
-    renderFailed("Agent sidecar timed out after 120 seconds of inactivity. The session can be resumed.");
+    renderFailed(
+      "Agent sidecar timed out after 120 seconds of inactivity. The session can be resumed.",
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Session interrupted — your progress is saved.")).toBeInTheDocument();

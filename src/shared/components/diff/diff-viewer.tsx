@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { DiffFileTree } from "@/shared/components/diff/diff-file-tree";
 import { DiffContent } from "@/shared/components/diff/diff-content";
+import { DiffFileTree } from "@/shared/components/diff/diff-file-tree";
 import { FindingsPanel } from "@/shared/components/diff/findings-panel";
 import { ReviewActionBar } from "@/shared/components/diff/review-action-bar";
-import type { DiffFile, ReviewComment, ReviewFinding, FindingAction } from "@/shared/types";
+import type { DiffFile, FindingAction, ReviewComment, ReviewFinding } from "@/shared/types";
 
 interface DiffViewerProps {
   files: DiffFile[];
@@ -12,7 +12,12 @@ interface DiffViewerProps {
   findingActions: FindingAction[];
   loading?: boolean;
   reviewDisabled?: boolean;
-  onAddComment: (filePath: string, lineNumber: number, content: string, suggestion?: string) => void;
+  onAddComment: (
+    filePath: string,
+    lineNumber: number,
+    content: string,
+    suggestion?: string,
+  ) => void;
   onDeleteComment: (commentId: string) => void;
   onFindingAction: (findingId: string, action: FindingAction["action"]) => void;
   onApprove: (summary: string) => void;
@@ -33,7 +38,7 @@ export function DiffViewer({
   onRequestChanges,
 }: DiffViewerProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(
-    files.length > 0 ? files[0].path : null
+    files.length > 0 ? files[0].path : null,
   );
   const [activeCommentLine, setActiveCommentLine] = useState<number | null>(null);
 

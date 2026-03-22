@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { ToolActivity } from "@/shared/types";
-import { getToolRenderer } from "@/features/workflow/components/shared/tool-renderers";
 import { TOOL_LABELS } from "@/features/workflow/components/shared/tool-labels";
+import { getToolRenderer } from "@/features/workflow/components/shared/tool-renderers";
+import type { ToolActivity } from "@/shared/types";
 
 interface ToolCardProps {
   activity: ToolActivity;
@@ -21,6 +21,7 @@ export function ToolCard({ activity }: ToolCardProps) {
   return (
     <div className="rounded-lg border bg-white dark:bg-zinc-900 my-1">
       <button
+        type="button"
         onClick={() => hasInput && setExpanded(!expanded)}
         className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm"
       >
@@ -31,7 +32,14 @@ export function ToolCard({ activity }: ToolCardProps) {
           </div>
         ) : (
           <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <svg
+              aria-hidden="true"
+              className="w-2.5 h-2.5 text-white"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={3}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
@@ -42,6 +50,7 @@ export function ToolCard({ activity }: ToolCardProps) {
         {!expanded && renderTool({ activity, expanded: false })}
         {hasInput && (
           <svg
+            aria-hidden="true"
             className={`w-3 h-3 ml-auto text-muted-foreground transition-transform shrink-0 ${expanded ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
@@ -57,7 +66,11 @@ export function ToolCard({ activity }: ToolCardProps) {
           {renderTool({ activity, expanded: true })}
           <div className="px-3 pb-2">
             <button
-              onClick={(e) => { e.stopPropagation(); setShowRaw(true); }}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowRaw(true);
+              }}
               className="text-[10px] text-muted-foreground hover:text-foreground underline"
             >
               Show raw
@@ -69,7 +82,11 @@ export function ToolCard({ activity }: ToolCardProps) {
         <div className="border-t">
           <div className="px-3 py-2">
             <button
-              onClick={(e) => { e.stopPropagation(); setShowRaw(false); }}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowRaw(false);
+              }}
               className="text-[10px] text-muted-foreground hover:text-foreground underline mb-2"
             >
               Show formatted
@@ -83,8 +100,11 @@ export function ToolCard({ activity }: ToolCardProps) {
               <p className="text-xs font-medium text-zinc-500 mt-2 mb-1">
                 Result{activity.is_error ? " (error)" : ""}:
               </p>
-              <pre className={`text-xs overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto ${activity.is_error ? "text-red-500" : "text-muted-foreground"}`}>
-                {activity.result.slice(0, 2000)}{activity.result.length > 2000 ? "..." : ""}
+              <pre
+                className={`text-xs overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto ${activity.is_error ? "text-red-500" : "text-muted-foreground"}`}
+              >
+                {activity.result.slice(0, 2000)}
+                {activity.result.length > 2000 ? "..." : ""}
               </pre>
             </div>
           )}

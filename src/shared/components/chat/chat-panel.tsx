@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from "react";
-import { Button } from "@/shared/ui/button";
-import { Textarea } from "@/shared/ui/textarea";
-import { ScrollArea } from "@/shared/ui/scroll-area";
-import { Badge } from "@/shared/ui/badge";
+import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, ClaudeStatus } from "@/shared/types";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { ScrollArea } from "@/shared/ui/scroll-area";
+import { Textarea } from "@/shared/ui/textarea";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -14,14 +14,7 @@ interface ChatPanelProps {
   onClear: () => void;
 }
 
-export function ChatPanel({
-  messages,
-  loading,
-  status,
-  onSend,
-  onLogin,
-  onClear,
-}: ChatPanelProps) {
+export function ChatPanel({ messages, loading, status, onSend, onLogin, onClear }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -29,7 +22,7 @@ export function ChatPanel({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, []);
 
   const handleSubmit = () => {
     if (!input.trim() || loading) return;
@@ -51,8 +44,7 @@ export function ChatPanel({
         <h3 className="text-lg font-medium">Claude Code Not Found</h3>
         <p className="text-sm text-muted-foreground max-w-sm">
           MeldUI requires Claude Code CLI to be installed. Visit{" "}
-          <span className="font-mono text-primary">code.claude.com</span> to
-          install it.
+          <span className="font-mono text-primary">code.claude.com</span> to install it.
         </p>
       </div>
     );
@@ -101,9 +93,7 @@ export function ChatPanel({
               >
                 <div
                   className={`max-w-[80%] rounded-lg px-4 py-2 text-sm whitespace-pre-wrap ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                    msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                   }`}
                 >
                   {msg.content}
@@ -131,11 +121,7 @@ export function ChatPanel({
             className="min-h-[44px] max-h-[120px] resize-none"
             disabled={loading}
           />
-          <Button
-            onClick={handleSubmit}
-            disabled={!input.trim() || loading}
-            className="self-end"
-          >
+          <Button onClick={handleSubmit} disabled={!input.trim() || loading} className="self-end">
             Send
           </Button>
         </div>

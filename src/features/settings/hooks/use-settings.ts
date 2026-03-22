@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands } from "@/bindings";
 import type { ProjectSettings } from "@/shared/lib/sync";
 
@@ -16,8 +16,7 @@ export function useSettings(projectDir: string) {
   });
 
   const updateSettingsMutation = useMutation({
-    mutationFn: (newSettings: ProjectSettings) =>
-      commands.settingsUpdate(projectDir, newSettings),
+    mutationFn: (newSettings: ProjectSettings) => commands.settingsUpdate(projectDir, newSettings),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: settingsKeys.project(projectDir),

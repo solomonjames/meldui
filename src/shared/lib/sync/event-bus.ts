@@ -1,4 +1,11 @@
-type SyncEventType = "ticket:created" | "ticket:updated" | "ticket:closed" | "ticket:deleted" | "sync:started" | "sync:completed" | "sync:error";
+type SyncEventType =
+  | "ticket:created"
+  | "ticket:updated"
+  | "ticket:closed"
+  | "ticket:deleted"
+  | "sync:started"
+  | "sync:completed"
+  | "sync:error";
 
 type SyncEventHandler = (data: unknown) => void;
 

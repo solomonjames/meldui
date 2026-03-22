@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { commands } from "@/bindings";
 import type { ClaudeStatus } from "@/shared/types";
 

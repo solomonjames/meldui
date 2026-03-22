@@ -1,12 +1,9 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { commands, events } from "@/bindings";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
-import type { ReviewFinding, ReviewComment, ReviewSubmission } from "@/shared/types";
+import type { ReviewComment, ReviewFinding, ReviewSubmission } from "@/shared/types";
 
-export function useWorkflowReview(
-  activeTicketId: string | null,
-  setError: (msg: string) => void
-) {
+export function useWorkflowReview(activeTicketId: string | null, setError: (msg: string) => void) {
   const [reviewFindings, setReviewFindings] = useState<ReviewFinding[]>([]);
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [pendingReviewRequestId, setPendingReviewRequestId] = useState<string | null>(null);
@@ -16,7 +13,7 @@ export function useWorkflowReview(
     if (activeTicketId && payload.ticket_id === activeTicketId) {
       setReviewFindings(payload.findings as ReviewFinding[]);
       setPendingReviewRequestId(payload.request_id);
-      setReviewRoundKey(prev => prev + 1);
+      setReviewRoundKey((prev) => prev + 1);
     }
   });
 
@@ -32,7 +29,7 @@ export function useWorkflowReview(
       };
       setReviewComments((prev) => [...prev, comment]);
     },
-    []
+    [],
   );
 
   const deleteReviewComment = useCallback((commentId: string) => {
@@ -43,14 +40,15 @@ export function useWorkflowReview(
     async (submission: ReviewSubmission) => {
       if (!pendingReviewRequestId) return;
       try {
-        await commands.agentReviewRespond(pendingReviewRequestId, submission as import("@/bindings").JsonValue);
+        await commands.agentReviewRespond(
+          pendingReviewRequestId,
+          submission as import("@/bindings").JsonValue,
+        );
         setPendingReviewRequestId(null);
 
         // Mark existing comments as resolved for next round
         if (submission.action === "request_changes") {
-          setReviewComments((prev) =>
-            prev.map((c) => ({ ...c, resolved: true }))
-          );
+          setReviewComments((prev) => prev.map((c) => ({ ...c, resolved: true })));
           setReviewFindings([]);
         } else {
           // Approved — clear all review state
@@ -67,7 +65,7 @@ export function useWorkflowReview(
         }
       }
     },
-    [pendingReviewRequestId, setError]
+    [pendingReviewRequestId, setError],
   );
 
   return {

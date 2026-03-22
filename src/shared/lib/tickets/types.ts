@@ -94,10 +94,4 @@ export const TICKET_STATUSES: TicketStatus[] = [
   "closed",
 ];
 
-export const TICKET_TYPES: TicketType[] = [
-  "feature",
-  "task",
-  "bug",
-  "chore",
-  "epic",
-];
+export const TICKET_TYPES: TicketType[] = ["feature", "task", "bug", "chore", "epic"];

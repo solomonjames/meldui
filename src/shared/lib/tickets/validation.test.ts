@@ -40,8 +40,12 @@ describe("validateTicket", () => {
   });
 
   it("validates priority range", () => {
-    expect(validateTicket(makeTicket({ priority: -1 })).some((e) => e.field === "priority")).toBe(true);
-    expect(validateTicket(makeTicket({ priority: 5 })).some((e) => e.field === "priority")).toBe(true);
+    expect(validateTicket(makeTicket({ priority: -1 })).some((e) => e.field === "priority")).toBe(
+      true,
+    );
+    expect(validateTicket(makeTicket({ priority: 5 })).some((e) => e.field === "priority")).toBe(
+      true,
+    );
     expect(validateTicket(makeTicket({ priority: 0 }))).toEqual([]);
     expect(validateTicket(makeTicket({ priority: 4 }))).toEqual([]);
   });

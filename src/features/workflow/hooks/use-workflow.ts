@@ -1,19 +1,19 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { commands } from "@/bindings";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useWorkflowFeedback } from "@/features/workflow/hooks/use-workflow-feedback";
+import { useWorkflowNotifications } from "@/features/workflow/hooks/use-workflow-notifications";
+import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
+import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
+import { useWorkflowStreaming } from "@/features/workflow/hooks/use-workflow-streaming";
 import type {
-  WorkflowState,
-  StepExecutionResult,
-  WorkflowSuggestion,
-  DiffFile,
   BranchInfo,
   CommitActionResult,
+  DiffFile,
+  StepExecutionResult,
+  WorkflowState,
+  WorkflowSuggestion,
 } from "@/shared/types";
-import { useWorkflowStreaming } from "@/features/workflow/hooks/use-workflow-streaming";
-import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
-import { useWorkflowNotifications } from "@/features/workflow/hooks/use-workflow-notifications";
-import { useWorkflowFeedback } from "@/features/workflow/hooks/use-workflow-feedback";
-import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
 
 export const workflowKeys = {
   list: (projectDir: string) => ["workflows", "list", projectDir] as const,
@@ -37,7 +37,9 @@ export function useWorkflow(projectDir: string) {
   const executingStepRef = useRef<string | null>(null);
   const onRefreshTicketRef = useRef<(() => Promise<void>) | null>(null);
   const getWorkflowStateRef = useRef<((issueId: string) => Promise<unknown>) | null>(null);
-  const createStreamChannelRef = useRef<ReturnType<typeof useWorkflowStreaming>["createStreamChannel"]>(null!);
+  const createStreamChannelRef = useRef<
+    ReturnType<typeof useWorkflowStreaming>["createStreamChannel"]
+  >(null!);
 
   useEffect(() => {
     currentStepRef.current = currentState?.current_step_id ?? null;
@@ -49,7 +51,11 @@ export function useWorkflow(projectDir: string) {
   const permissions = useWorkflowPermissions(activeTicketId, setError);
   const feedback = useWorkflowFeedback(activeTicketId, setError);
   const review = useWorkflowReview(activeTicketId, setError);
-  const notifications = useWorkflowNotifications(activeTicketId, onRefreshTicketRef, getWorkflowStateRef);
+  const notifications = useWorkflowNotifications(
+    activeTicketId,
+    onRefreshTicketRef,
+    getWorkflowStateRef,
+  );
 
   const listenersReady =
     streaming.streamingReady &&
@@ -88,7 +94,7 @@ export function useWorkflow(projectDir: string) {
         return null;
       }
     },
-    [projectDir, queryClient]
+    [projectDir, queryClient],
   );
 
   // getWorkflowState — imperative (called after executeStep, from notifications, etc.)
@@ -103,7 +109,7 @@ export function useWorkflow(projectDir: string) {
         return null;
       }
     },
-    [projectDir]
+    [projectDir],
   );
 
   getWorkflowStateRef.current = getWorkflowState;
@@ -118,7 +124,7 @@ export function useWorkflow(projectDir: string) {
         return [] as DiffFile[];
       }
     },
-    [projectDir]
+    [projectDir],
   );
 
   // getBranchInfo — imperative
@@ -131,7 +137,7 @@ export function useWorkflow(projectDir: string) {
         return null as BranchInfo | null;
       }
     },
-    [projectDir]
+    [projectDir],
   );
 
   // ── Mutations ──
@@ -150,7 +156,7 @@ export function useWorkflow(projectDir: string) {
         setLoading(false);
       }
     },
-    [projectDir]
+    [projectDir],
   );
 
   const { clearPending: clearFeedbackPending } = feedback;
@@ -174,9 +180,7 @@ export function useWorkflow(projectDir: string) {
         }
 
         executingStepRef.current = currentStepRef.current;
-        setCurrentState((prev) =>
-          prev ? { ...prev, step_status: "in_progress" } : prev
-        );
+        setCurrentState((prev) => (prev ? { ...prev, step_status: "in_progress" } : prev));
         const channel = createStreamChannelRef.current();
         const result = await commands.workflowExecuteStep(projectDir, issueId, channel);
 
@@ -194,7 +198,14 @@ export function useWorkflow(projectDir: string) {
         setLoading(false);
       }
     },
-    [projectDir, getWorkflowState, currentState?.workflow_id, workflows, clearFeedbackPending, clearPermissionPending]
+    [
+      projectDir,
+      getWorkflowState,
+      currentState?.workflow_id,
+      workflows,
+      clearFeedbackPending,
+      clearPermissionPending,
+    ],
   );
 
   const suggestWorkflow = useCallback(
@@ -212,7 +223,7 @@ export function useWorkflow(projectDir: string) {
         setLoading(false);
       }
     },
-    [projectDir]
+    [projectDir],
   );
 
   const executeCommitActionMutation = useMutation({
@@ -222,24 +233,26 @@ export function useWorkflow(projectDir: string) {
       commitMessage: string;
     }) => {
       const channel = createStreamChannelRef.current();
-      return commands.workflowExecuteCommitAction(projectDir, vars.issueId, vars.action, vars.commitMessage, channel);
+      return commands.workflowExecuteCommitAction(
+        projectDir,
+        vars.issueId,
+        vars.action,
+        vars.commitMessage,
+        channel,
+      );
     },
   });
 
   const executeCommitAction = useCallback(
-    async (
-      issueId: string,
-      action: "commit" | "commit_and_pr",
-      commitMessage: string
-    ) => {
+    async (issueId: string, action: "commit" | "commit_and_pr", commitMessage: string) => {
       try {
         setLoading(true);
         setError(null);
-        return await executeCommitActionMutation.mutateAsync({
+        return (await executeCommitActionMutation.mutateAsync({
           issueId,
           action,
           commitMessage,
-        }) as CommitActionResult;
+        })) as CommitActionResult;
       } catch (err) {
         setError(`Commit action failed: ${err}`);
         return null;
@@ -247,7 +260,7 @@ export function useWorkflow(projectDir: string) {
         setLoading(false);
       }
     },
-    [executeCommitActionMutation]
+    [executeCommitActionMutation],
   );
 
   const cleanupWorktree = useCallback(
@@ -258,7 +271,7 @@ export function useWorkflow(projectDir: string) {
         setError(`Failed to cleanup worktree: ${err}`);
       }
     },
-    [projectDir]
+    [projectDir],
   );
 
   const setOnRefreshTicket = useCallback((fn: () => Promise<void>) => {

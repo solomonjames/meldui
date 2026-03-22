@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import { commands, events } from "@/bindings";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 import type { ReviewFinding, ReviewComment, ReviewSubmission } from "@/shared/types";
 
 export function useWorkflowReview(
@@ -11,46 +11,14 @@ export function useWorkflowReview(
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [pendingReviewRequestId, setPendingReviewRequestId] = useState<string | null>(null);
   const [reviewRoundKey, setReviewRoundKey] = useState(0);
-  const [reviewReady, setReviewReady] = useState(false);
-  const unlistenRef = useRef<UnlistenFn | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mark not-ready before re-subscribing to Tauri events
-    setReviewReady(false);
-
-    const setup = async () => {
-      if (unlistenRef.current) {
-        unlistenRef.current();
-        unlistenRef.current = null;
-      }
-
-      const unlisten = await events.agentReviewFindingsRequest.listen((event) => {
-        if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
-          setReviewFindings(event.payload.findings as ReviewFinding[]);
-          setPendingReviewRequestId(event.payload.request_id);
-          setReviewRoundKey(prev => prev + 1);
-        }
-      });
-
-      if (!cancelled) {
-        unlistenRef.current = unlisten;
-        setReviewReady(true);
-      } else {
-        unlisten();
-      }
-    };
-
-    setup();
-
-    return () => {
-      cancelled = true;
-      if (unlistenRef.current) {
-        unlistenRef.current();
-        unlistenRef.current = null;
-      }
-    };
-  }, [activeTicketId]);
+  const reviewReady = useTauriEvent(events.agentReviewFindingsRequest, (payload) => {
+    if (activeTicketId && payload.ticket_id === activeTicketId) {
+      setReviewFindings(payload.findings as ReviewFinding[]);
+      setPendingReviewRequestId(payload.request_id);
+      setReviewRoundKey(prev => prev + 1);
+    }
+  });
 
   const addReviewComment = useCallback(
     (filePath: string, lineNumber: number, content: string, suggestion?: string) => {

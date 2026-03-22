@@ -1,55 +1,48 @@
-import { useEffect } from "react";
+import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { events } from "@/bindings";
 import { ticketKeys } from "@/shared/lib/query-keys";
+import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 
 /**
  * Centralized Tauri event → TanStack Query invalidation.
  * Install once in App.tsx.
+ *
+ * Uses `useTauriEvent` for safe async listener lifecycle (no race condition
+ * on cleanup) and debounces subtask events so rapid-fire creates/updates
+ * collapse into a single cache invalidation.
  */
 export function useTauriEventInvalidation(projectDir: string) {
   const queryClient = useQueryClient();
+  const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  useEffect(() => {
-    if (!projectDir) return;
-
-    const unlisteners: Array<() => void> = [];
-
-    // Subtask events → invalidate ticket list
-    events.subtaskCreated.listen(() => {
+  const debouncedInvalidateAll = useCallback(() => {
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
-    }).then((unlisten) => unlisteners.push(unlisten));
+    }, 100);
+  }, [queryClient, projectDir]);
 
-    events.subtaskUpdated.listen(() => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
-    }).then((unlisten) => unlisteners.push(unlisten));
+  // Subtask events -> debounced full ticket list refetch
+  useTauriEvent(events.subtaskCreated, debouncedInvalidateAll);
+  useTauriEvent(events.subtaskUpdated, debouncedInvalidateAll);
+  useTauriEvent(events.subtaskClosed, debouncedInvalidateAll);
 
-    events.subtaskClosed.listen(() => {
-      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
-    }).then((unlisten) => unlisteners.push(unlisten));
+  // Section update -> targeted ticket detail refetch
+  useTauriEvent(events.sectionUpdateEvent, (payload) => {
+    if (payload.ticket_id) {
+      queryClient.invalidateQueries({
+        queryKey: ticketKeys.detail(projectDir, payload.ticket_id),
+      });
+    }
+  });
 
-    // Section update → invalidate specific ticket detail
-    events.sectionUpdateEvent.listen((event) => {
-      const ticketId = event.payload.ticket_id;
-      if (ticketId) {
-        queryClient.invalidateQueries({
-          queryKey: ticketKeys.detail(projectDir, ticketId),
-        });
-      }
-    }).then((unlisten) => unlisteners.push(unlisten));
-
-    // Step complete → invalidate workflow state
-    events.stepCompleteEvent.listen((event) => {
-      const ticketId = event.payload.ticket_id;
-      if (ticketId) {
-        queryClient.invalidateQueries({
-          queryKey: ["workflows", "state", projectDir, ticketId],
-        });
-      }
-    }).then((unlisten) => unlisteners.push(unlisten));
-
-    return () => {
-      for (const unlisten of unlisteners) unlisten();
-    };
-  }, [projectDir, queryClient]);
+  // Step complete -> targeted workflow state refetch
+  useTauriEvent(events.stepCompleteEvent, (payload) => {
+    if (payload.ticket_id) {
+      queryClient.invalidateQueries({
+        queryKey: ["workflows", "state", projectDir, payload.ticket_id],
+      });
+    }
+  });
 }

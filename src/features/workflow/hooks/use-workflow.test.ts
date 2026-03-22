@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import {
   mockInvoke,
   clearTauriMocks,
   emitTauriEvent,
+  MockChannel,
 } from "@/shared/test/mocks/tauri";
 import { createQueryWrapper } from "@/shared/test/helpers/query-wrapper";
 import { useWorkflow } from "@/features/workflow/hooks/use-workflow";
@@ -25,7 +26,7 @@ describe("useWorkflow", () => {
     });
   });
 
-  it("executeStep calls invoke with correct args", async () => {
+  it("executeStep calls invoke with correct args including channel", async () => {
     mockInvoke.mockResolvedValueOnce({
       step_id: "step-1",
       response: "done",
@@ -50,6 +51,7 @@ describe("useWorkflow", () => {
     expect(mockInvoke).toHaveBeenCalledWith("workflow_execute_step", {
       projectDir: "/test/project",
       issueId: "issue-1",
+      onChunk: expect.any(MockChannel),
     });
   });
 
@@ -79,11 +81,14 @@ describe("useWorkflow", () => {
 
   // Helper: sets up hook with active ticket, current step, and a blocking
   // executeStep call so that executingStepRef is set for streaming output routing.
+  // Returns the captured channel so tests can send chunks through it.
   async function setupWithActiveExecution() {
-    // Use a controllable mock for invoke
+    let capturedChannel: MockChannel<StreamChunk> | null = null;
     let resolveExecute!: (value: unknown) => void;
-    mockInvoke.mockImplementation((cmd: string) => {
+
+    mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
       if (cmd === "workflow_execute_step") {
+        capturedChannel = args?.onChunk as MockChannel<StreamChunk>;
         return new Promise((resolve) => { resolveExecute = resolve; });
       }
       if (cmd === "workflow_state") {
@@ -109,27 +114,27 @@ describe("useWorkflow", () => {
     // Start a blocking executeStep to set executingStepRef
     act(() => { result.current.executeStep("issue-1"); });
 
-    return { result, resolveExecute };
+    // Wait for the channel to be captured
+    await waitFor(() => expect(capturedChannel).not.toBeNull());
+
+    return { result, resolveExecute, getCapturedChannel: () => capturedChannel! };
   }
 
-  it("text StreamChunk events accumulate in stepOutputs", async () => {
-    const { result } = await setupWithActiveExecution();
-
-    // Emit text chunks while executeStep is active
-    const chunk1: StreamChunk = {
-      issue_id: "issue-1",
-      chunk_type: "text",
-      content: "Hello ",
-    };
-    const chunk2: StreamChunk = {
-      issue_id: "issue-1",
-      chunk_type: "text",
-      content: "World",
-    };
+  it("text StreamChunk events accumulate in stepOutputs via channel", async () => {
+    const { result, getCapturedChannel } = await setupWithActiveExecution();
+    const channel = getCapturedChannel();
 
     act(() => {
-      emitTauriEvent("stream-chunk", chunk1);
-      emitTauriEvent("stream-chunk", chunk2);
+      channel.send({
+        issue_id: "issue-1",
+        chunk_type: "text",
+        content: "Hello ",
+      });
+      channel.send({
+        issue_id: "issue-1",
+        chunk_type: "text",
+        content: "World",
+      });
     });
 
     await waitFor(() => {
@@ -139,17 +144,16 @@ describe("useWorkflow", () => {
     });
   });
 
-  it("error StreamChunk events are captured in stderrLines", async () => {
-    const { result } = await setupWithActiveExecution();
-
-    const errorChunk: StreamChunk = {
-      issue_id: "issue-1",
-      chunk_type: "error",
-      content: "Something went wrong",
-    };
+  it("error StreamChunk events are captured in stderrLines via channel", async () => {
+    const { result, getCapturedChannel } = await setupWithActiveExecution();
+    const channel = getCapturedChannel();
 
     act(() => {
-      emitTauriEvent("stream-chunk", errorChunk);
+      channel.send({
+        issue_id: "issue-1",
+        chunk_type: "error",
+        content: "Something went wrong",
+      });
     });
 
     await waitFor(() => {
@@ -160,17 +164,16 @@ describe("useWorkflow", () => {
     });
   });
 
-  it("result StreamChunk events set resultContent", async () => {
-    const { result } = await setupWithActiveExecution();
-
-    const resultChunk: StreamChunk = {
-      issue_id: "issue-1",
-      chunk_type: "result",
-      content: "Final result text",
-    };
+  it("result StreamChunk events set resultContent via channel", async () => {
+    const { result, getCapturedChannel } = await setupWithActiveExecution();
+    const channel = getCapturedChannel();
 
     act(() => {
-      emitTauriEvent("stream-chunk", resultChunk);
+      channel.send({
+        issue_id: "issue-1",
+        chunk_type: "result",
+        content: "Final result text",
+      });
     });
 
     await waitFor(() => {
@@ -180,81 +183,35 @@ describe("useWorkflow", () => {
     });
   });
 
-  it("events for a different issue_id are filtered out", async () => {
-    const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
-    await waitFor(() => expect(result.current.listenersReady).toBe(true));
+  it("chunks for a different issue_id are filtered out via channel", async () => {
+    const { result, getCapturedChannel } = await setupWithActiveExecution();
+    const channel = getCapturedChannel();
 
     act(() => {
-      result.current.setActiveTicketId("issue-1");
-    });
-    await waitFor(() => expect(result.current.listenersReady).toBe(true));
-
-    mockInvoke.mockResolvedValueOnce({
-      workflow_id: "wf-1",
-      current_step_id: "step-1",
-      step_status: "pending",
-      step_history: [],
+      channel.send({
+        issue_id: "issue-OTHER",
+        chunk_type: "text",
+        content: "Should be ignored",
+      });
     });
 
-    await act(async () => {
-      await result.current.getWorkflowState("issue-1");
-    });
-
-    const wrongChunk: StreamChunk = {
-      issue_id: "issue-OTHER",
-      chunk_type: "text",
-      content: "Should be ignored",
-    };
-
-    act(() => {
-      emitTauriEvent("stream-chunk", wrongChunk);
-    });
-
-    // Small delay to ensure event would have been processed
-    await vi.advanceTimersByTimeAsync?.(50).catch(() => {});
-    expect(result.current.stepOutputs["step-1"]).toBeUndefined();
+    // Small delay to ensure chunk would have been processed
+    await new Promise((r) => setTimeout(r, 50));
+    expect(result.current.stepOutputs["step-1"]?.textContent).toBeFalsy();
   });
 
   describe("executingStepRef output routing", () => {
     it("streaming output only routes to step when executeStep is active", async () => {
-      // executeStep will block until we resolve it
-      let resolveExecute!: (value: unknown) => void;
-      mockInvoke.mockImplementation((cmd: string) => {
-        if (cmd === "workflow_execute_step") {
-          return new Promise((resolve) => { resolveExecute = resolve; });
-        }
-        if (cmd === "workflow_state") {
-          return Promise.resolve({
-            workflow_id: "wf-1",
-            current_step_id: "step-1",
-            step_status: "in_progress",
-            step_history: [],
-          });
-        }
-        return Promise.resolve(null);
-      });
+      const { result, resolveExecute, getCapturedChannel } = await setupWithActiveExecution();
+      const channel = getCapturedChannel();
 
-      const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
-      await waitFor(() => expect(result.current.listenersReady).toBe(true));
-
-      act(() => { result.current.setActiveTicketId("issue-1"); });
-      await waitFor(() => expect(result.current.listenersReady).toBe(true));
-
-      // Set current step
-      await act(async () => { await result.current.getWorkflowState("issue-1"); });
-
-      // Start executeStep (won't resolve yet)
+      // Send chunk while executeStep is active -- should be captured
       act(() => {
-        result.current.executeStep("issue-1");
-      });
-
-      // Emit text while executeStep is active — should be captured
-      act(() => {
-        emitTauriEvent("stream-chunk", {
+        channel.send({
           issue_id: "issue-1",
           chunk_type: "text",
           content: "During execution",
-        } as StreamChunk);
+        });
       });
 
       await waitFor(() => {
@@ -269,13 +226,13 @@ describe("useWorkflow", () => {
       });
 
       // After executeStep completes, executingStepRef is null.
-      // New streaming events should be dropped (no active execution).
+      // New streaming events through the same channel should be dropped (no active execution).
       act(() => {
-        emitTauriEvent("stream-chunk", {
+        channel.send({
           issue_id: "issue-1",
           chunk_type: "text",
           content: " SHOULD NOT APPEAR",
-        } as StreamChunk);
+        });
       });
 
       await new Promise((r) => setTimeout(r, 50));

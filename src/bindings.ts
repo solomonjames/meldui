@@ -77,11 +77,11 @@ async workflowAdvance(projectDir: string, issueId: string) : Promise<WorkflowSta
 async workflowState(projectDir: string, issueId: string) : Promise<WorkflowState | null> {
     return await TAURI_INVOKE("workflow_state", { projectDir, issueId });
 },
-async workflowExecuteStep(projectDir: string, issueId: string) : Promise<StepExecutionResult> {
-    return await TAURI_INVOKE("workflow_execute_step", { projectDir, issueId });
+async workflowExecuteStep(projectDir: string, issueId: string, onChunk: TAURI_CHANNEL<StreamChunk>) : Promise<StepExecutionResult> {
+    return await TAURI_INVOKE("workflow_execute_step", { projectDir, issueId, onChunk });
 },
-async workflowSuggest(projectDir: string, issueId: string) : Promise<WorkflowSuggestion> {
-    return await TAURI_INVOKE("workflow_suggest", { projectDir, issueId });
+async workflowSuggest(projectDir: string, issueId: string, onChunk: TAURI_CHANNEL<StreamChunk>) : Promise<WorkflowSuggestion> {
+    return await TAURI_INVOKE("workflow_suggest", { projectDir, issueId, onChunk });
 },
 async workflowGetDiff(projectDir: string, baseCommit: string | null) : Promise<DiffFile[]> {
     return await TAURI_INVOKE("workflow_get_diff", { projectDir, baseCommit });
@@ -89,8 +89,8 @@ async workflowGetDiff(projectDir: string, baseCommit: string | null) : Promise<D
 async workflowGetBranchInfo(projectDir: string) : Promise<BranchInfo> {
     return await TAURI_INVOKE("workflow_get_branch_info", { projectDir });
 },
-async workflowExecuteCommitAction(projectDir: string, issueId: string, action: string, commitMessage: string) : Promise<CommitActionResult> {
-    return await TAURI_INVOKE("workflow_execute_commit_action", { projectDir, issueId, action, commitMessage });
+async workflowExecuteCommitAction(projectDir: string, issueId: string, action: string, commitMessage: string, onChunk: TAURI_CHANNEL<StreamChunk>) : Promise<CommitActionResult> {
+    return await TAURI_INVOKE("workflow_execute_commit_action", { projectDir, issueId, action, commitMessage, onChunk });
 },
 async workflowCleanupWorktree(projectDir: string, issueId: string) : Promise<null> {
     return await TAURI_INVOKE("workflow_cleanup_worktree", { projectDir, issueId });
@@ -119,7 +119,6 @@ prUrlReportedEvent: PrUrlReportedEvent,
 sectionUpdateEvent: SectionUpdateEvent,
 statusUpdateEvent: StatusUpdateEvent,
 stepCompleteEvent: StepCompleteEvent,
-streamChunk: StreamChunk,
 subtaskClosed: SubtaskClosed,
 subtaskCreated: SubtaskCreated,
 subtaskUpdated: SubtaskUpdated
@@ -133,7 +132,6 @@ prUrlReportedEvent: "pr-url-reported-event",
 sectionUpdateEvent: "section-update-event",
 statusUpdateEvent: "status-update-event",
 stepCompleteEvent: "step-complete-event",
-streamChunk: "stream-chunk",
 subtaskClosed: "subtask-closed",
 subtaskCreated: "subtask-created",
 subtaskUpdated: "subtask-updated"

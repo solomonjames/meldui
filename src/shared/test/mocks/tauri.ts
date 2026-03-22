@@ -19,6 +19,16 @@ export function emitTauriEvent(event: string, payload: unknown) {
   }
 }
 
+/** Mock Channel for testing channel-based streaming */
+export class MockChannel<T> {
+  onmessage: ((payload: T) => void) | null = null;
+
+  /** Simulate receiving a message (for tests) */
+  send(payload: T) {
+    this.onmessage?.(payload);
+  }
+}
+
 /** Clear all mock listeners (call in beforeEach/afterEach). */
 export function clearTauriMocks() {
   listeners.length = 0;
@@ -44,6 +54,7 @@ export const mockListen = vi.fn(
 // Wire up vi.mock calls
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
+  Channel: MockChannel,
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

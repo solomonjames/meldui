@@ -60,7 +60,7 @@ export function useWorkflow(projectDir: string) {
 
   const workflowsQuery = useQuery({
     queryKey: workflowKeys.list(projectDir),
-    queryFn: () => commands.workflowList({ projectDir }),
+    queryFn: () => commands.workflowList(projectDir),
     enabled: !!projectDir,
   });
 
@@ -69,7 +69,7 @@ export function useWorkflow(projectDir: string) {
   const listWorkflows = useCallback(async () => {
     const result = await queryClient.fetchQuery({
       queryKey: workflowKeys.list(projectDir),
-      queryFn: () => commands.workflowList({ projectDir }),
+      queryFn: () => commands.workflowList(projectDir),
     });
     return result ?? [];
   }, [projectDir, queryClient]);
@@ -79,7 +79,7 @@ export function useWorkflow(projectDir: string) {
       try {
         return await queryClient.fetchQuery({
           queryKey: workflowKeys.detail(projectDir, workflowId),
-          queryFn: () => commands.workflowGet({ projectDir, workflowId }),
+          queryFn: () => commands.workflowGet(projectDir, workflowId),
         });
       } catch (err) {
         setError(`Failed to get workflow: ${err}`);
@@ -93,7 +93,7 @@ export function useWorkflow(projectDir: string) {
   const getWorkflowState = useCallback(
     async (issueId: string) => {
       try {
-        const state = await commands.workflowState({ projectDir, issueId });
+        const state = await commands.workflowState(projectDir, issueId);
         setCurrentState(state);
         return state;
       } catch (err) {
@@ -110,10 +110,7 @@ export function useWorkflow(projectDir: string) {
   const getDiff = useCallback(
     async (dirOverride?: string, baseCommit?: string) => {
       try {
-        return await commands.workflowGetDiff({
-          projectDir: dirOverride ?? projectDir,
-          baseCommit: baseCommit ?? null,
-        });
+        return await commands.workflowGetDiff(dirOverride ?? projectDir, baseCommit ?? null);
       } catch (err) {
         setError(`Failed to get diff: ${err}`);
         return [] as DiffFile[];
@@ -126,9 +123,7 @@ export function useWorkflow(projectDir: string) {
   const getBranchInfo = useCallback(
     async (dirOverride?: string) => {
       try {
-        return await commands.workflowGetBranchInfo({
-          projectDir: dirOverride ?? projectDir,
-        });
+        return await commands.workflowGetBranchInfo(dirOverride ?? projectDir);
       } catch (err) {
         setError(`Failed to get branch info: ${err}`);
         return null as BranchInfo | null;
@@ -143,11 +138,7 @@ export function useWorkflow(projectDir: string) {
     async (issueId: string, workflowId: string) => {
       try {
         setLoading(true);
-        const state = await commands.workflowAssign({
-          projectDir,
-          issueId,
-          workflowId,
-        });
+        const state = await commands.workflowAssign(projectDir, issueId, workflowId);
         setCurrentState(state);
         return state;
       } catch (err) {
@@ -173,11 +164,7 @@ export function useWorkflow(projectDir: string) {
           const wf = workflows.find((w) => w.id === currentState.workflow_id);
           if (wf?.ticket_sections && wf.ticket_sections.length > 0) {
             try {
-              await commands.ticketInitializeSections({
-                projectDir,
-                ticketId: issueId,
-                sectionDefs: wf.ticket_sections,
-              });
+              await commands.ticketInitializeSections(projectDir, issueId, wf.ticket_sections);
             } catch {
               // Non-fatal
             }
@@ -188,7 +175,7 @@ export function useWorkflow(projectDir: string) {
         setCurrentState((prev) =>
           prev ? { ...prev, step_status: "in_progress" } : prev
         );
-        const result = await commands.workflowExecuteStep({ projectDir, issueId });
+        const result = await commands.workflowExecuteStep(projectDir, issueId);
 
         executingStepRef.current = null;
         await getWorkflowState(issueId);
@@ -212,7 +199,7 @@ export function useWorkflow(projectDir: string) {
       try {
         setLoading(true);
         setError(null);
-        const suggestion = await commands.workflowSuggest({ projectDir, issueId });
+        const suggestion = await commands.workflowSuggest(projectDir, issueId);
         return suggestion as WorkflowSuggestion;
       } catch {
         setError(`Unable to suggest workflow — please select manually`);
@@ -230,12 +217,7 @@ export function useWorkflow(projectDir: string) {
       action: "commit" | "commit_and_pr";
       commitMessage: string;
     }) =>
-      commands.workflowExecuteCommitAction({
-        projectDir,
-        issueId: vars.issueId,
-        action: vars.action,
-        commitMessage: vars.commitMessage,
-      }),
+      commands.workflowExecuteCommitAction(projectDir, vars.issueId, vars.action, vars.commitMessage),
   });
 
   const executeCommitAction = useCallback(
@@ -265,7 +247,7 @@ export function useWorkflow(projectDir: string) {
   const cleanupWorktree = useCallback(
     async (issueId: string) => {
       try {
-        await commands.workflowCleanupWorktree({ projectDir, issueId });
+        await commands.workflowCleanupWorktree(projectDir, issueId);
       } catch (err) {
         setError(`Failed to cleanup worktree: ${err}`);
       }

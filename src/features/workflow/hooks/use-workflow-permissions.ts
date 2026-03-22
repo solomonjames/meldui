@@ -55,7 +55,7 @@ export function useWorkflowPermissions(
   const respondToPermission = useCallback(
     async (requestId: string, allowed: boolean) => {
       try {
-        await commands.agentPermissionRespond({ requestId, allowed });
+        await commands.agentPermissionRespond(requestId, allowed);
         setPendingPermission(null);
       } catch (err) {
         setPendingPermission(null);

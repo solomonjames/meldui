@@ -11,7 +11,7 @@ export function useTickets(projectDir: string) {
   const ticketsQuery = useQuery({
     queryKey: ticketKeys.all(projectDir),
     queryFn: () =>
-      commands.ticketList({ projectDir, showAll: true }),
+      commands.ticketList(projectDir, null, null, true),
     enabled: !!projectDir,
   });
 
@@ -22,13 +22,13 @@ export function useTickets(projectDir: string) {
       ticketType?: string;
       priority?: string;
     }) =>
-      commands.ticketCreate({
+      commands.ticketCreate(
         projectDir,
-        title: vars.title,
-        description: vars.description,
-        ticketType: vars.ticketType || "task",
-        priority: vars.priority ? parseInt(vars.priority, 10) : 2,
-      }),
+        vars.title,
+        vars.description ?? null,
+        vars.ticketType || "task",
+        vars.priority ? parseInt(vars.priority, 10) : 2,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -47,19 +47,20 @@ export function useTickets(projectDir: string) {
         acceptance_criteria?: string;
       };
     }) =>
-      commands.ticketUpdate({
+      commands.ticketUpdate(
         projectDir,
-        id: vars.id,
-        title: vars.updates.title,
-        status: vars.updates.status,
-        priority: vars.updates.priority
+        vars.id,
+        vars.updates.title ?? null,
+        vars.updates.status ?? null,
+        vars.updates.priority
           ? parseInt(vars.updates.priority, 10)
-          : undefined,
-        description: vars.updates.description,
-        notes: vars.updates.notes,
-        design: vars.updates.design,
-        acceptanceCriteria: vars.updates.acceptance_criteria,
-      }),
+          : null,
+        vars.updates.description ?? null,
+        vars.updates.notes ?? null,
+        vars.updates.design ?? null,
+        vars.updates.acceptance_criteria ?? null,
+        null,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -67,7 +68,7 @@ export function useTickets(projectDir: string) {
 
   const closeTicket = useMutation({
     mutationFn: (vars: { id: string; reason?: string }) =>
-      commands.ticketClose({ projectDir, id: vars.id, reason: vars.reason }),
+      commands.ticketClose(projectDir, vars.id, vars.reason ?? null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -75,7 +76,7 @@ export function useTickets(projectDir: string) {
 
   const deleteTicket = useMutation({
     mutationFn: (vars: { id: string }) =>
-      commands.ticketDelete({ projectDir, id: vars.id }),
+      commands.ticketDelete(projectDir, vars.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -83,21 +84,12 @@ export function useTickets(projectDir: string) {
 
   const addComment = useMutation({
     mutationFn: (vars: { id: string; text: string }) =>
-      commands.ticketAddComment({
-        projectDir,
-        id: vars.id,
-        text: vars.text,
-      }),
+      commands.ticketAddComment(projectDir, vars.id, vars.text),
   });
 
   const updateSection = useMutation({
     mutationFn: (vars: { ticketId: string; sectionId: string; content: unknown }) =>
-      commands.ticketUpdateSection({
-        projectDir,
-        ticketId: vars.ticketId,
-        sectionId: vars.sectionId,
-        content: vars.content,
-      }),
+      commands.ticketUpdateSection(projectDir, vars.ticketId, vars.sectionId, vars.content as import("@/bindings").JsonValue),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.detail(projectDir, vars.ticketId) });
     },
@@ -107,7 +99,7 @@ export function useTickets(projectDir: string) {
     try {
       return await queryClient.fetchQuery({
         queryKey: ticketKeys.detail(projectDir, id),
-        queryFn: () => commands.ticketShow({ projectDir, id }),
+        queryFn: () => commands.ticketShow(projectDir, id),
       });
     } catch {
       return null;

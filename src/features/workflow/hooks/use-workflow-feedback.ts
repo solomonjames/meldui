@@ -50,7 +50,7 @@ export function useWorkflowFeedback(
   const respondToFeedback = useCallback(
     async (requestId: string, approved: boolean, feedback?: string) => {
       try {
-        await commands.agentFeedbackRespond({ requestId, approved, feedback });
+        await commands.agentFeedbackRespond(requestId, approved, feedback ?? null);
         setPendingFeedback(null);
       } catch (err) {
         // Clear stale feedback — the sidecar is likely dead (broken pipe)

@@ -11,13 +11,13 @@ export function useSettings(projectDir: string) {
 
   const settingsQuery = useQuery({
     queryKey: settingsKeys.project(projectDir),
-    queryFn: () => commands.settingsGet({ projectDir }),
+    queryFn: () => commands.settingsGet(projectDir),
     enabled: !!projectDir,
   });
 
   const updateSettingsMutation = useMutation({
     mutationFn: (newSettings: ProjectSettings) =>
-      commands.settingsUpdate({ projectDir, settings: newSettings }),
+      commands.settingsUpdate(projectDir, newSettings),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: settingsKeys.project(projectDir),
@@ -32,7 +32,7 @@ export function useSettings(projectDir: string) {
     loadSettings: async () => {
       const data = await queryClient.fetchQuery({
         queryKey: settingsKeys.project(projectDir),
-        queryFn: () => commands.settingsGet({ projectDir }),
+        queryFn: () => commands.settingsGet(projectDir),
       });
       return data ?? null;
     },

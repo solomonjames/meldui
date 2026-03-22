@@ -75,10 +75,7 @@ export function useWorkflowReview(
     async (submission: ReviewSubmission) => {
       if (!pendingReviewRequestId) return;
       try {
-        await commands.agentReviewRespond({
-          requestId: pendingReviewRequestId,
-          submission,
-        });
+        await commands.agentReviewRespond(pendingReviewRequestId, submission as import("@/bindings").JsonValue);
         setPendingReviewRequestId(null);
 
         // Mark existing comments as resolved for next round

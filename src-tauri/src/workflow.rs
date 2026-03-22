@@ -887,18 +887,18 @@ pub struct DiffLine {
     pub line_type: DiffLineType,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub old_line_no: Option<usize>,
+    pub old_line_no: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_line_no: Option<usize>,
+    pub new_line_no: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct DiffHunk {
     pub header: String,
-    pub old_start: usize,
-    pub old_count: usize,
-    pub new_start: usize,
-    pub new_count: usize,
+    pub old_start: u32,
+    pub old_count: u32,
+    pub new_start: u32,
+    pub new_count: u32,
     pub lines: Vec<DiffLine>,
 }
 
@@ -906,8 +906,8 @@ pub struct DiffHunk {
 pub struct DiffFile {
     pub path: String,
     pub status: String,
-    pub additions: usize,
-    pub deletions: usize,
+    pub additions: u32,
+    pub deletions: u32,
     pub hunks: Vec<DiffHunk>,
 }
 
@@ -1159,18 +1159,18 @@ fn parse_diff(diff_text: &str) -> Vec<DiffFile> {
                             DiffLine {
                                 line_type,
                                 content: line.value.clone(),
-                                old_line_no: line.source_line_no,
-                                new_line_no: line.target_line_no,
+                                old_line_no: line.source_line_no.map(|n| n as u32),
+                                new_line_no: line.target_line_no.map(|n| n as u32),
                             }
                         })
                         .collect();
 
                     DiffHunk {
                         header: hunk.section_header.clone(),
-                        old_start: hunk.source_start,
-                        old_count: hunk.source_length,
-                        new_start: hunk.target_start,
-                        new_count: hunk.target_length,
+                        old_start: hunk.source_start as u32,
+                        old_count: hunk.source_length as u32,
+                        new_start: hunk.target_start as u32,
+                        new_count: hunk.target_length as u32,
                         lines,
                     }
                 })
@@ -1179,8 +1179,8 @@ fn parse_diff(diff_text: &str) -> Vec<DiffFile> {
             DiffFile {
                 path: file.path(),
                 status: status.to_string(),
-                additions: file.added(),
-                deletions: file.removed(),
+                additions: file.added() as u32,
+                deletions: file.removed() as u32,
                 hunks,
             }
         })
@@ -1198,7 +1198,7 @@ pub struct ReviewFinding {
     pub id: String,
     pub file_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub line_number: Option<usize>,
+    pub line_number: Option<u32>,
     pub severity: String,
     pub validity: String,
     pub title: String,
@@ -1212,7 +1212,7 @@ pub struct ReviewFinding {
 pub struct ReviewComment {
     pub id: String,
     pub file_path: String,
-    pub line_number: usize,
+    pub line_number: u32,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestion: Option<String>,

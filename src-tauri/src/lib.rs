@@ -381,64 +381,66 @@ pub fn run() {
     };
     use claude::StreamChunk;
 
-    let (invoke_handler, register_events) = {
-        let builder = tauri_specta::ts::builder()
-            .commands(tauri_specta::collect_commands![
-                open_folder_dialog,
-                claude_status,
-                claude_login,
-                agent_permission_respond,
-                agent_feedback_respond,
-                agent_review_respond,
-                ticket_list,
-                ticket_create,
-                ticket_update,
-                ticket_close,
-                ticket_show,
-                ticket_delete,
-                ticket_add_comment,
-                ticket_update_section,
-                ticket_initialize_sections,
-                settings_get,
-                settings_update,
-                sync_pull_all,
-                sync_push_ticket,
-                workflow_list,
-                workflow_get,
-                workflow_assign,
-                workflow_advance,
-                workflow_state,
-                workflow_execute_step,
-                workflow_suggest,
-                workflow_get_diff,
-                workflow_get_branch_info,
-                workflow_execute_commit_action,
-                workflow_cleanup_worktree,
-                preferences::get_app_preferences,
-                preferences::set_app_preferences,
-                preferences::open_preferences_window,
-            ])
-            .events(tauri_specta::collect_events![
-                StreamChunk,
-                AgentPermissionRequest,
-                AgentFeedbackRequest,
-                AgentReviewFindingsRequest,
-                SubtaskCreated,
-                SubtaskUpdated,
-                SubtaskClosed,
-                SectionUpdateEvent,
-                NotificationEvent,
-                StepCompleteEvent,
-                StatusUpdateEvent,
-                PrUrlReportedEvent,
-                preferences::AppPreferences,
-            ]);
+    let builder = tauri_specta::Builder::<tauri::Wry>::new()
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+        .commands(tauri_specta::collect_commands![
+            open_folder_dialog,
+            claude_status,
+            claude_login,
+            agent_permission_respond,
+            agent_feedback_respond,
+            agent_review_respond,
+            ticket_list,
+            ticket_create,
+            ticket_update,
+            ticket_close,
+            ticket_show,
+            ticket_delete,
+            ticket_add_comment,
+            ticket_update_section,
+            ticket_initialize_sections,
+            settings_get,
+            settings_update,
+            sync_pull_all,
+            sync_push_ticket,
+            workflow_list,
+            workflow_get,
+            workflow_assign,
+            workflow_advance,
+            workflow_state,
+            workflow_execute_step,
+            workflow_suggest,
+            workflow_get_diff,
+            workflow_get_branch_info,
+            workflow_execute_commit_action,
+            workflow_cleanup_worktree,
+            preferences::get_app_preferences,
+            preferences::set_app_preferences,
+            preferences::open_preferences_window,
+        ])
+        .events(tauri_specta::collect_events![
+            StreamChunk,
+            AgentPermissionRequest,
+            AgentFeedbackRequest,
+            AgentReviewFindingsRequest,
+            SubtaskCreated,
+            SubtaskUpdated,
+            SubtaskClosed,
+            SectionUpdateEvent,
+            NotificationEvent,
+            StepCompleteEvent,
+            StatusUpdateEvent,
+            PrUrlReportedEvent,
+            preferences::AppPreferences,
+        ]);
 
-        #[cfg(debug_assertions)]
-        let builder = builder.path("../src/bindings.ts");
-
-        builder.build().unwrap()
-    };
+    #[cfg(debug_assertions)]
+    builder
+        .export(
+            specta_typescript::Typescript::default(),
+            "../src/bindings.ts",
+        )
+        .expect("Failed to export typescript bindings");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -447,8 +449,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(AgentState::new())
-        .setup(|app| {
-            register_events(app);
+        .invoke_handler(builder.invoke_handler())
+        .setup(move |app| {
+            builder.mount_events(app);
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -478,7 +481,6 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(invoke_handler)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

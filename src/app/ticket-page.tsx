@@ -74,7 +74,7 @@ export function TicketPage({
     error,
   } = useQuery({
     queryKey: ticketKeys.detail(projectDir, ticketId),
-    queryFn: () => commands.ticketShow({ projectDir, id: ticketId }),
+    queryFn: () => commands.ticketShow(projectDir, ticketId),
     enabled: !!projectDir && !!ticketId,
   });
 

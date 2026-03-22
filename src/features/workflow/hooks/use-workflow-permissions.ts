@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import { commands, events } from "@/bindings";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 import type { PermissionRequest } from "@/shared/types";
 
 export function useWorkflowPermissions(
@@ -8,49 +8,15 @@ export function useWorkflowPermissions(
   setError: (msg: string) => void
 ) {
   const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
-  const [permissionsReady, setPermissionsReady] = useState(false);
-  const permissionUnlistenRef = useRef<UnlistenFn | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mark not-ready before re-subscribing to Tauri events
-    setPermissionsReady(false);
-
-    const setup = async () => {
-      if (permissionUnlistenRef.current) {
-        permissionUnlistenRef.current();
-        permissionUnlistenRef.current = null;
-      }
-
-      const unlisten = await events.agentPermissionRequest.listen((event) => {
-        if (!cancelled) {
-          const { request_id, tool_name, input } = event.payload;
-          setPendingPermission({
-            request_id,
-            tool_name,
-            input: input as Record<string, unknown>,
-          });
-        }
-      });
-
-      if (!cancelled) {
-        permissionUnlistenRef.current = unlisten;
-        setPermissionsReady(true);
-      } else {
-        unlisten();
-      }
-    };
-
-    setup();
-
-    return () => {
-      cancelled = true;
-      if (permissionUnlistenRef.current) {
-        permissionUnlistenRef.current();
-        permissionUnlistenRef.current = null;
-      }
-    };
-  }, [activeTicketId]);
+  const permissionsReady = useTauriEvent(events.agentPermissionRequest, (payload) => {
+    const { request_id, tool_name, input } = payload;
+    setPendingPermission({
+      request_id,
+      tool_name,
+      input: input as Record<string, unknown>,
+    });
+  });
 
   const respondToPermission = useCallback(
     async (requestId: string, allowed: boolean) => {

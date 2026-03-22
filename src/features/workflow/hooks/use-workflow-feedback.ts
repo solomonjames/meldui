@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import { commands, events } from "@/bindings";
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 import type { FeedbackRequestEvent } from "@/shared/types";
 
 export function useWorkflowFeedback(
@@ -8,44 +8,12 @@ export function useWorkflowFeedback(
   setError: (msg: string) => void
 ) {
   const [pendingFeedback, setPendingFeedback] = useState<FeedbackRequestEvent | null>(null);
-  const [feedbackReady, setFeedbackReady] = useState(false);
-  const unlistenRef = useRef<UnlistenFn | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: mark not-ready before re-subscribing to Tauri events
-    setFeedbackReady(false);
-
-    const setup = async () => {
-      if (unlistenRef.current) {
-        unlistenRef.current();
-        unlistenRef.current = null;
-      }
-
-      const unlisten = await events.agentFeedbackRequest.listen((event) => {
-        if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
-          setPendingFeedback(event.payload);
-        }
-      });
-
-      if (!cancelled) {
-        unlistenRef.current = unlisten;
-        setFeedbackReady(true);
-      } else {
-        unlisten();
-      }
-    };
-
-    setup();
-
-    return () => {
-      cancelled = true;
-      if (unlistenRef.current) {
-        unlistenRef.current();
-        unlistenRef.current = null;
-      }
-    };
-  }, [activeTicketId]);
+  const feedbackReady = useTauriEvent(events.agentFeedbackRequest, (payload) => {
+    if (activeTicketId && payload.ticket_id === activeTicketId) {
+      setPendingFeedback(payload);
+    }
+  });
 
   const respondToFeedback = useCallback(
     async (requestId: string, approved: boolean, feedback?: string) => {

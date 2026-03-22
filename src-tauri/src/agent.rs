@@ -994,8 +994,29 @@ pub async fn execute_step(
         return Err(e);
     }
 
-    // Wait for stderr reader
-    let _ = stderr_handle.await;
+    // Clear the agent handle FIRST to drop the socket write half reference.
+    // The sidecar stays alive until the socket closes, so we must release
+    // our write half before waiting for the child to exit — otherwise we
+    // deadlock (Rust waits for child exit, child waits for socket close).
+    if let Some(state) = app_handle.try_state::<AgentState>() {
+        let mut handle_guard = state.handle.lock().await;
+        *handle_guard = None;
+    }
+    // Drop our local Arc to the write half — combined with the AgentHandle
+    // drop above, this fully closes the socket write end.
+    drop(write_half);
+
+    // Now the sidecar detects socket close and exits, which closes stderr.
+    // Wait for stderr reader and child process with a timeout to avoid
+    // hanging if the sidecar doesn't exit cleanly.
+    let shutdown_timeout = std::time::Duration::from_secs(5);
+    if tokio::time::timeout(shutdown_timeout, stderr_handle)
+        .await
+        .is_err()
+    {
+        log::warn!("agent: stderr reader did not finish within timeout, killing sidecar");
+        let _ = child.kill().await;
+    }
 
     // Wait for child process
     let status = child
@@ -1013,12 +1034,6 @@ pub async fn execute_step(
 
     // Clean up socket file if sidecar didn't
     let _ = std::fs::remove_file(&socket_path);
-
-    // Clear the agent handle
-    if let Some(state) = app_handle.try_state::<AgentState>() {
-        let mut handle_guard = state.handle.lock().await;
-        *handle_guard = None;
-    }
 
     if !status.success() && !got_query_response {
         return Err(format!(

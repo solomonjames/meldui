@@ -107,7 +107,7 @@ The agent sidecar (`src/agent/`) is a separate TypeScript package compiled to a 
 
 ```
 React Frontend (tool cards, permission dialogs, thinking section)
-    ↕ Tauri events (workflow-step-output, agent-permission-request)
+    ↕ Tauri events (StreamChunk, AgentPermissionRequest — PascalCase struct names via tauri-specta)
 Rust Backend (src-tauri/src/agent.rs)
     ↕ Unix socket + JSON-RPC 2.0
 Bun Sidecar (src/agent/main.ts → compiled binary)
@@ -129,9 +129,14 @@ The sidecar is excluded from the frontend `tsc` build via `tsconfig.app.json` `"
 
 ### Type Sharing
 
-Frontend TypeScript types in `src/shared/types/index.ts` manually mirror the Rust serde structs. When adding fields, update both:
-- Rust struct (with `#[serde(default)]` for optional fields)
-- TypeScript interface
+`src/bindings.ts` is **auto-generated** by tauri-specta when `bun run tauri:dev` runs. Do not edit it manually. It provides typed `commands.*()` and `events.*.listen()` wrappers and re-exports all IPC types.
+
+`src/shared/types/index.ts` still contains manually-maintained types used by UI components. When adding new Rust types that cross the IPC boundary:
+1. Add `specta::Type` derive to the Rust struct (and `tauri_specta::Event` for event structs)
+2. Run `bun run tauri:dev` to regenerate `src/bindings.ts`
+3. Update `src/shared/types/index.ts` only if UI components need narrower types (e.g., string unions vs `string`)
+
+**specta limitations**: `usize`/`isize` fields cause `BigIntForbidden` panics at startup — use `u32`/`i32` instead. The `specta`, `specta-typescript`, and `tauri-specta` crates use exact version pinning (`=x.y.z`) because they are RC releases with breaking changes between versions.
 
 ### Frontend Stack
 

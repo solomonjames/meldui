@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
 import type { Ticket } from "@/shared/lib/tickets";
 import { ticketKeys } from "@/shared/lib/query-keys";
 
@@ -11,7 +11,7 @@ export function useTickets(projectDir: string) {
   const ticketsQuery = useQuery({
     queryKey: ticketKeys.all(projectDir),
     queryFn: () =>
-      invoke<Ticket[]>("ticket_list", { projectDir, showAll: true }),
+      commands.ticketList(projectDir, null, null, true),
     enabled: !!projectDir,
   });
 
@@ -22,13 +22,13 @@ export function useTickets(projectDir: string) {
       ticketType?: string;
       priority?: string;
     }) =>
-      invoke<Ticket>("ticket_create", {
+      commands.ticketCreate(
         projectDir,
-        title: vars.title,
-        description: vars.description,
-        ticketType: vars.ticketType || "task",
-        priority: vars.priority ? parseInt(vars.priority, 10) : 2,
-      }),
+        vars.title,
+        vars.description ?? null,
+        vars.ticketType || "task",
+        vars.priority ? parseInt(vars.priority, 10) : 2,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -47,14 +47,20 @@ export function useTickets(projectDir: string) {
         acceptance_criteria?: string;
       };
     }) =>
-      invoke("ticket_update", {
+      commands.ticketUpdate(
         projectDir,
-        id: vars.id,
-        ...vars.updates,
-        priority: vars.updates.priority
+        vars.id,
+        vars.updates.title ?? null,
+        vars.updates.status ?? null,
+        vars.updates.priority
           ? parseInt(vars.updates.priority, 10)
-          : undefined,
-      }),
+          : null,
+        vars.updates.description ?? null,
+        vars.updates.notes ?? null,
+        vars.updates.design ?? null,
+        vars.updates.acceptance_criteria ?? null,
+        null,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -62,7 +68,7 @@ export function useTickets(projectDir: string) {
 
   const closeTicket = useMutation({
     mutationFn: (vars: { id: string; reason?: string }) =>
-      invoke("ticket_close", { projectDir, id: vars.id, reason: vars.reason }),
+      commands.ticketClose(projectDir, vars.id, vars.reason ?? null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -70,7 +76,7 @@ export function useTickets(projectDir: string) {
 
   const deleteTicket = useMutation({
     mutationFn: (vars: { id: string }) =>
-      invoke("ticket_delete", { projectDir, id: vars.id }),
+      commands.ticketDelete(projectDir, vars.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
     },
@@ -78,21 +84,12 @@ export function useTickets(projectDir: string) {
 
   const addComment = useMutation({
     mutationFn: (vars: { id: string; text: string }) =>
-      invoke("ticket_add_comment", {
-        projectDir,
-        id: vars.id,
-        text: vars.text,
-      }),
+      commands.ticketAddComment(projectDir, vars.id, vars.text),
   });
 
   const updateSection = useMutation({
     mutationFn: (vars: { ticketId: string; sectionId: string; content: unknown }) =>
-      invoke("ticket_update_section", {
-        projectDir,
-        ticketId: vars.ticketId,
-        sectionId: vars.sectionId,
-        content: vars.content,
-      }),
+      commands.ticketUpdateSection(projectDir, vars.ticketId, vars.sectionId, vars.content as import("@/bindings").JsonValue),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ticketKeys.detail(projectDir, vars.ticketId) });
     },
@@ -102,7 +99,7 @@ export function useTickets(projectDir: string) {
     try {
       return await queryClient.fetchQuery({
         queryKey: ticketKeys.detail(projectDir, id),
-        queryFn: () => invoke<Ticket>("ticket_show", { projectDir, id }),
+        queryFn: () => commands.ticketShow(projectDir, id),
       });
     } catch {
       return null;

@@ -14,7 +14,7 @@ describe("useClaude", () => {
 
   it("auto-fetches status on mount", async () => {
     const status = { installed: true, authenticated: true, message: "ok" };
-    mockInvoke.mockResolvedValueOnce(JSON.stringify(status));
+    mockInvoke.mockResolvedValueOnce(status);
 
     const { result } = renderHook(() => useClaude(), { wrapper });
 
@@ -29,15 +29,13 @@ describe("useClaude", () => {
     const status = { installed: true, authenticated: false, message: "not logged in" };
     const afterLogin = { installed: true, authenticated: true, message: "ok" };
 
+    let callCount = 0;
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "claude_status") {
-        // First call returns unauthenticated, subsequent calls return authenticated
-        const isFirst = !mockInvoke.mock.results.some(
-          (r: { value: unknown }) => r.value === JSON.stringify(afterLogin)
-        );
-        return Promise.resolve(JSON.stringify(isFirst ? status : afterLogin));
+        callCount++;
+        return Promise.resolve(callCount === 1 ? status : afterLogin);
       }
-      if (cmd === "claude_login") return Promise.resolve("ok");
+      if (cmd === "claude_login") return Promise.resolve(afterLogin);
       return Promise.resolve(null);
     });
 

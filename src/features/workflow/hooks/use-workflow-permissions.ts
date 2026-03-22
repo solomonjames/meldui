@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { commands, events } from "@/bindings";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import type { PermissionRequest } from "@/shared/types";
 
 export function useWorkflowPermissions(
@@ -22,14 +22,16 @@ export function useWorkflowPermissions(
         permissionUnlistenRef.current = null;
       }
 
-      const unlisten = await listen<PermissionRequest>(
-        "agent-permission-request",
-        (event) => {
-          if (!cancelled) {
-            setPendingPermission(event.payload);
-          }
+      const unlisten = await events.agentPermissionRequest.listen((event) => {
+        if (!cancelled) {
+          const { request_id, tool_name, input } = event.payload;
+          setPendingPermission({
+            request_id,
+            tool_name,
+            input: input as Record<string, unknown>,
+          });
         }
-      );
+      });
 
       if (!cancelled) {
         permissionUnlistenRef.current = unlisten;
@@ -53,7 +55,7 @@ export function useWorkflowPermissions(
   const respondToPermission = useCallback(
     async (requestId: string, allowed: boolean) => {
       try {
-        await invoke("agent_permission_respond", { requestId, allowed });
+        await commands.agentPermissionRespond(requestId, allowed);
         setPendingPermission(null);
       } catch (err) {
         setPendingPermission(null);

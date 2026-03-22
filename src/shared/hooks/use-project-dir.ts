@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
 import { load, type Store } from "@tauri-apps/plugin-store";
 
 const STORE_FILE = "settings.json";
@@ -22,7 +22,7 @@ export function useProjectDir() {
   }, []);
 
   const openFolderDialog = useCallback(async () => {
-    const selected = await invoke<string | null>("open_folder_dialog");
+    const selected = await commands.openFolderDialog();
     if (selected) {
       setProjectDir(selected);
       const store = storeRef.current ?? await load(STORE_FILE);

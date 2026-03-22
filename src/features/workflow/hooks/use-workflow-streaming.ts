@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { events } from "@/bindings";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import type {
-  StreamChunk,
   StepOutputStream,
   ToolActivity,
   ContentBlock,
@@ -62,8 +62,7 @@ export function useWorkflowStreaming(
         unlistenRef.current = null;
       }
 
-      const unlisten = await listen<StreamChunk>(
-        "workflow-step-output",
+      const unlisten = await events.streamChunk.listen(
         (event) => {
           if (cancelled) return;
           const chunk = event.payload;

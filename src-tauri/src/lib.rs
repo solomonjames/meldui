@@ -18,6 +18,7 @@ use workflow::{
 // ── Folder dialog command ──
 
 #[tauri::command]
+#[specta::specta]
 async fn open_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -40,18 +41,21 @@ async fn open_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, Str
 // ── Claude commands ──
 
 #[tauri::command]
-async fn claude_status() -> Result<String, String> {
+#[specta::specta]
+async fn claude_status() -> Result<claude::ClaudeStatus, String> {
     claude::get_status().await
 }
 
 #[tauri::command]
-async fn claude_login() -> Result<String, String> {
+#[specta::specta]
+async fn claude_login() -> Result<claude::ClaudeStatus, String> {
     claude::login().await
 }
 
 // ── Agent commands ──
 
 #[tauri::command]
+#[specta::specta]
 async fn agent_permission_respond(
     request_id: String,
     allowed: bool,
@@ -66,6 +70,7 @@ async fn agent_permission_respond(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn agent_feedback_respond(
     request_id: String,
     approved: bool,
@@ -83,6 +88,7 @@ async fn agent_feedback_respond(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn agent_review_respond(
     request_id: String,
     submission: serde_json::Value,
@@ -99,6 +105,7 @@ async fn agent_review_respond(
 // ── Ticket commands ──
 
 #[tauri::command]
+#[specta::specta]
 async fn ticket_list(
     project_dir: String,
     status: Option<String>,
@@ -114,6 +121,7 @@ async fn ticket_list(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn ticket_create(
     project_dir: String,
     title: String,
@@ -131,6 +139,7 @@ async fn ticket_create(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn ticket_update(
     project_dir: String,
     id: String,
@@ -158,6 +167,7 @@ async fn ticket_update(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn ticket_close(
     project_dir: String,
     id: String,
@@ -167,16 +177,19 @@ async fn ticket_close(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn ticket_show(project_dir: String, id: String) -> Result<Ticket, String> {
     tickets::show_ticket(&project_dir, &id)
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn ticket_delete(project_dir: String, id: String) -> Result<(), String> {
     tickets::delete_ticket(&project_dir, &id)
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn ticket_add_comment(
     project_dir: String,
     id: String,
@@ -186,6 +199,7 @@ async fn ticket_add_comment(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn ticket_update_section(
     project_dir: String,
     ticket_id: String,
@@ -196,6 +210,7 @@ async fn ticket_update_section(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn ticket_initialize_sections(
     project_dir: String,
     ticket_id: String,
@@ -207,11 +222,13 @@ async fn ticket_initialize_sections(
 // ── Settings commands ──
 
 #[tauri::command]
+#[specta::specta]
 async fn settings_get(project_dir: String) -> Result<settings::ProjectSettings, String> {
     settings::get_settings(&project_dir)
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn settings_update(
     project_dir: String,
     settings: settings::ProjectSettings,
@@ -222,11 +239,13 @@ async fn settings_update(
 // ── Sync commands ──
 
 #[tauri::command]
+#[specta::specta]
 async fn sync_pull_all(project_dir: String) -> Result<Vec<Ticket>, String> {
     sync::pull_all(&project_dir).await
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn sync_push_ticket(project_dir: String, id: String) -> Result<String, String> {
     let ticket = tickets::show_ticket(&project_dir, &id)?;
     sync::push_ticket(&project_dir, &ticket).await
@@ -235,11 +254,13 @@ async fn sync_push_ticket(project_dir: String, id: String) -> Result<String, Str
 // ── Workflow commands ──
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_list(project_dir: String) -> Result<Vec<WorkflowDefinition>, String> {
     Ok(workflow::list_workflows(&project_dir))
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_get(
     project_dir: String,
     workflow_id: String,
@@ -249,6 +270,7 @@ async fn workflow_get(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_assign(
     project_dir: String,
     issue_id: String,
@@ -258,11 +280,13 @@ async fn workflow_assign(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_advance(project_dir: String, issue_id: String) -> Result<WorkflowState, String> {
     workflow::advance_step(&project_dir, &issue_id)
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_state(
     project_dir: String,
     issue_id: String,
@@ -294,6 +318,7 @@ async fn workflow_state(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_execute_step(
     project_dir: String,
     issue_id: String,
@@ -303,6 +328,7 @@ async fn workflow_execute_step(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_suggest(
     project_dir: String,
     issue_id: String,
@@ -312,6 +338,7 @@ async fn workflow_suggest(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_get_diff(
     project_dir: String,
     base_commit: Option<String>,
@@ -320,11 +347,13 @@ async fn workflow_get_diff(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_get_branch_info(project_dir: String) -> Result<BranchInfo, String> {
     workflow::get_branch_info(&project_dir).await
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_execute_commit_action(
     project_dir: String,
     issue_id: String,
@@ -336,6 +365,7 @@ async fn workflow_execute_commit_action(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn workflow_cleanup_worktree(project_dir: String, issue_id: String) -> Result<(), String> {
     workflow::remove_worktree(&project_dir, &issue_id).await
 }
@@ -344,43 +374,16 @@ async fn workflow_cleanup_worktree(project_dir: String, issue_id: String) -> Res
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
-        .manage(AgentState::new())
-        .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+    use agent::{
+        AgentFeedbackRequest, AgentPermissionRequest, AgentReviewFindingsRequest,
+        NotificationEvent, PrUrlReportedEvent, SectionUpdateEvent, StatusUpdateEvent,
+        StepCompleteEvent, SubtaskClosed, SubtaskCreated, SubtaskUpdated,
+    };
+    use claude::StreamChunk;
 
-            // Build and set macOS app menu
-            match menu::build_app_menu(app) {
-                Ok(menu) => {
-                    app.set_menu(menu)?;
-                    app.on_menu_event(|app_handle, event| {
-                        if event.id().0.as_str() == "preferences" {
-                            if let Err(e) = preferences::open_preferences_window(app_handle.clone())
-                            {
-                                log::error!("Failed to open preferences window: {}", e);
-                            }
-                        }
-                    });
-                }
-                Err(e) => {
-                    log::warn!("Failed to build app menu: {}", e);
-                }
-            }
-
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
+    let builder = tauri_specta::Builder::<tauri::Wry>::new()
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+        .commands(tauri_specta::collect_commands![
             open_folder_dialog,
             claude_status,
             claude_login,
@@ -415,6 +418,69 @@ pub fn run() {
             preferences::set_app_preferences,
             preferences::open_preferences_window,
         ])
+        .events(tauri_specta::collect_events![
+            StreamChunk,
+            AgentPermissionRequest,
+            AgentFeedbackRequest,
+            AgentReviewFindingsRequest,
+            SubtaskCreated,
+            SubtaskUpdated,
+            SubtaskClosed,
+            SectionUpdateEvent,
+            NotificationEvent,
+            StepCompleteEvent,
+            StatusUpdateEvent,
+            PrUrlReportedEvent,
+            preferences::AppPreferences,
+        ]);
+
+    #[cfg(debug_assertions)]
+    builder
+        .export(
+            specta_typescript::Typescript::default(),
+            "../src/bindings.ts",
+        )
+        .expect("Failed to export typescript bindings");
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .manage(AgentState::new())
+        .invoke_handler(builder.invoke_handler())
+        .setup(move |app| {
+            builder.mount_events(app);
+
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+
+            // Build and set macOS app menu
+            match menu::build_app_menu(app) {
+                Ok(menu) => {
+                    app.set_menu(menu)?;
+                    app.on_menu_event(|app_handle, event| {
+                        if event.id().0.as_str() == "preferences" {
+                            if let Err(e) = preferences::open_preferences_window(app_handle.clone())
+                            {
+                                log::error!("Failed to open preferences window: {}", e);
+                            }
+                        }
+                    });
+                }
+                Err(e) => {
+                    log::warn!("Failed to build app menu: {}", e);
+                }
+            }
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

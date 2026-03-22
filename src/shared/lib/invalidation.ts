@@ -1,8 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { listen } from "@tauri-apps/api/event";
+import { events } from "@/bindings";
 import { ticketKeys } from "@/shared/lib/query-keys";
-import type { SectionUpdateEvent, StepCompleteEvent } from "@/shared/types";
 
 /**
  * Centralized Tauri event → TanStack Query invalidation.
@@ -17,20 +16,20 @@ export function useTauriEventInvalidation(projectDir: string) {
     const unlisteners: Array<() => void> = [];
 
     // Subtask events → invalidate ticket list
-    const subtaskEvents = [
-      "meldui-subtask-created",
-      "meldui-subtask-updated",
-      "meldui-subtask-closed",
-    ];
+    events.subtaskCreated.listen(() => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    }).then((unlisten) => unlisteners.push(unlisten));
 
-    for (const event of subtaskEvents) {
-      listen(event, () => {
-        queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
-      }).then((unlisten) => unlisteners.push(unlisten));
-    }
+    events.subtaskUpdated.listen(() => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    }).then((unlisten) => unlisteners.push(unlisten));
+
+    events.subtaskClosed.listen(() => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.all(projectDir) });
+    }).then((unlisten) => unlisteners.push(unlisten));
 
     // Section update → invalidate specific ticket detail
-    listen<SectionUpdateEvent>("meldui-section-update", (event) => {
+    events.sectionUpdateEvent.listen((event) => {
       const ticketId = event.payload.ticket_id;
       if (ticketId) {
         queryClient.invalidateQueries({
@@ -40,7 +39,7 @@ export function useTauriEventInvalidation(projectDir: string) {
     }).then((unlisten) => unlisteners.push(unlisten));
 
     // Step complete → invalidate workflow state
-    listen<StepCompleteEvent>("meldui-step-complete", (event) => {
+    events.stepCompleteEvent.listen((event) => {
       const ticketId = event.payload.ticket_id;
       if (ticketId) {
         queryClient.invalidateQueries({

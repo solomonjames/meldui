@@ -128,8 +128,8 @@ describe("useWorkflow", () => {
     };
 
     act(() => {
-      emitTauriEvent("workflow-step-output", chunk1);
-      emitTauriEvent("workflow-step-output", chunk2);
+      emitTauriEvent("stream-chunk", chunk1);
+      emitTauriEvent("stream-chunk", chunk2);
     });
 
     await waitFor(() => {
@@ -149,7 +149,7 @@ describe("useWorkflow", () => {
     };
 
     act(() => {
-      emitTauriEvent("workflow-step-output", errorChunk);
+      emitTauriEvent("stream-chunk", errorChunk);
     });
 
     await waitFor(() => {
@@ -170,7 +170,7 @@ describe("useWorkflow", () => {
     };
 
     act(() => {
-      emitTauriEvent("workflow-step-output", resultChunk);
+      emitTauriEvent("stream-chunk", resultChunk);
     });
 
     await waitFor(() => {
@@ -207,7 +207,7 @@ describe("useWorkflow", () => {
     };
 
     act(() => {
-      emitTauriEvent("workflow-step-output", wrongChunk);
+      emitTauriEvent("stream-chunk", wrongChunk);
     });
 
     // Small delay to ensure event would have been processed
@@ -250,7 +250,7 @@ describe("useWorkflow", () => {
 
       // Emit text while executeStep is active — should be captured
       act(() => {
-        emitTauriEvent("workflow-step-output", {
+        emitTauriEvent("stream-chunk", {
           issue_id: "issue-1",
           chunk_type: "text",
           content: "During execution",
@@ -271,7 +271,7 @@ describe("useWorkflow", () => {
       // After executeStep completes, executingStepRef is null.
       // New streaming events should be dropped (no active execution).
       act(() => {
-        emitTauriEvent("workflow-step-output", {
+        emitTauriEvent("stream-chunk", {
           issue_id: "issue-1",
           chunk_type: "text",
           content: " SHOULD NOT APPEAR",

@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
-  WorkflowDefinition,
   WorkflowState,
   StepExecutionResult,
   WorkflowSuggestion,
@@ -61,7 +60,7 @@ export function useWorkflow(projectDir: string) {
 
   const workflowsQuery = useQuery({
     queryKey: workflowKeys.list(projectDir),
-    queryFn: () => invoke<WorkflowDefinition[]>("workflow_list", { projectDir }),
+    queryFn: () => commands.workflowList(projectDir),
     enabled: !!projectDir,
   });
 
@@ -70,7 +69,7 @@ export function useWorkflow(projectDir: string) {
   const listWorkflows = useCallback(async () => {
     const result = await queryClient.fetchQuery({
       queryKey: workflowKeys.list(projectDir),
-      queryFn: () => invoke<WorkflowDefinition[]>("workflow_list", { projectDir }),
+      queryFn: () => commands.workflowList(projectDir),
     });
     return result ?? [];
   }, [projectDir, queryClient]);
@@ -80,8 +79,7 @@ export function useWorkflow(projectDir: string) {
       try {
         return await queryClient.fetchQuery({
           queryKey: workflowKeys.detail(projectDir, workflowId),
-          queryFn: () =>
-            invoke<WorkflowDefinition>("workflow_get", { projectDir, workflowId }),
+          queryFn: () => commands.workflowGet(projectDir, workflowId),
         });
       } catch (err) {
         setError(`Failed to get workflow: ${err}`);
@@ -95,10 +93,7 @@ export function useWorkflow(projectDir: string) {
   const getWorkflowState = useCallback(
     async (issueId: string) => {
       try {
-        const state = await invoke<WorkflowState | null>("workflow_state", {
-          projectDir,
-          issueId,
-        });
+        const state = await commands.workflowState(projectDir, issueId);
         setCurrentState(state);
         return state;
       } catch (err) {
@@ -115,13 +110,10 @@ export function useWorkflow(projectDir: string) {
   const getDiff = useCallback(
     async (dirOverride?: string, baseCommit?: string) => {
       try {
-        return await invoke<DiffFile[]>("workflow_get_diff", {
-          projectDir: dirOverride ?? projectDir,
-          baseCommit: baseCommit ?? null,
-        });
+        return await commands.workflowGetDiff(dirOverride ?? projectDir, baseCommit ?? null);
       } catch (err) {
         setError(`Failed to get diff: ${err}`);
-        return [];
+        return [] as DiffFile[];
       }
     },
     [projectDir]
@@ -131,12 +123,10 @@ export function useWorkflow(projectDir: string) {
   const getBranchInfo = useCallback(
     async (dirOverride?: string) => {
       try {
-        return await invoke<BranchInfo>("workflow_get_branch_info", {
-          projectDir: dirOverride ?? projectDir,
-        });
+        return await commands.workflowGetBranchInfo(dirOverride ?? projectDir);
       } catch (err) {
         setError(`Failed to get branch info: ${err}`);
-        return null;
+        return null as BranchInfo | null;
       }
     },
     [projectDir]
@@ -148,11 +138,7 @@ export function useWorkflow(projectDir: string) {
     async (issueId: string, workflowId: string) => {
       try {
         setLoading(true);
-        const state = await invoke<WorkflowState>("workflow_assign", {
-          projectDir,
-          issueId,
-          workflowId,
-        });
+        const state = await commands.workflowAssign(projectDir, issueId, workflowId);
         setCurrentState(state);
         return state;
       } catch (err) {
@@ -178,11 +164,7 @@ export function useWorkflow(projectDir: string) {
           const wf = workflows.find((w) => w.id === currentState.workflow_id);
           if (wf?.ticket_sections && wf.ticket_sections.length > 0) {
             try {
-              await invoke("ticket_initialize_sections", {
-                projectDir,
-                ticketId: issueId,
-                sectionDefs: wf.ticket_sections,
-              });
+              await commands.ticketInitializeSections(projectDir, issueId, wf.ticket_sections);
             } catch {
               // Non-fatal
             }
@@ -193,14 +175,11 @@ export function useWorkflow(projectDir: string) {
         setCurrentState((prev) =>
           prev ? { ...prev, step_status: "in_progress" } : prev
         );
-        const result = await invoke<StepExecutionResult>(
-          "workflow_execute_step",
-          { projectDir, issueId }
-        );
+        const result = await commands.workflowExecuteStep(projectDir, issueId);
 
         executingStepRef.current = null;
         await getWorkflowState(issueId);
-        return result;
+        return result as StepExecutionResult;
       } catch (err) {
         executingStepRef.current = null;
         clearFeedbackPending();
@@ -220,11 +199,8 @@ export function useWorkflow(projectDir: string) {
       try {
         setLoading(true);
         setError(null);
-        const suggestion = await invoke<WorkflowSuggestion>(
-          "workflow_suggest",
-          { projectDir, issueId }
-        );
-        return suggestion;
+        const suggestion = await commands.workflowSuggest(projectDir, issueId);
+        return suggestion as WorkflowSuggestion;
       } catch {
         setError(`Unable to suggest workflow — please select manually`);
         return null;
@@ -241,12 +217,7 @@ export function useWorkflow(projectDir: string) {
       action: "commit" | "commit_and_pr";
       commitMessage: string;
     }) =>
-      invoke<CommitActionResult>("workflow_execute_commit_action", {
-        projectDir,
-        issueId: vars.issueId,
-        action: vars.action,
-        commitMessage: vars.commitMessage,
-      }),
+      commands.workflowExecuteCommitAction(projectDir, vars.issueId, vars.action, vars.commitMessage),
   });
 
   const executeCommitAction = useCallback(
@@ -262,7 +233,7 @@ export function useWorkflow(projectDir: string) {
           issueId,
           action,
           commitMessage,
-        });
+        }) as CommitActionResult;
       } catch (err) {
         setError(`Commit action failed: ${err}`);
         return null;
@@ -276,7 +247,7 @@ export function useWorkflow(projectDir: string) {
   const cleanupWorktree = useCallback(
     async (issueId: string) => {
       try {
-        await invoke("workflow_cleanup_worktree", { projectDir, issueId });
+        await commands.workflowCleanupWorktree(projectDir, issueId);
       } catch (err) {
         setError(`Failed to cleanup worktree: ${err}`);
       }

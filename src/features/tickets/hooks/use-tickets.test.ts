@@ -24,6 +24,8 @@ describe("useTickets", () => {
 
     expect(mockInvoke).toHaveBeenCalledWith("ticket_list", {
       projectDir: "/project",
+      status: null,
+      ticketType: null,
       showAll: true,
     });
   });
@@ -56,7 +58,7 @@ describe("useTickets", () => {
     expect(mockInvoke).toHaveBeenCalledWith("ticket_create", {
       projectDir: "/project",
       title: "New",
-      description: undefined,
+      description: null,
       ticketType: "task",
       priority: 2,
     });
@@ -79,8 +81,14 @@ describe("useTickets", () => {
     expect(mockInvoke).toHaveBeenCalledWith("ticket_update", {
       projectDir: "/project",
       id: "t-1",
+      title: null,
       status: "closed",
-      priority: undefined,
+      priority: null,
+      description: null,
+      notes: null,
+      design: null,
+      acceptanceCriteria: null,
+      metadata: null,
     });
   });
 

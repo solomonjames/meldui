@@ -1,11 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type {
-  NotificationEvent,
-  SectionUpdateEvent,
-  StepCompleteEvent,
-  StatusUpdateEvent,
-} from "@/shared/types";
+import { events } from "@/bindings";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { NotificationEvent } from "@/shared/types";
 
 export function useWorkflowNotifications(
   activeTicketId: string | null,
@@ -30,49 +26,37 @@ export function useWorkflowNotifications(
 
       const unlistens: UnlistenFn[] = [];
 
-      const sectionUnlisten = await listen<SectionUpdateEvent>(
-        "meldui-section-update",
-        (event) => {
-          if (cancelled) return;
-          // Trigger ticket refresh so the ticket context panel updates live
-          if (activeTicketId && event.payload.ticket_id === activeTicketId) {
-            setLastUpdatedSectionId(event.payload.section_id ?? event.payload.section);
-            onRefreshTicketRef.current?.();
-          }
+      const sectionUnlisten = await events.sectionUpdateEvent.listen((event) => {
+        if (cancelled) return;
+        // Trigger ticket refresh so the ticket context panel updates live
+        if (activeTicketId && event.payload.ticket_id === activeTicketId) {
+          setLastUpdatedSectionId(event.payload.section_id ?? event.payload.section);
+          onRefreshTicketRef.current?.();
         }
-      );
+      });
       unlistens.push(sectionUnlisten);
 
-      const notifyUnlisten = await listen<NotificationEvent>(
-        "meldui-notification",
-        (event) => {
-          if (!cancelled) {
-            setNotifications((prev) => [...prev, event.payload]);
-          }
+      const notifyUnlisten = await events.notificationEvent.listen((event) => {
+        if (!cancelled) {
+          setNotifications((prev) => [...prev, event.payload]);
         }
-      );
+      });
       unlistens.push(notifyUnlisten);
 
-      const stepCompleteUnlisten = await listen<StepCompleteEvent>(
-        "meldui-step-complete",
-        (event) => {
-          if (cancelled) return;
-          if (activeTicketId && event.payload.ticket_id === activeTicketId) {
-            // Refresh workflow state — this triggers re-render and gate/advance logic
-            getWorkflowStateRef.current?.(activeTicketId);
-          }
+      const stepCompleteUnlisten = await events.stepCompleteEvent.listen((event) => {
+        if (cancelled) return;
+        if (activeTicketId && event.payload.ticket_id === activeTicketId) {
+          // Refresh workflow state — this triggers re-render and gate/advance logic
+          getWorkflowStateRef.current?.(activeTicketId);
         }
-      );
+      });
       unlistens.push(stepCompleteUnlisten);
 
-      const statusUnlisten = await listen<StatusUpdateEvent>(
-        "meldui-status-update",
-        (event) => {
-          if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
-            setStatusText(event.payload.status_text);
-          }
+      const statusUnlisten = await events.statusUpdateEvent.listen((event) => {
+        if (!cancelled && activeTicketId && event.payload.ticket_id === activeTicketId) {
+          setStatusText(event.payload.status_text);
         }
-      );
+      });
       unlistens.push(statusUnlisten);
 
       if (!cancelled) {

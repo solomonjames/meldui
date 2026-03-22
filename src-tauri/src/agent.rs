@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
+use tauri_specta::Event;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process::Command;
@@ -80,7 +81,7 @@ struct SidecarConfig {
 // ── Event types emitted to frontend (unchanged) ──
 
 /// Permission request received from the sidecar.
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, specta::Type, tauri_specta::Event)]
 pub struct AgentPermissionRequest {
     pub request_id: String,
     pub tool_name: String,
@@ -88,7 +89,7 @@ pub struct AgentPermissionRequest {
 }
 
 /// Feedback request received from the sidecar.
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, specta::Type, tauri_specta::Event)]
 pub struct AgentFeedbackRequest {
     pub request_id: String,
     pub ticket_id: String,
@@ -96,12 +97,72 @@ pub struct AgentFeedbackRequest {
 }
 
 /// Review findings request received from the sidecar.
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, specta::Type, tauri_specta::Event)]
 pub struct AgentReviewFindingsRequest {
     pub request_id: String,
     pub ticket_id: String,
     pub findings: serde_json::Value,
     pub summary: String,
+}
+
+/// Emitted when a subtask is created by the agent.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct SubtaskCreated {
+    pub subtask_id: String,
+    pub parent_id: String,
+}
+
+/// Emitted when a subtask is updated by the agent.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct SubtaskUpdated {
+    pub subtask_id: String,
+    pub parent_id: String,
+}
+
+/// Emitted when a subtask is closed by the agent.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct SubtaskClosed {
+    pub subtask_id: String,
+    pub parent_id: String,
+}
+
+/// Emitted when a ticket section is updated by the agent.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct SectionUpdateEvent {
+    pub ticket_id: String,
+    pub section: String,
+    #[serde(default)]
+    pub section_id: Option<String>,
+    pub content: String,
+}
+
+/// Emitted when the agent sends a notification.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct NotificationEvent {
+    pub title: String,
+    pub message: String,
+    pub level: String,
+}
+
+/// Emitted when a workflow step is complete.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct StepCompleteEvent {
+    pub ticket_id: String,
+    pub summary: String,
+}
+
+/// Emitted when the agent provides a status update.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct StatusUpdateEvent {
+    pub ticket_id: String,
+    pub status_text: String,
+}
+
+/// Emitted when the agent reports a pull request URL.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct PrUrlReportedEvent {
+    pub ticket_id: String,
+    pub url: String,
 }
 
 // ── Pending request types for oneshot channels ──
@@ -623,14 +684,12 @@ pub async fn execute_step(
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
             if !line.trim().is_empty() {
-                let _ = stderr_app.emit(
-                    "workflow-step-output",
-                    StreamChunk {
-                        issue_id: stderr_issue_id.clone(),
-                        chunk_type: "stderr".to_string(),
-                        content: line,
-                    },
-                );
+                let _ = StreamChunk {
+                    issue_id: stderr_issue_id.clone(),
+                    chunk_type: "stderr".to_string(),
+                    content: line,
+                }
+                .emit(&stderr_app);
             }
         }
     });
@@ -681,18 +740,16 @@ pub async fn execute_step(
         let msg: JsonRpcMessage = match serde_json::from_str(&line) {
             Ok(v) => v,
             Err(e) => {
-                let _ = app_handle.emit(
-                    "workflow-step-output",
-                    StreamChunk {
-                        issue_id: issue_id.to_string(),
-                        chunk_type: "stderr".to_string(),
-                        content: format!(
-                            "Malformed JSON-RPC from sidecar: {} (line: {})",
-                            e,
-                            &line[..line.len().min(200)]
-                        ),
-                    },
-                );
+                let _ = StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "stderr".to_string(),
+                    content: format!(
+                        "Malformed JSON-RPC from sidecar: {} (line: {})",
+                        e,
+                        &line[..line.len().min(200)]
+                    ),
+                }
+                .emit(app_handle);
                 continue;
             }
         };
@@ -776,14 +833,12 @@ pub async fn execute_step(
                 }
                 if let Some(resp) = params.get("response").and_then(|r| r.as_str()) {
                     response_text = resp.to_string();
-                    let _ = app_handle.emit(
-                        "workflow-step-output",
-                        StreamChunk {
-                            issue_id: issue_id.to_string(),
-                            chunk_type: "result".to_string(),
-                            content: resp.to_string(),
-                        },
-                    );
+                    let _ = StreamChunk {
+                        issue_id: issue_id.to_string(),
+                        chunk_type: "result".to_string(),
+                        content: resp.to_string(),
+                    }
+                    .emit(app_handle);
                 }
                 break 'outer Ok(());
             }
@@ -793,14 +848,12 @@ pub async fn execute_step(
                     .get("message")
                     .and_then(|m| m.as_str())
                     .unwrap_or("Unknown agent error");
-                let _ = app_handle.emit(
-                    "workflow-step-output",
-                    StreamChunk {
-                        issue_id: issue_id.to_string(),
-                        chunk_type: "error".to_string(),
-                        content: message.to_string(),
-                    },
-                );
+                let _ = StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "error".to_string(),
+                    content: message.to_string(),
+                }
+                .emit(app_handle);
                 break 'outer Ok(());
             }
 
@@ -828,14 +881,12 @@ pub async fn execute_step(
                     }
 
                     // Emit Tauri event for frontend
-                    let _ = app_handle.emit(
-                        "agent-permission-request",
-                        AgentPermissionRequest {
-                            request_id,
-                            tool_name,
-                            input,
-                        },
-                    );
+                    let _ = AgentPermissionRequest {
+                        request_id,
+                        tool_name,
+                        input,
+                    }
+                    .emit(app_handle);
                 }
             }
 
@@ -862,14 +913,12 @@ pub async fn execute_step(
                         *pending = Some(PendingFeedback { json_rpc_id: id });
                     }
 
-                    let _ = app_handle.emit(
-                        "agent-feedback-request",
-                        AgentFeedbackRequest {
-                            request_id,
-                            ticket_id,
-                            summary,
-                        },
-                    );
+                    let _ = AgentFeedbackRequest {
+                        request_id,
+                        ticket_id,
+                        summary,
+                    }
+                    .emit(app_handle);
                 }
             }
 
@@ -900,15 +949,13 @@ pub async fn execute_step(
                         *pending = Some(PendingReview { json_rpc_id: id });
                     }
 
-                    let _ = app_handle.emit(
-                        "agent-review-findings",
-                        AgentReviewFindingsRequest {
-                            request_id,
-                            ticket_id,
-                            findings,
-                            summary,
-                        },
-                    );
+                    let _ = AgentReviewFindingsRequest {
+                        request_id,
+                        ticket_id,
+                        findings,
+                        summary,
+                    }
+                    .emit(app_handle);
                 }
             }
 
@@ -925,14 +972,12 @@ pub async fn execute_step(
             "Agent sidecar timed out after {} seconds of inactivity. The session can be resumed.",
             idle_timeout.as_secs()
         );
-        let _ = app_handle.emit(
-            "workflow-step-output",
-            StreamChunk {
-                issue_id: issue_id.to_string(),
-                chunk_type: "error".to_string(),
-                content: timeout_msg.clone(),
-            },
-        );
+        let _ = StreamChunk {
+            issue_id: issue_id.to_string(),
+            chunk_type: "error".to_string(),
+            content: timeout_msg.clone(),
+        }
+        .emit(app_handle);
         let _ = child.kill().await;
         if let Some(state) = app_handle.try_state::<AgentState>() {
             let mut handle_guard = state.handle.lock().await;
@@ -949,8 +994,29 @@ pub async fn execute_step(
         return Err(e);
     }
 
-    // Wait for stderr reader
-    let _ = stderr_handle.await;
+    // Clear the agent handle FIRST to drop the socket write half reference.
+    // The sidecar stays alive until the socket closes, so we must release
+    // our write half before waiting for the child to exit — otherwise we
+    // deadlock (Rust waits for child exit, child waits for socket close).
+    if let Some(state) = app_handle.try_state::<AgentState>() {
+        let mut handle_guard = state.handle.lock().await;
+        *handle_guard = None;
+    }
+    // Drop our local Arc to the write half — combined with the AgentHandle
+    // drop above, this fully closes the socket write end.
+    drop(write_half);
+
+    // Now the sidecar detects socket close and exits, which closes stderr.
+    // Wait for stderr reader and child process with a timeout to avoid
+    // hanging if the sidecar doesn't exit cleanly.
+    let shutdown_timeout = std::time::Duration::from_secs(5);
+    if tokio::time::timeout(shutdown_timeout, stderr_handle)
+        .await
+        .is_err()
+    {
+        log::warn!("agent: stderr reader did not finish within timeout, killing sidecar");
+        let _ = child.kill().await;
+    }
 
     // Wait for child process
     let status = child
@@ -968,12 +1034,6 @@ pub async fn execute_step(
 
     // Clean up socket file if sidecar didn't
     let _ = std::fs::remove_file(&socket_path);
-
-    // Clear the agent handle
-    if let Some(state) = app_handle.try_state::<AgentState>() {
-        let mut handle_guard = state.handle.lock().await;
-        *handle_guard = None;
-    }
 
     if !status.success() && !got_query_response {
         return Err(format!(
@@ -1003,26 +1063,22 @@ fn dispatch_message_to_tauri(
         "session" => {
             // Session ID is tracked in queryComplete, but emit for frontend
             if let Some(sid) = params.get("session_id").and_then(|s| s.as_str()) {
-                let _ = app_handle.emit(
-                    "workflow-step-output",
-                    StreamChunk {
-                        issue_id: issue_id.to_string(),
-                        chunk_type: "session".to_string(),
-                        content: sid.to_string(),
-                    },
-                );
+                let _ = StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "session".to_string(),
+                    content: sid.to_string(),
+                }
+                .emit(app_handle);
             }
         }
         "text" => {
             if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
-                let _ = app_handle.emit(
-                    "workflow-step-output",
-                    StreamChunk {
-                        issue_id: issue_id.to_string(),
-                        chunk_type: "text".to_string(),
-                        content: content.to_string(),
-                    },
-                );
+                let _ = StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "text".to_string(),
+                    content: content.to_string(),
+                }
+                .emit(app_handle);
             }
         }
         "tool_start" => {
@@ -1035,14 +1091,12 @@ fn dispatch_message_to_tauri(
                 "tool_name": tool_name,
                 "tool_id": tool_id,
             });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "tool_start".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "tool_start".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "tool_input" => {
             let tool_id = params.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
@@ -1051,14 +1105,12 @@ fn dispatch_message_to_tauri(
                 "tool_id": tool_id,
                 "content": content,
             });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "tool_input".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "tool_input".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "tool_end" => {
             let tool_id = params
@@ -1066,14 +1118,12 @@ fn dispatch_message_to_tauri(
                 .and_then(|i| i.as_str())
                 .unwrap_or("0");
             let payload = serde_json::json!({ "tool_id": tool_id });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "tool_end".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "tool_end".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "tool_result" => {
             let tool_id = params.get("tool_id").and_then(|i| i.as_str()).unwrap_or("");
@@ -1087,37 +1137,31 @@ fn dispatch_message_to_tauri(
                 "content": content,
                 "is_error": is_error,
             });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "tool_result".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "tool_result".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "thinking" => {
             if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
-                let _ = app_handle.emit(
-                    "workflow-step-output",
-                    StreamChunk {
-                        issue_id: issue_id.to_string(),
-                        chunk_type: "thinking".to_string(),
-                        content: content.to_string(),
-                    },
-                );
+                let _ = StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "thinking".to_string(),
+                    content: content.to_string(),
+                }
+                .emit(app_handle);
             }
         }
         "result" => {
             if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
-                let _ = app_handle.emit(
-                    "workflow-step-output",
-                    StreamChunk {
-                        issue_id: issue_id.to_string(),
-                        chunk_type: "result".to_string(),
-                        content: content.to_string(),
-                    },
-                );
+                let _ = StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "result".to_string(),
+                    content: content.to_string(),
+                }
+                .emit(app_handle);
             }
         }
         "error" => {
@@ -1125,52 +1169,78 @@ fn dispatch_message_to_tauri(
                 .get("message")
                 .and_then(|m| m.as_str())
                 .unwrap_or("Unknown agent error");
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "error".to_string(),
-                    content: message.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "error".to_string(),
+                content: message.to_string(),
+            }
+            .emit(app_handle);
         }
         "section_update" => {
             let ticket_id = params
                 .get("ticket_id")
                 .and_then(|t| t.as_str())
-                .unwrap_or("");
-            let section = params.get("section").and_then(|s| s.as_str()).unwrap_or("");
-            let content = params.get("content").and_then(|c| c.as_str()).unwrap_or("");
-            let payload = serde_json::json!({
-                "ticket_id": ticket_id,
-                "section": section,
-                "content": content,
-            });
-            let _ = app_handle.emit("meldui-section-update", payload);
+                .unwrap_or("")
+                .to_string();
+            let section = params
+                .get("section")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
+            let section_id = params
+                .get("section_id")
+                .and_then(|s| s.as_str())
+                .map(|s| s.to_string());
+            let content = params
+                .get("content")
+                .and_then(|c| c.as_str())
+                .unwrap_or("")
+                .to_string();
+            let _ = SectionUpdateEvent {
+                ticket_id,
+                section,
+                section_id,
+                content,
+            }
+            .emit(app_handle);
         }
         "notification" => {
-            let title = params.get("title").and_then(|t| t.as_str()).unwrap_or("");
-            let message = params.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            let title = params
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let message = params
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("")
+                .to_string();
             let level = params
                 .get("level")
                 .and_then(|l| l.as_str())
-                .unwrap_or("info");
-            let payload = serde_json::json!({
-                "title": title,
-                "message": message,
-                "level": level,
-            });
-            let _ = app_handle.emit("meldui-notification", payload);
+                .unwrap_or("info")
+                .to_string();
+            let _ = NotificationEvent {
+                title,
+                message,
+                level,
+            }
+            .emit(app_handle);
         }
         "step_complete" => {
             let ticket_id = params
                 .get("ticket_id")
                 .and_then(|t| t.as_str())
-                .unwrap_or("");
-            let summary = params.get("summary").and_then(|s| s.as_str()).unwrap_or("");
+                .unwrap_or("")
+                .to_string();
+            let summary = params
+                .get("summary")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
 
             if !ticket_id.is_empty() {
-                match crate::workflow::advance_step(canonical_project_dir, ticket_id) {
+                match crate::workflow::advance_step(canonical_project_dir, &ticket_id) {
                     Ok(_state) => {
                         log::info!(
                             "agent: workflow advanced for {} (summary: {})",
@@ -1184,26 +1254,24 @@ fn dispatch_message_to_tauri(
                 }
             }
 
-            let payload = serde_json::json!({
-                "ticket_id": ticket_id,
-                "summary": summary,
-            });
-            let _ = app_handle.emit("meldui-step-complete", payload);
+            let _ = StepCompleteEvent { ticket_id, summary }.emit(app_handle);
         }
         "status_update" => {
             let ticket_id = params
                 .get("ticket_id")
                 .and_then(|t| t.as_str())
-                .unwrap_or("");
+                .unwrap_or("")
+                .to_string();
             let status_text = params
                 .get("status_text")
                 .and_then(|s| s.as_str())
-                .unwrap_or("");
-            let payload = serde_json::json!({
-                "ticket_id": ticket_id,
-                "status_text": status_text,
-            });
-            let _ = app_handle.emit("meldui-status-update", payload);
+                .unwrap_or("")
+                .to_string();
+            let _ = StatusUpdateEvent {
+                ticket_id,
+                status_text,
+            }
+            .emit(app_handle);
         }
         "feedback_request" => {
             // This type is now handled as a JSON-RPC reverse request, not a notification.
@@ -1218,28 +1286,65 @@ fn dispatch_message_to_tauri(
             let ticket_id = params
                 .get("ticket_id")
                 .and_then(|t| t.as_str())
-                .unwrap_or("");
-            let url = params.get("url").and_then(|u| u.as_str()).unwrap_or("");
-            let payload = serde_json::json!({
-                "ticket_id": ticket_id,
-                "url": url,
-            });
-            let _ = app_handle.emit("meldui-pr-url-reported", payload);
+                .unwrap_or("")
+                .to_string();
+            let url = params
+                .get("url")
+                .and_then(|u| u.as_str())
+                .unwrap_or("")
+                .to_string();
+            let _ = PrUrlReportedEvent { ticket_id, url }.emit(app_handle);
         }
-        "subtask_created" | "subtask_updated" | "subtask_closed" => {
+        "subtask_created" => {
             let subtask_id = params
                 .get("subtask_id")
                 .and_then(|s| s.as_str())
-                .unwrap_or("");
+                .unwrap_or("")
+                .to_string();
             let parent_id = params
                 .get("parent_id")
                 .and_then(|p| p.as_str())
-                .unwrap_or("");
-            let payload = serde_json::json!({
-                "subtask_id": subtask_id,
-                "parent_id": parent_id,
-            });
-            let _ = app_handle.emit(&format!("meldui-{}", msg_type.replace('_', "-")), payload);
+                .unwrap_or("")
+                .to_string();
+            let _ = SubtaskCreated {
+                subtask_id,
+                parent_id,
+            }
+            .emit(app_handle);
+        }
+        "subtask_updated" => {
+            let subtask_id = params
+                .get("subtask_id")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
+            let parent_id = params
+                .get("parent_id")
+                .and_then(|p| p.as_str())
+                .unwrap_or("")
+                .to_string();
+            let _ = SubtaskUpdated {
+                subtask_id,
+                parent_id,
+            }
+            .emit(app_handle);
+        }
+        "subtask_closed" => {
+            let subtask_id = params
+                .get("subtask_id")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
+            let parent_id = params
+                .get("parent_id")
+                .and_then(|p| p.as_str())
+                .unwrap_or("")
+                .to_string();
+            let _ = SubtaskClosed {
+                subtask_id,
+                parent_id,
+            }
+            .emit(app_handle);
         }
         "tool_progress" => {
             let tool_name = params
@@ -1259,14 +1364,12 @@ fn dispatch_message_to_tauri(
                 "tool_use_id": tool_use_id,
                 "elapsed_seconds": elapsed,
             });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "tool_progress".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "tool_progress".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "subagent_start" => {
             let task_id = params.get("task_id").and_then(|t| t.as_str()).unwrap_or("");
@@ -1283,14 +1386,12 @@ fn dispatch_message_to_tauri(
                 "tool_use_id": tool_use_id,
                 "description": description,
             });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "subagent_start".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "subagent_start".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "subagent_progress" => {
             let payload = serde_json::json!({
@@ -1299,14 +1400,12 @@ fn dispatch_message_to_tauri(
                 "last_tool_name": params.get("last_tool_name"),
                 "usage": params.get("usage"),
             });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "subagent_progress".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "subagent_progress".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "subagent_complete" => {
             let payload = serde_json::json!({
@@ -1315,14 +1414,12 @@ fn dispatch_message_to_tauri(
                 "summary": params.get("summary"),
                 "usage": params.get("usage"),
             });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "subagent_complete".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "subagent_complete".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "files_changed" => {
             let files = params
@@ -1330,14 +1427,12 @@ fn dispatch_message_to_tauri(
                 .cloned()
                 .unwrap_or(serde_json::json!([]));
             let payload = serde_json::json!({ "files": files });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "files_changed".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "files_changed".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "tool_use_summary" => {
             let summary = params.get("summary").and_then(|s| s.as_str()).unwrap_or("");
@@ -1349,28 +1444,24 @@ fn dispatch_message_to_tauri(
                 "summary": summary,
                 "tool_ids": tool_ids,
             });
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "tool_use_summary".to_string(),
-                    content: payload.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "tool_use_summary".to_string(),
+                content: payload.to_string(),
+            }
+            .emit(app_handle);
         }
         "compacting" => {
             let is_compacting = params
                 .get("is_compacting")
                 .and_then(|b| b.as_bool())
                 .unwrap_or(false);
-            let _ = app_handle.emit(
-                "workflow-step-output",
-                StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: "compacting".to_string(),
-                    content: is_compacting.to_string(),
-                },
-            );
+            let _ = StreamChunk {
+                issue_id: issue_id.to_string(),
+                chunk_type: "compacting".to_string(),
+                content: is_compacting.to_string(),
+            }
+            .emit(app_handle);
         }
         "heartbeat" => {
             log::debug!("agent: heartbeat received");

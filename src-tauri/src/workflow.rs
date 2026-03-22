@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 // ── Worktree Management ──
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, specta::Type)]
 pub struct WorktreeInfo {
     pub path: String,
     pub branch: String,
@@ -244,7 +244,7 @@ fn effective_project_dir(project_dir: &str, ticket_id: &str) -> String {
 
 // ── Workflow Definition (parsed from YAML) ──
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct WorkflowSectionDef {
     pub id: String,
     pub label: String,
@@ -254,7 +254,7 @@ pub struct WorkflowSectionDef {
     pub collapsed: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct WorkflowDefinition {
     pub id: String,
     pub name: String,
@@ -265,7 +265,7 @@ pub struct WorkflowDefinition {
     pub ticket_sections: Vec<WorkflowSectionDef>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum StepViewType {
     Chat,
@@ -275,7 +275,7 @@ pub enum StepViewType {
     Commit,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct WorkflowStep {
     pub id: String,
     pub name: String,
@@ -284,7 +284,7 @@ pub struct WorkflowStep {
     pub view: StepViewType,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 #[serde(untagged)]
 pub enum StepInstructions {
     Prompt { prompt: String },
@@ -293,7 +293,7 @@ pub enum StepInstructions {
 
 // ── Workflow State (stored in ticket metadata) ──
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct WorkflowState {
     pub workflow_id: String,
     pub current_step_id: Option<String>,
@@ -301,7 +301,7 @@ pub struct WorkflowState {
     pub step_history: Vec<StepRecord>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum StepStatus {
     Pending,
@@ -310,7 +310,7 @@ pub enum StepStatus {
     Failed(String),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct StepRecord {
     pub step_id: String,
     pub status: StepStatus,
@@ -792,7 +792,7 @@ pub async fn execute_step(
     })
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct StepExecutionResult {
     pub step_id: String,
     pub response: String,
@@ -801,7 +801,7 @@ pub struct StepExecutionResult {
 
 // ── Workflow Suggestion ──
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct WorkflowSuggestion {
     pub workflow_id: String,
     pub reasoning: String,
@@ -874,7 +874,7 @@ pub async fn suggest_workflow(
 
 // ── Diff for Review ──
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffLineType {
     Added,
@@ -882,37 +882,37 @@ pub enum DiffLineType {
     Context,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct DiffLine {
     pub line_type: DiffLineType,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub old_line_no: Option<usize>,
+    pub old_line_no: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_line_no: Option<usize>,
+    pub new_line_no: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct DiffHunk {
     pub header: String,
-    pub old_start: usize,
-    pub old_count: usize,
-    pub new_start: usize,
-    pub new_count: usize,
+    pub old_start: u32,
+    pub old_count: u32,
+    pub new_start: u32,
+    pub new_count: u32,
     pub lines: Vec<DiffLine>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct DiffFile {
     pub path: String,
     pub status: String,
-    pub additions: usize,
-    pub deletions: usize,
+    pub additions: u32,
+    pub deletions: u32,
     pub hunks: Vec<DiffHunk>,
 }
 
 /// Branch information for the commit view.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, specta::Type)]
 pub struct BranchInfo {
     pub branch: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -971,7 +971,7 @@ pub async fn get_branch_info(project_dir: &str) -> Result<BranchInfo, String> {
 }
 
 /// Result of a commit action executed via the agent sidecar.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct CommitActionResult {
     pub success: bool,
     pub message: String,
@@ -1159,18 +1159,18 @@ fn parse_diff(diff_text: &str) -> Vec<DiffFile> {
                             DiffLine {
                                 line_type,
                                 content: line.value.clone(),
-                                old_line_no: line.source_line_no,
-                                new_line_no: line.target_line_no,
+                                old_line_no: line.source_line_no.map(|n| n as u32),
+                                new_line_no: line.target_line_no.map(|n| n as u32),
                             }
                         })
                         .collect();
 
                     DiffHunk {
                         header: hunk.section_header.clone(),
-                        old_start: hunk.source_start,
-                        old_count: hunk.source_length,
-                        new_start: hunk.target_start,
-                        new_count: hunk.target_length,
+                        old_start: hunk.source_start as u32,
+                        old_count: hunk.source_length as u32,
+                        new_start: hunk.target_start as u32,
+                        new_count: hunk.target_length as u32,
                         lines,
                     }
                 })
@@ -1179,8 +1179,8 @@ fn parse_diff(diff_text: &str) -> Vec<DiffFile> {
             DiffFile {
                 path: file.path(),
                 status: status.to_string(),
-                additions: file.added(),
-                deletions: file.removed(),
+                additions: file.added() as u32,
+                deletions: file.removed() as u32,
                 hunks,
             }
         })
@@ -1192,13 +1192,13 @@ fn parse_diff(diff_text: &str) -> Vec<DiffFile> {
 // The Rust side currently passes review data as serde_json::Value, but these are kept
 // for future use when the review flow needs Rust-side validation or persistence.
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 #[allow(dead_code)]
 pub struct ReviewFinding {
     pub id: String,
     pub file_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub line_number: Option<usize>,
+    pub line_number: Option<u32>,
     pub severity: String,
     pub validity: String,
     pub title: String,
@@ -1207,12 +1207,12 @@ pub struct ReviewFinding {
     pub suggestion: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 #[allow(dead_code)]
 pub struct ReviewComment {
     pub id: String,
     pub file_path: String,
-    pub line_number: usize,
+    pub line_number: u32,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestion: Option<String>,
@@ -1220,7 +1220,7 @@ pub struct ReviewComment {
     pub resolved: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 #[allow(dead_code)]
 pub struct ReviewSubmission {
     pub action: String,
@@ -1229,7 +1229,7 @@ pub struct ReviewSubmission {
     pub finding_actions: Vec<FindingAction>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 #[allow(dead_code)]
 pub struct FindingAction {
     pub finding_id: String,

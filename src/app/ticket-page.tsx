@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/bindings";
 
 import { Hash, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
@@ -74,7 +74,7 @@ export function TicketPage({
     error,
   } = useQuery({
     queryKey: ticketKeys.detail(projectDir, ticketId),
-    queryFn: () => invoke<Ticket>("ticket_show", { projectDir, id: ticketId }),
+    queryFn: () => commands.ticketShow(projectDir, ticketId),
     enabled: !!projectDir && !!ticketId,
   });
 

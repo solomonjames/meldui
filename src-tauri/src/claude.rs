@@ -48,16 +48,17 @@ fn claude_command() -> Result<Command, String> {
 }
 
 /// Check if Claude Code CLI is available and authenticated
-pub async fn get_status() -> Result<String, String> {
+pub async fn get_status() -> Result<ClaudeStatus, String> {
     let bin = find_claude_binary();
 
     if bin.is_none() {
-        return Ok(serde_json::json!({
-            "installed": false,
-            "authenticated": false,
-            "message": "Claude Code CLI not found. Install it from https://code.claude.com"
-        })
-        .to_string());
+        return Ok(ClaudeStatus {
+            installed: false,
+            authenticated: false,
+            path: None,
+            message: "Claude Code CLI not found. Install it from https://code.claude.com"
+                .to_string(),
+        });
     }
 
     let bin_path = bin.unwrap();
@@ -83,21 +84,20 @@ pub async fn get_status() -> Result<String, String> {
     let authenticated = auth_check.status.success()
         || (!stderr.contains("not logged in") && !stderr.contains("authentication"));
 
-    Ok(serde_json::json!({
-        "installed": true,
-        "authenticated": authenticated,
-        "path": bin_path.to_string_lossy(),
-        "message": if authenticated {
-            "Claude Code is installed and authenticated"
+    Ok(ClaudeStatus {
+        installed: true,
+        authenticated,
+        path: Some(bin_path.to_string_lossy().to_string()),
+        message: if authenticated {
+            "Claude Code is installed and authenticated".to_string()
         } else {
-            "Claude Code is installed but not authenticated"
-        }
+            "Claude Code is installed but not authenticated".to_string()
+        },
     })
-    .to_string())
 }
 
 /// Trigger Claude Code login flow
-pub async fn login() -> Result<String, String> {
+pub async fn login() -> Result<ClaudeStatus, String> {
     let mut cmd = claude_command()?;
     let output = cmd
         .arg("login")
@@ -108,15 +108,26 @@ pub async fn login() -> Result<String, String> {
         .map_err(|e| format!("Failed to start claude login: {}", e))?;
 
     if output.status.success() {
-        Ok("Login initiated. Check your browser.".to_string())
+        // Re-check status after login
+        get_status().await
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(format!("Login failed: {}", stderr))
     }
 }
 
+/// Status of the Claude Code CLI installation and authentication.
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+pub struct ClaudeStatus {
+    pub installed: bool,
+    pub authenticated: bool,
+    #[serde(default)]
+    pub path: Option<String>,
+    pub message: String,
+}
+
 /// Streaming event payload emitted to frontend
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type, tauri_specta::Event)]
 pub struct StreamChunk {
     pub issue_id: String,
     pub chunk_type: String, // "text", "tool_start", "tool_input", "tool_end", "tool_result", "thinking", "result", "error", "stderr"

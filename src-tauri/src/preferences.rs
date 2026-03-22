@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
+use tauri_specta::Event;
 
 const STORE_FILE: &str = "app-preferences.json";
 const THEME_KEY: &str = "theme";
 const DEFAULT_THEME: &str = "system";
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type, tauri_specta::Event)]
 pub struct AppPreferences {
     #[serde(default = "default_theme")]
     pub theme: String,
@@ -25,6 +26,7 @@ impl Default for AppPreferences {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_app_preferences(app: AppHandle) -> Result<AppPreferences, String> {
     let store = app
         .store(STORE_FILE)
@@ -41,6 +43,7 @@ pub fn get_app_preferences(app: AppHandle) -> Result<AppPreferences, String> {
 const VALID_THEMES: &[&str] = &["light", "dark", "system"];
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Result<(), String> {
     if !VALID_THEMES.contains(&preferences.theme.as_str()) {
         return Err(format!("Invalid theme: {}", preferences.theme));
@@ -60,13 +63,15 @@ pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Resul
         .map_err(|e| format!("Failed to save preferences: {}", e))?;
 
     // Emit event to all windows for cross-window sync
-    app.emit("preferences-changed", &preferences)
+    preferences
+        .emit(&app)
         .map_err(|e| format!("Failed to emit preferences event: {}", e))?;
 
     Ok(())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_preferences_window(app: AppHandle) -> Result<(), String> {
     // Singleton: if preferences window already exists, focus it
     if let Some(window) = app.get_webview_window("preferences") {

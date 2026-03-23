@@ -17,9 +17,6 @@ async claudeLogin() : Promise<ClaudeStatus> {
 async agentPermissionRespond(requestId: string, allowed: boolean) : Promise<null> {
     return await TAURI_INVOKE("agent_permission_respond", { requestId, allowed });
 },
-async agentFeedbackRespond(requestId: string, approved: boolean, feedback: string | null) : Promise<null> {
-    return await TAURI_INVOKE("agent_feedback_respond", { requestId, approved, feedback });
-},
 async agentReviewRespond(requestId: string, submission: JsonValue) : Promise<null> {
     return await TAURI_INVOKE("agent_review_respond", { requestId, submission });
 },
@@ -116,7 +113,6 @@ async openPreferencesWindow() : Promise<null> {
 
 
 export const events = __makeEvents__<{
-agentFeedbackRequest: AgentFeedbackRequest,
 agentPermissionRequest: AgentPermissionRequest,
 agentReviewFindingsRequest: AgentReviewFindingsRequest,
 appPreferences: AppPreferences,
@@ -124,12 +120,10 @@ notificationEvent: NotificationEvent,
 prUrlReportedEvent: PrUrlReportedEvent,
 sectionUpdateEvent: SectionUpdateEvent,
 statusUpdateEvent: StatusUpdateEvent,
-stepCompleteEvent: StepCompleteEvent,
 subtaskClosed: SubtaskClosed,
 subtaskCreated: SubtaskCreated,
 subtaskUpdated: SubtaskUpdated
 }>({
-agentFeedbackRequest: "agent-feedback-request",
 agentPermissionRequest: "agent-permission-request",
 agentReviewFindingsRequest: "agent-review-findings-request",
 appPreferences: "app-preferences",
@@ -137,7 +131,6 @@ notificationEvent: "notification-event",
 prUrlReportedEvent: "pr-url-reported-event",
 sectionUpdateEvent: "section-update-event",
 statusUpdateEvent: "status-update-event",
-stepCompleteEvent: "step-complete-event",
 subtaskClosed: "subtask-closed",
 subtaskCreated: "subtask-created",
 subtaskUpdated: "subtask-updated"
@@ -149,10 +142,6 @@ subtaskUpdated: "subtask-updated"
 
 /** user-defined types **/
 
-/**
- * Feedback request received from the sidecar.
- */
-export type AgentFeedbackRequest = { request_id: string; ticket_id: string; summary: string }
 /**
  * Permission request received from the sidecar.
  */
@@ -200,10 +189,6 @@ export type SectionUpdateEvent = { ticket_id: string; section: string; section_i
  * Emitted when the agent provides a status update.
  */
 export type StatusUpdateEvent = { ticket_id: string; status_text: string }
-/**
- * Emitted when a workflow step is complete.
- */
-export type StepCompleteEvent = { ticket_id: string; summary: string }
 export type StepExecutionResult = { step_id: string; response: string; workflow_completed: boolean }
 export type StepInstructions = { prompt: string } | { file: string }
 export type StepRecord = { step_id: string; status: StepStatus; started_at: string | null; completed_at: string | null; output_summary: string | null }

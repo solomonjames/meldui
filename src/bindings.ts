@@ -150,7 +150,7 @@ export type AgentPermissionRequest = { request_id: string; tool_name: string; in
  * Review findings request received from the sidecar.
  */
 export type AgentReviewFindingsRequest = { request_id: string; ticket_id: string; findings: JsonValue; summary: string }
-export type AppPreferences = { theme?: string }
+export type AppPreferences = { theme?: string; context_indicator_visibility?: string }
 /**
  * Branch information for the commit view.
  */

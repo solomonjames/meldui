@@ -37,7 +37,7 @@ pub struct ConversationSnapshot {
     pub updated_at: String,
     pub status: String,
     pub events: Vec<ConversationEventRecord>,
-    pub steps: Vec<StepRecord>,
+    pub steps: Vec<ConversationStepRecord>,
     pub event_count: u32,
 }
 
@@ -51,7 +51,7 @@ pub struct ConversationEventRecord {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
-pub struct StepRecord {
+pub struct ConversationStepRecord {
     pub step_id: String,
     pub label: Option<String>,
     pub started_at: String,
@@ -201,7 +201,7 @@ fn replay_ndjson(
     let reader = BufReader::new(file);
 
     let mut events: Vec<ConversationEventRecord> = Vec::new();
-    let mut steps: Vec<StepRecord> = Vec::new();
+    let mut steps: Vec<ConversationStepRecord> = Vec::new();
     let mut first_timestamp: Option<String> = None;
     let mut last_timestamp = String::new();
     let mut status = "active".to_string();
@@ -230,7 +230,7 @@ fn replay_ndjson(
                             .and_then(|l| l.as_str())
                             .map(String::from)
                     });
-                steps.push(StepRecord {
+                steps.push(ConversationStepRecord {
                     step_id: event.step_id.clone(),
                     label,
                     started_at: event.timestamp.clone(),

@@ -6,7 +6,6 @@ import type { NotificationEvent } from "@/shared/types";
 export function useWorkflowNotifications(
   activeTicketId: string | null,
   onRefreshTicketRef: React.MutableRefObject<(() => Promise<void>) | null>,
-  getWorkflowStateRef: React.MutableRefObject<((issueId: string) => Promise<unknown>) | null>,
 ) {
   const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
   const [statusText, setStatusText] = useState<string | null>(null);
@@ -24,20 +23,13 @@ export function useWorkflowNotifications(
     setNotifications((prev) => [...prev, payload]);
   });
 
-  const stepCompleteReady = useTauriEvent(events.stepCompleteEvent, (payload) => {
-    if (activeTicketId && payload.ticket_id === activeTicketId) {
-      // Refresh workflow state — this triggers re-render and gate/advance logic
-      getWorkflowStateRef.current?.(activeTicketId);
-    }
-  });
-
   const statusReady = useTauriEvent(events.statusUpdateEvent, (payload) => {
     if (activeTicketId && payload.ticket_id === activeTicketId) {
       setStatusText(payload.status_text);
     }
   });
 
-  const notificationsReady = sectionReady && notificationReady && stepCompleteReady && statusReady;
+  const notificationsReady = sectionReady && notificationReady && statusReady;
 
   const clearNotification = useCallback((index: number) => {
     setNotifications((prev) => prev.filter((_, i) => i !== index));

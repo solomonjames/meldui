@@ -36,7 +36,6 @@ export function useWorkflow(projectDir: string) {
   const currentStepRef = useRef<string | null>(null);
   const executingStepRef = useRef<string | null>(null);
   const onRefreshTicketRef = useRef<(() => Promise<void>) | null>(null);
-  const getWorkflowStateRef = useRef<((issueId: string) => Promise<unknown>) | null>(null);
   const createStreamChannelRef = useRef<
     ReturnType<typeof useWorkflowStreaming>["createStreamChannel"]
   >(null!);
@@ -50,11 +49,7 @@ export function useWorkflow(projectDir: string) {
   createStreamChannelRef.current = streaming.createStreamChannel;
   const permissions = useWorkflowPermissions(activeTicketId, setError);
   const review = useWorkflowReview(activeTicketId, setError);
-  const notifications = useWorkflowNotifications(
-    activeTicketId,
-    onRefreshTicketRef,
-    getWorkflowStateRef,
-  );
+  const notifications = useWorkflowNotifications(activeTicketId, onRefreshTicketRef);
 
   const listenersReady =
     streaming.streamingReady &&
@@ -109,8 +104,6 @@ export function useWorkflow(projectDir: string) {
     },
     [projectDir],
   );
-
-  getWorkflowStateRef.current = getWorkflowState;
 
   // getDiff — imperative, called by views with variable params
   const getDiff = useCallback(

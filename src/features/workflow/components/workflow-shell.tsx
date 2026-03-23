@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { ChangesTab } from "@/features/workflow/components/changes-tab";
 import { CommitTab } from "@/features/workflow/components/commit-tab";
@@ -75,12 +76,9 @@ export function WorkflowShell({
 
   // Expose scrollToStep to parent via ref
   const scrollToStep = useCallback((stepId: string) => {
-    setActiveTab("chat");
-    // Wait a tick for the tab content to render, then scroll
-    requestAnimationFrame(() => {
-      const el = document.querySelector(`[data-step-id="${stepId}"]`);
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    flushSync(() => setActiveTab("chat"));
+    const el = document.querySelector(`[data-step-id="${stepId}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   useEffect(() => {
@@ -276,7 +274,7 @@ export function WorkflowShell({
   const currentStepOutput = currentStep ? stepOutputs[currentStep.id] : undefined;
   const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
   const reviewDisabled = !pendingReviewRequestId;
-  const agentCommitMessage = lastResult?.response ?? null;
+  const agentCommitMessage = lastResult?.response ?? currentStepOutput?.textContent ?? null;
 
   return (
     <div
@@ -342,7 +340,7 @@ export function WorkflowShell({
             </TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="chat" className="flex flex-1 flex-col overflow-hidden">
+        <TabsContent value="chat" keepMounted className="flex flex-1 flex-col overflow-hidden">
           <div className="flex justify-center px-4 py-2.5">
             <div className="shadow-[0_0_20px_rgba(16,185,129,0.12)] dark:shadow-[0_0_20px_rgba(16,185,129,0.15)] rounded-full">
               <CompactWorkflowIndicator

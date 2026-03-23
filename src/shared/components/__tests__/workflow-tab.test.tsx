@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { WorkflowTab } from "@/features/workflow/components/workflow-tab";
+import { WorkflowTab } from "@/shared/components/workflow-tab";
 
 describe("WorkflowTab", () => {
   const steps = [

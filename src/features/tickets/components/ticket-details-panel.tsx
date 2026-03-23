@@ -28,7 +28,7 @@ import "@/shared/components/sections";
 import { EditableMarkdownField } from "@/features/tickets/components/editable-markdown-field";
 import { SubtaskProgress } from "@/features/tickets/components/subtask-progress";
 import { PRIORITY_CONFIG, STATUS_CONFIG, TYPE_CONFIG } from "@/features/tickets/constants";
-import { WorkflowTab } from "@/features/workflow/components/workflow-tab";
+import { WorkflowTab } from "@/shared/components/workflow-tab";
 import type {
   SectionType,
   StepRecord,

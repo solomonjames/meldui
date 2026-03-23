@@ -73,7 +73,6 @@ pub struct ConversationSummary {
 pub struct ConversationWriter {
     file: std::fs::File,
     sequence: u32,
-    ticket_id: String,
 }
 
 fn conversations_dir(project_dir: &str) -> PathBuf {
@@ -124,7 +123,6 @@ impl ConversationWriter {
         Ok(Self {
             file,
             sequence: last_seq,
-            ticket_id: ticket_id.to_string(),
         })
     }
 

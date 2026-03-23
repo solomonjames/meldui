@@ -253,6 +253,37 @@ async fn conversation_list(
     conversation::list_conversations(&project_dir)
 }
 
+// ── Project file commands ──
+
+#[tauri::command]
+#[specta::specta]
+async fn list_project_files(project_dir: String) -> Result<Vec<String>, String> {
+    use std::path::Path;
+
+    let root = Path::new(&project_dir);
+    if !root.is_dir() {
+        return Err("Invalid project directory".to_string());
+    }
+
+    let mut files = Vec::new();
+    let walker = ignore::WalkBuilder::new(root).max_depth(Some(6)).build();
+
+    for entry in walker {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.file_type().map_or(false, |ft| ft.is_file()) {
+            if let Ok(relative) = entry.path().strip_prefix(root) {
+                files.push(relative.to_string_lossy().to_string());
+            }
+        }
+        if files.len() >= 1000 {
+            break;
+        }
+    }
+
+    files.sort();
+    Ok(files)
+}
+
 // ── Workflow commands ──
 
 #[tauri::command]
@@ -420,6 +451,7 @@ pub fn run() {
             sync_push_ticket,
             conversation_restore,
             conversation_list,
+            list_project_files,
             workflow_list,
             workflow_get,
             workflow_assign,

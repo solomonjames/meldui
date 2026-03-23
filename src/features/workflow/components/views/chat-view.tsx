@@ -1,5 +1,5 @@
-import { ArrowRight, Check, Play } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { ArrowRight, Check, Play, User } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
@@ -46,6 +46,21 @@ function StepCompleteCard({
   );
 }
 
+function UserMessageBubble({ content }: { content: string }) {
+  return (
+    <div className="flex justify-end my-2">
+      <div className="flex items-start gap-2 max-w-[80%]">
+        <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2">
+          <p className="text-sm whitespace-pre-wrap">{content}</p>
+        </div>
+        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 shrink-0 mt-0.5">
+          <User className="w-3.5 h-3.5 text-primary" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface ChatViewProps {
   stepName: string;
   response: string;
@@ -78,7 +93,18 @@ export function ChatView({
   onRespondToPermission,
 }: ChatViewProps) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [userMessages, setUserMessages] = useState<Array<{ id: string; content: string }>>([]);
   const { config, setModel, setThinking, setEffort, setFastMode } = useAgentConfig();
+
+  const handleSend = useCallback(
+    (message?: string) => {
+      if (message) {
+        setUserMessages((prev) => [...prev, { id: `user-${Date.now()}`, content: message }]);
+      }
+      onExecute(message);
+    },
+    [onExecute],
+  );
 
   // Load persisted conversation history
   const { data: snapshot } = useConversation(projectDir ?? "", ticketId ?? null);
@@ -96,7 +122,7 @@ export function ChatView({
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll should fire on content/response changes
   useEffect(() => {
     chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [contentBlocks.length, response, isStepComplete]);
+  }, [contentBlocks.length, response, isStepComplete, userMessages.length]);
 
   return (
     <div data-testid="chat-view" className="flex flex-col h-full">
@@ -166,6 +192,11 @@ export function ChatView({
             {pendingPermission && onRespondToPermission && (
               <PermissionDialog permission={pendingPermission} onRespond={onRespondToPermission} />
             )}
+
+            {/* User messages */}
+            {userMessages.map((msg) => (
+              <UserMessageBubble key={msg.id} content={msg.content} />
+            ))}
 
             {/* Content blocks — text-first with activity groups */}
             {contentBlocks.map((block, i) => {
@@ -272,7 +303,7 @@ export function ChatView({
             onSetEffort={setEffort}
             onSetFastMode={setFastMode}
             onSend={(message) => {
-              onExecute(message);
+              handleSend(message);
             }}
             disabled={isExecuting}
             contextUsage={stepOutput?.contextUsage}

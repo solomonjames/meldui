@@ -230,13 +230,13 @@ export function ComposeToolbar({
               onSelect={handleSelect}
               onClick={handleSelect}
               placeholder={placeholder}
-              className="min-h-[44px] max-h-[120px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="min-h-[88px] max-h-[200px] resize-none border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
               disabled={disabled}
             />
           </div>
 
           {/* Toolbar row */}
-          <div className="flex items-center gap-1.5 px-3 pb-2 pt-1">
+          <div className="flex items-center gap-1.5 px-3 pb-2 pt-1 border-t border-border/40">
             {/* Model selector */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -171,13 +171,20 @@ export function WorkflowShell({
   ]);
 
   // Auto-advance when step completes and autoAdvance is enabled
+  const autoAdvancingRef = useRef(false);
   useEffect(() => {
     if (!autoAdvance) return;
     if (workflowState?.step_status !== "completed") return;
     if (!workflowState.current_step_id) return; // workflow done
+    if (autoAdvancingRef.current) return;
 
     const timer = setTimeout(() => {
-      advanceStep(ticket.id).then(() => onRefreshTicket());
+      autoAdvancingRef.current = true;
+      advanceStep(ticket.id)
+        .then(() => onRefreshTicket())
+        .finally(() => {
+          autoAdvancingRef.current = false;
+        });
     }, 500);
 
     return () => clearTimeout(timer);

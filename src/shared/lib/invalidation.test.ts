@@ -90,9 +90,12 @@ describe("useTauriEventInvalidation", () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledTimes(1);
+    expect(invalidateSpy).toHaveBeenCalledTimes(2);
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["workflows", "state", "/test/project", "TICKET-99"],
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["conversations", "/test/project", "TICKET-99"],
     });
   });
 });

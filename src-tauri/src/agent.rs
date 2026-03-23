@@ -480,6 +480,8 @@ pub async fn execute_step(
     app_handle: &tauri::AppHandle,
     tickets_dir_override: Option<&str>,
     canonical_project_dir: Option<&str>,
+    conversation_writer: Option<&tokio::sync::Mutex<crate::conversation::ConversationWriter>>,
+    current_step_id: Option<&str>,
 ) -> Result<(String, String), String> {
     let agent_bin = find_agent_binary().ok_or_else(|| {
         "Agent sidecar binary not found. Run 'bun run agent:build' first.".to_string()
@@ -823,6 +825,14 @@ pub async fn execute_step(
                     app_handle,
                     canonical_project_dir.unwrap_or(project_dir),
                 );
+
+                // Persist to conversation NDJSON
+                if let Some(writer) = conversation_writer {
+                    let step = current_step_id.unwrap_or(issue_id);
+                    if let Err(e) = writer.lock().await.append_raw(msg_type, &params, step) {
+                        log::error!("conversation: failed to append: {}", e);
+                    }
+                }
             }
 
             "queryComplete" => {

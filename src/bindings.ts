@@ -62,6 +62,12 @@ async syncPullAll(projectDir: string) : Promise<Ticket[]> {
 async syncPushTicket(projectDir: string, id: string) : Promise<string> {
     return await TAURI_INVOKE("sync_push_ticket", { projectDir, id });
 },
+async conversationRestore(projectDir: string, ticketId: string) : Promise<ConversationSnapshot | null> {
+    return await TAURI_INVOKE("conversation_restore", { projectDir, ticketId });
+},
+async conversationList(projectDir: string) : Promise<ConversationSummary[]> {
+    return await TAURI_INVOKE("conversation_list", { projectDir });
+},
 async workflowList(projectDir: string) : Promise<WorkflowDefinition[]> {
     return await TAURI_INVOKE("workflow_list", { projectDir });
 },
@@ -168,6 +174,10 @@ export type ClaudeStatus = { installed: boolean; authenticated: boolean; path?: 
  * Result of a commit action executed via the agent sidecar.
  */
 export type CommitActionResult = { success: boolean; message: string; commit_hash?: string | null; pr_url?: string | null }
+export type ConversationEventRecord = { timestamp: string; sequence: number; step_id: string; event_type: string; content: string }
+export type ConversationSnapshot = { schema_version: number; ticket_id: string; session_id: string | null; created_at: string; updated_at: string; status: string; events: ConversationEventRecord[]; steps: ConversationStepRecord[]; event_count: number }
+export type ConversationStepRecord = { step_id: string; label: string | null; started_at: string; completed_at: string | null; status: string; first_sequence: number }
+export type ConversationSummary = { ticket_id: string; status: string; event_count: number; updated_at: string }
 export type DiffFile = { path: string; status: string; additions: number; deletions: number; hunks: DiffHunk[] }
 export type DiffHunk = { header: string; old_start: number; old_count: number; new_start: number; new_count: number; lines: DiffLine[] }
 export type DiffLine = { line_type: DiffLineType; content: string; old_line_no?: number | null; new_line_no?: number | null }

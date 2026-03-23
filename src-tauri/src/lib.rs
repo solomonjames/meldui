@@ -2,6 +2,7 @@ mod agent;
 #[allow(dead_code)]
 mod beads;
 mod claude;
+mod conversation;
 mod menu;
 mod preferences;
 mod settings;
@@ -251,6 +252,25 @@ async fn sync_push_ticket(project_dir: String, id: String) -> Result<String, Str
     sync::push_ticket(&project_dir, &ticket).await
 }
 
+// ── Conversation commands ──
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_restore(
+    project_dir: String,
+    ticket_id: String,
+) -> Result<Option<conversation::ConversationSnapshot>, String> {
+    conversation::restore_conversation(&project_dir, &ticket_id)
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_list(
+    project_dir: String,
+) -> Result<Vec<conversation::ConversationSummary>, String> {
+    conversation::list_conversations(&project_dir)
+}
+
 // ── Workflow commands ──
 
 #[tauri::command]
@@ -412,6 +432,8 @@ pub fn run() {
             settings_update,
             sync_pull_all,
             sync_push_ticket,
+            conversation_restore,
+            conversation_list,
             workflow_list,
             workflow_get,
             workflow_assign,

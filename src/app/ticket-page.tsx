@@ -146,6 +146,7 @@ export function TicketPage({
               {hasActiveWorkflow ? (
                 <WorkflowShell
                   ticket={ticket}
+                  projectDir={projectDir}
                   onNavigateToBacklog={onNavigateToBacklog}
                   onRefreshTicket={handleRefreshTicket}
                 />

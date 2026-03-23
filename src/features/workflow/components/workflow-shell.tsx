@@ -13,12 +13,14 @@ import type { StepExecutionResult, Ticket } from "@/shared/types";
 
 interface WorkflowShellProps {
   ticket: Ticket;
+  projectDir: string;
   onNavigateToBacklog: () => void;
   onRefreshTicket: () => Promise<void>;
 }
 
 export function WorkflowShell({
   ticket,
+  projectDir,
   onNavigateToBacklog,
   onRefreshTicket,
 }: WorkflowShellProps) {
@@ -229,6 +231,8 @@ export function WorkflowShell({
             pendingFeedback={pendingFeedback}
             onRespondToFeedback={onRespondToFeedback}
             onExecute={handleExecute}
+            projectDir={projectDir}
+            ticketId={ticket.id}
           />
         );
       case "review":

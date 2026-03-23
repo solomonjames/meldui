@@ -40,7 +40,16 @@ export function snapshotToBlocks(
     switch (event.event_type) {
       case "text": {
         flushToolGroup();
-        blocks.push({ type: "text", content: event.content });
+        const text = extractContent(event.content);
+        if (text) {
+          // Merge consecutive text chunks into a single block
+          const last = blocks[blocks.length - 1];
+          if (last && last.type === "text") {
+            last.content += text;
+          } else {
+            blocks.push({ type: "text", content: text });
+          }
+        }
         break;
       }
       case "tool_start": {
@@ -60,7 +69,7 @@ export function snapshotToBlocks(
         const toolId = (parsed?.tool_id ?? "") as string;
         const existing = toolMap.get(toolId);
         if (existing) {
-          existing.input += (parsed?.input ?? event.content) as string;
+          existing.input += (parsed?.content ?? parsed?.input ?? event.content) as string;
         }
         break;
       }
@@ -72,7 +81,7 @@ export function snapshotToBlocks(
         const toolId = (parsed?.tool_id ?? "") as string;
         const existing = toolMap.get(toolId);
         if (existing) {
-          existing.result = (parsed?.result ?? event.content) as string;
+          existing.result = (parsed?.content ?? parsed?.result ?? event.content) as string;
           existing.is_error = (parsed?.is_error ?? false) as boolean;
         }
         break;
@@ -94,18 +103,19 @@ export function snapshotToBlocks(
         break;
       }
       case "thinking": {
-        flushToolGroup();
-        blocks.push({ type: "text", content: event.content });
+        // Thinking content is informational; skip rendering in history
         break;
       }
       case "result": {
         flushToolGroup();
-        blocks.push({ type: "text", content: event.content });
+        const resultText = extractContent(event.content);
+        if (resultText) blocks.push({ type: "text", content: resultText });
         break;
       }
       case "error": {
         flushToolGroup();
-        blocks.push({ type: "text", content: `**Error:** ${event.content}` });
+        const errorText = extractContent(event.content) ?? event.content;
+        blocks.push({ type: "text", content: `**Error:** ${errorText}` });
         break;
       }
       default:
@@ -123,4 +133,16 @@ function safeParse(content: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/** Extract the inner `content` field from a JSON-serialized event payload.
+ *  The NDJSON stores the full params object (e.g. `{"content":"...","type":"text"}`),
+ *  so we need to unwrap it. Falls back to the raw string if it's not JSON. */
+function extractContent(raw: string): string | null {
+  const parsed = safeParse(raw);
+  if (parsed && typeof parsed.content === "string") {
+    return parsed.content || null;
+  }
+  // Not JSON — use the raw string directly
+  return raw || null;
 }

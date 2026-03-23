@@ -122,28 +122,31 @@ export function TicketPage({
     : undefined;
 
   return (
-    <div className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950">
-      {/* Page header */}
-      <div className="px-6 py-3 border-b bg-white dark:bg-zinc-900 flex items-center gap-3 shrink-0">
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onNavigateToBacklog}>
-          <ArrowLeft className="w-4 h-4" />
-        </Button>
-        <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono text-muted-foreground">
-          <Hash className="w-3 h-3" />
-          {ticket.id}
-        </span>
-        <h1 className="text-sm font-semibold truncate">{ticket.title}</h1>
-      </div>
+    <div className="flex h-full bg-zinc-50 dark:bg-zinc-950 relative">
+      <ResizablePanelGroup key={detailsCollapsed ? "collapsed" : "expanded"} direction="horizontal">
+        {/* Left: Header + Main content */}
+        <ResizablePanel defaultSize={detailsCollapsed ? 100 : 72} minSize={30}>
+          <div className="flex flex-col h-full">
+            {/* Page header — left panel only */}
+            <div className="px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-2.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                onClick={onNavigateToBacklog}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+              </Button>
+              <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-700" />
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground/70">
+                <Hash className="w-2.5 h-2.5" />
+                {ticket.id}
+              </span>
+              <h1 className="text-sm font-medium truncate text-foreground/90">{ticket.title}</h1>
+            </div>
 
-      {/* Main content */}
-      <div className="flex-1 overflow-hidden relative">
-        <ResizablePanelGroup
-          key={detailsCollapsed ? "collapsed" : "expanded"}
-          direction="horizontal"
-        >
-          {/* Left: Main content area */}
-          <ResizablePanel defaultSize={detailsCollapsed ? 100 : 70} minSize={30}>
-            <div className="h-full overflow-hidden">
+            {/* Main content area */}
+            <div className="flex-1 overflow-hidden">
               {hasActiveWorkflow ? (
                 <WorkflowShell
                   ticket={ticket}
@@ -164,38 +167,15 @@ export function TicketPage({
                 />
               )}
             </div>
-          </ResizablePanel>
+          </div>
+        </ResizablePanel>
 
-          {/* Resize handle */}
-          {!detailsCollapsed && <ResizableHandle withHandle />}
+        {/* Resize handle */}
+        {!detailsCollapsed && <ResizableHandle withHandle />}
 
-          {/* Right: Ticket details panel */}
-          {!detailsCollapsed && (
-            <ResizablePanel defaultSize={30} minSize={15}>
-              <TicketDetailsPanel
-                ticket={ticket}
-                allTickets={allTickets}
-                onUpdateTicket={onUpdateTicket}
-                onShowTicket={onShowTicket}
-                onAddComment={onAddComment}
-                onUpdateSection={handleUpdateSection}
-                onDeleteTicket={onDeleteTicket}
-                sectionDefs={workflowDef?.ticket_sections}
-                lastUpdatedSectionId={workflowCtx.lastUpdatedSectionId}
-                isCollapsed={false}
-                onToggleCollapse={() => setDetailsCollapsed(true)}
-                workflowSteps={workflowDef?.steps}
-                currentStepId={workflowCtx.currentState?.current_step_id}
-                stepHistory={workflowCtx.currentState?.step_history}
-                onStepClick={(stepId) => scrollToStepRef.current(stepId)}
-              />
-            </ResizablePanel>
-          )}
-        </ResizablePanelGroup>
-
-        {/* Collapsed panel toggle */}
-        {detailsCollapsed && (
-          <div className="absolute top-0 right-0 z-10">
+        {/* Right: Ticket details panel — full height */}
+        {!detailsCollapsed && (
+          <ResizablePanel defaultSize={28} minSize={18}>
             <TicketDetailsPanel
               ticket={ticket}
               allTickets={allTickets}
@@ -206,16 +186,39 @@ export function TicketPage({
               onDeleteTicket={onDeleteTicket}
               sectionDefs={workflowDef?.ticket_sections}
               lastUpdatedSectionId={workflowCtx.lastUpdatedSectionId}
-              isCollapsed={true}
-              onToggleCollapse={() => setDetailsCollapsed(false)}
+              isCollapsed={false}
+              onToggleCollapse={() => setDetailsCollapsed(true)}
               workflowSteps={workflowDef?.steps}
               currentStepId={workflowCtx.currentState?.current_step_id}
               stepHistory={workflowCtx.currentState?.step_history}
-              onStepClick={() => {}}
+              onStepClick={(stepId) => scrollToStepRef.current(stepId)}
             />
-          </div>
+          </ResizablePanel>
         )}
-      </div>
+      </ResizablePanelGroup>
+
+      {/* Collapsed panel toggle */}
+      {detailsCollapsed && (
+        <div className="absolute top-0 right-0 z-10">
+          <TicketDetailsPanel
+            ticket={ticket}
+            allTickets={allTickets}
+            onUpdateTicket={onUpdateTicket}
+            onShowTicket={onShowTicket}
+            onAddComment={onAddComment}
+            onUpdateSection={handleUpdateSection}
+            onDeleteTicket={onDeleteTicket}
+            sectionDefs={workflowDef?.ticket_sections}
+            lastUpdatedSectionId={workflowCtx.lastUpdatedSectionId}
+            isCollapsed={true}
+            onToggleCollapse={() => setDetailsCollapsed(false)}
+            workflowSteps={workflowDef?.steps}
+            currentStepId={workflowCtx.currentState?.current_step_id}
+            stepHistory={workflowCtx.currentState?.step_history}
+            onStepClick={() => {}}
+          />
+        </div>
+      )}
     </div>
   );
 }

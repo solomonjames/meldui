@@ -318,11 +318,26 @@ export function WorkflowShell({
         onValueChange={(v) => setActiveTab(v as "chat" | "changes" | "commit")}
         className="flex flex-1 flex-col overflow-hidden"
       >
-        <div className="border-b bg-white px-4 dark:bg-zinc-900">
-          <TabsList>
-            <TabsTrigger value="chat">Chat</TabsTrigger>
-            <TabsTrigger value="changes">Changes</TabsTrigger>
-            <TabsTrigger value="commit">Commit</TabsTrigger>
+        <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+          <TabsList className="ml-2 rounded-none border-0 bg-transparent h-auto p-0">
+            <TabsTrigger
+              value="chat"
+              className="rounded-none border-0 px-3 py-2.5 text-xs font-medium data-active:shadow-none data-active:bg-transparent"
+            >
+              Chat
+            </TabsTrigger>
+            <TabsTrigger
+              value="changes"
+              className="rounded-none border-0 px-3 py-2.5 text-xs font-medium data-active:shadow-none data-active:bg-transparent"
+            >
+              Changes
+            </TabsTrigger>
+            <TabsTrigger
+              value="commit"
+              className="rounded-none border-0 px-3 py-2.5 text-xs font-medium data-active:shadow-none data-active:bg-transparent"
+            >
+              Commit
+            </TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="chat" className="flex flex-1 flex-col overflow-hidden">

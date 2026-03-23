@@ -4,7 +4,6 @@ import {
   Calendar,
   ChevronDown,
   GitPullRequest,
-  Hash,
   PanelRightClose,
   PanelRightOpen,
   Send,
@@ -348,32 +347,39 @@ export function TicketDetailsPanel({
   const hasWorkflow = workflowSteps && workflowSteps.length > 0;
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Panel header */}
-      <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono text-muted-foreground">
-            <Hash className="w-3 h-3" />
-            {ticket.id}
-          </span>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 w-7 p-0 shrink-0"
-          onClick={onToggleCollapse}
-        >
-          <PanelRightClose className="w-4 h-4" />
-        </Button>
-      </div>
-
+    <div className="flex flex-col h-full border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
       <Tabs defaultValue="ticket" className="flex flex-1 flex-col overflow-hidden">
-        {hasWorkflow && (
-          <TabsList className="mx-4 mt-2 shrink-0">
-            <TabsTrigger value="ticket">Ticket</TabsTrigger>
-            <TabsTrigger value="workflow">Workflow</TabsTrigger>
-          </TabsList>
-        )}
+        {/* Panel header — tabs + collapse button */}
+        <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+          <div className="flex items-center">
+            {hasWorkflow ? (
+              <TabsList className="ml-2 my-0 rounded-none border-0 bg-transparent h-auto p-0">
+                <TabsTrigger
+                  value="ticket"
+                  className="rounded-none border-0 px-3 py-2.5 text-xs font-medium data-active:shadow-none data-active:bg-transparent"
+                >
+                  Ticket
+                </TabsTrigger>
+                <TabsTrigger
+                  value="workflow"
+                  className="rounded-none border-0 px-3 py-2.5 text-xs font-medium data-active:shadow-none data-active:bg-transparent"
+                >
+                  Workflow
+                </TabsTrigger>
+              </TabsList>
+            ) : (
+              <span className="px-4 py-2.5 text-xs font-medium text-foreground">Ticket</span>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 shrink-0 mr-2 text-muted-foreground hover:text-foreground"
+            onClick={onToggleCollapse}
+          >
+            <PanelRightClose className="w-3.5 h-3.5" />
+          </Button>
+        </div>
 
         <TabsContent value="ticket" className="flex-1 overflow-hidden mt-0">
           <ScrollArea className="flex-1">

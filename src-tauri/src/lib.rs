@@ -72,24 +72,6 @@ async fn agent_permission_respond(
 
 #[tauri::command]
 #[specta::specta]
-async fn agent_feedback_respond(
-    request_id: String,
-    approved: bool,
-    feedback: Option<String>,
-    state: tauri::State<'_, AgentState>,
-) -> Result<(), String> {
-    let handle_guard = state.handle.lock().await;
-    if let Some(handle) = handle_guard.as_ref() {
-        handle
-            .respond_to_feedback(&request_id, approved, feedback)
-            .await
-    } else {
-        Err("No active agent session".to_string())
-    }
-}
-
-#[tauri::command]
-#[specta::specta]
 async fn agent_review_respond(
     request_id: String,
     submission: serde_json::Value,
@@ -406,9 +388,8 @@ async fn workflow_cleanup_worktree(project_dir: String, issue_id: String) -> Res
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use agent::{
-        AgentFeedbackRequest, AgentPermissionRequest, AgentReviewFindingsRequest,
-        NotificationEvent, PrUrlReportedEvent, SectionUpdateEvent, StatusUpdateEvent,
-        StepCompleteEvent, SubtaskClosed, SubtaskCreated, SubtaskUpdated,
+        AgentPermissionRequest, AgentReviewFindingsRequest, NotificationEvent, PrUrlReportedEvent,
+        SectionUpdateEvent, StatusUpdateEvent, SubtaskClosed, SubtaskCreated, SubtaskUpdated,
     };
     let builder = tauri_specta::Builder::<tauri::Wry>::new()
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
@@ -417,7 +398,6 @@ pub fn run() {
             claude_status,
             claude_login,
             agent_permission_respond,
-            agent_feedback_respond,
             agent_review_respond,
             ticket_list,
             ticket_create,
@@ -451,14 +431,12 @@ pub fn run() {
         ])
         .events(tauri_specta::collect_events![
             AgentPermissionRequest,
-            AgentFeedbackRequest,
             AgentReviewFindingsRequest,
             SubtaskCreated,
             SubtaskUpdated,
             SubtaskClosed,
             SectionUpdateEvent,
             NotificationEvent,
-            StepCompleteEvent,
             StatusUpdateEvent,
             PrUrlReportedEvent,
             preferences::AppPreferences,

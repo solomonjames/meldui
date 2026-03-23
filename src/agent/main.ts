@@ -24,13 +24,12 @@ import type {
   QueryResult,
   CancelResult,
   ToolApprovalResult,
-  FeedbackRequestResult,
   ReviewRequestResult,
   MessageNotificationParams,
   OutboundMessage,
 } from "./protocol.js";
 import { METHOD_NAMES } from "./protocol.js";
-import type { PermissionRequestEvent, FeedbackRequestEvent, ReviewRequestEvent, ReviewSubmissionData } from "./types.js";
+import type { PermissionRequestEvent, ReviewRequestEvent, ReviewSubmissionData } from "./types.js";
 
 // ── Socket path ──
 
@@ -235,28 +234,6 @@ async function main(): Promise<void> {
         .catch((err) => {
           process.stderr.write(`[sidecar] toolApproval request failed: ${err}\n`);
           event.resolve("deny");
-        })
-        .finally(() => {
-          clearInterval(heartbeat);
-        });
-    });
-
-    agent.on("feedback-request", (event: FeedbackRequestEvent) => {
-      const heartbeat = setInterval(() => {
-        sendMessage({ type: "heartbeat" });
-      }, 30_000);
-
-      rpc.request(METHOD_NAMES.feedbackRequest, {
-        requestId: event.requestId,
-        ticketId: event.ticketId,
-        summary: event.summary,
-      } satisfies Record<string, unknown>)
-        .then((result: FeedbackRequestResult) => {
-          event.resolve({ approved: result.approved, feedback: result.feedback });
-        })
-        .catch((err) => {
-          process.stderr.write(`[sidecar] feedbackRequest failed: ${err}\n`);
-          event.resolve({ approved: false });
         })
         .finally(() => {
           clearInterval(heartbeat);

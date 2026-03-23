@@ -2,7 +2,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import { events } from "@/bindings";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
-import { conversationKeys } from "@/shared/lib/conversations";
 import { ticketKeys } from "@/shared/lib/query-keys";
 
 /**
@@ -34,19 +33,6 @@ export function useTauriEventInvalidation(projectDir: string) {
     if (payload.ticket_id) {
       queryClient.invalidateQueries({
         queryKey: ticketKeys.detail(projectDir, payload.ticket_id),
-      });
-    }
-  });
-
-  // Step complete -> targeted workflow state refetch + conversation cache invalidation
-  useTauriEvent(events.stepCompleteEvent, (payload) => {
-    if (payload.ticket_id) {
-      queryClient.invalidateQueries({
-        queryKey: ["workflows", "state", projectDir, payload.ticket_id],
-      });
-      // Invalidate conversation cache so ChatView picks up the snapshot
-      queryClient.invalidateQueries({
-        queryKey: conversationKeys.ticket(projectDir, payload.ticket_id),
       });
     }
   });

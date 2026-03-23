@@ -7,7 +7,7 @@
 
 import EventEmitter from "eventemitter3";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { createMelduiMcpServer, type FeedbackResponse, type ReviewSubmissionResponse, type ReviewFinding } from "./mcp/meldui-server.js";
+import { createMelduiMcpServer, type ReviewSubmissionResponse, type ReviewFinding } from "./mcp/meldui-server.js";
 import { buildSystemPromptAppend } from "./config.js";
 import type { AgentConfig, MeldAgentEvents, MeldAgent } from "./types.js";
 import type { OutboundMessage } from "./protocol.js";
@@ -46,13 +46,6 @@ export class ClaudeAgent
   async execute(prompt: string, config: AgentConfig): Promise<void> {
     this.abortController = new AbortController();
 
-    const emitFeedbackRequest = (ticketId: string, summary: string): Promise<FeedbackResponse> => {
-      const requestId = `feedback-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      return new Promise((resolve) => {
-        this.emit("feedback-request", { requestId, ticketId, summary, resolve });
-      });
-    };
-
     const emitReviewRequest = (ticketId: string, findings: ReviewFinding[], summary: string): Promise<ReviewSubmissionResponse> => {
       const requestId = `review-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       return new Promise((resolve) => {
@@ -60,7 +53,7 @@ export class ClaudeAgent
       });
     };
 
-    const melduiMcpServer = createMelduiMcpServer(config.projectDir, this.sendFn, emitFeedbackRequest, emitReviewRequest, config.ticketsDir);
+    const melduiMcpServer = createMelduiMcpServer(config.projectDir, this.sendFn, emitReviewRequest, config.ticketsDir);
 
     const systemPromptAppend = buildSystemPromptAppend(config);
 

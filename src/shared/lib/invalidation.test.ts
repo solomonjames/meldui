@@ -77,25 +77,4 @@ describe("useTauriEventInvalidation", () => {
       queryKey: ["tickets", "detail", "/test/project", "TICKET-42"],
     });
   });
-
-  it("step complete triggers workflow state invalidation", async () => {
-    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
-    renderInvalidationHook();
-    await waitForListeners();
-
-    act(() => {
-      emitTauriEvent("step-complete-event", {
-        ticket_id: "TICKET-99",
-        summary: "Step done",
-      });
-    });
-
-    expect(invalidateSpy).toHaveBeenCalledTimes(2);
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: ["workflows", "state", "/test/project", "TICKET-99"],
-    });
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: ["conversations", "/test/project", "TICKET-99"],
-    });
-  });
 });

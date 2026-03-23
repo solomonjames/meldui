@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { clearTauriMocks } from "@/shared/test/mocks/tauri";
 import { WorkflowShell } from "@/features/workflow/components/workflow-shell";
@@ -7,7 +7,9 @@ import type { Ticket, WorkflowDefinition, WorkflowState } from "@/shared/types";
 
 // Mock child components to keep tests focused on the auto-execute logic
 vi.mock("./stage-bar", () => ({
-  StageBar: () => <div data-testid="stage-bar" />,
+  StageBar: ({ autoAdvance }: { autoAdvance?: boolean }) => (
+    <div data-testid="stage-bar" data-auto-advance={autoAdvance} />
+  ),
 }));
 
 vi.mock("./debug-panel", () => ({
@@ -101,8 +103,9 @@ function makeWorkflowContext(overrides: Partial<WorkflowContextValue> = {}): Wor
     clearNotification: vi.fn(),
     statusText: null,
     lastUpdatedSectionId: null,
-    pendingFeedback: null,
-    respondToFeedback: vi.fn(),
+    autoAdvance: false,
+    setAutoAdvance: vi.fn(),
+    advanceStep: vi.fn().mockResolvedValue(undefined),
     setOnRefreshTicket: vi.fn(),
     listWorkflows: vi.fn().mockResolvedValue([]),
     getWorkflow: vi.fn().mockResolvedValue(makeWorkflowDef()),
@@ -459,5 +462,84 @@ describe("WorkflowShell failed step display", () => {
     await waitFor(() => {
       expect(ctx.executeStep).toHaveBeenCalledWith("ticket-1");
     });
+  });
+});
+
+describe("WorkflowShell auto-advance on step completion", () => {
+  let onRefreshTicket: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    clearTauriMocks();
+    vi.useFakeTimers();
+    onRefreshTicket = vi.fn().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("auto-advances when autoAdvance is true and step completes", async () => {
+    const ctx = makeWorkflowContext({
+      currentState: makeWorkflowState({ step_status: "completed" }),
+      autoAdvance: true,
+    });
+
+    render(
+      <WorkflowProvider workflow={ctx}>
+        <WorkflowShell
+          ticket={makeTicket()}
+          projectDir="/test"
+          onNavigateToBacklog={vi.fn()}
+          onRefreshTicket={onRefreshTicket}
+        />
+      </WorkflowProvider>,
+    );
+
+    await vi.advanceTimersByTimeAsync(600);
+    expect(ctx.advanceStep).toHaveBeenCalledWith("ticket-1");
+  });
+
+  it("does NOT auto-advance when autoAdvance is false", async () => {
+    const ctx = makeWorkflowContext({
+      currentState: makeWorkflowState({ step_status: "completed" }),
+      autoAdvance: false,
+    });
+
+    render(
+      <WorkflowProvider workflow={ctx}>
+        <WorkflowShell
+          ticket={makeTicket()}
+          projectDir="/test"
+          onNavigateToBacklog={vi.fn()}
+          onRefreshTicket={onRefreshTicket}
+        />
+      </WorkflowProvider>,
+    );
+
+    await vi.advanceTimersByTimeAsync(600);
+    expect(ctx.advanceStep).not.toHaveBeenCalled();
+  });
+
+  it("does NOT auto-advance on error status", async () => {
+    const ctx = makeWorkflowContext({
+      currentState: makeWorkflowState({
+        step_status: { failed: "something broke" } as unknown as WorkflowState["step_status"],
+      }),
+      autoAdvance: true,
+    });
+
+    render(
+      <WorkflowProvider workflow={ctx}>
+        <WorkflowShell
+          ticket={makeTicket()}
+          projectDir="/test"
+          onNavigateToBacklog={vi.fn()}
+          onRefreshTicket={onRefreshTicket}
+        />
+      </WorkflowProvider>,
+    );
+
+    await vi.advanceTimersByTimeAsync(600);
+    expect(ctx.advanceStep).not.toHaveBeenCalled();
   });
 });

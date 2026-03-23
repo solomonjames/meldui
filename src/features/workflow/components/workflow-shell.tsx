@@ -37,8 +37,9 @@ export function WorkflowShell({
     notifications,
     clearNotification: onClearNotification,
     statusText,
-    pendingFeedback,
-    respondToFeedback: onRespondToFeedback,
+    autoAdvance,
+    setAutoAdvance,
+    advanceStep,
     reviewFindings,
     reviewComments,
     addReviewComment: onAddReviewComment,
@@ -169,6 +170,33 @@ export function WorkflowShell({
     debug,
   ]);
 
+  // Auto-advance when step completes and autoAdvance is enabled
+  const autoAdvancingRef = useRef(false);
+  useEffect(() => {
+    if (!autoAdvance) return;
+    if (workflowState?.step_status !== "completed") return;
+    if (!workflowState.current_step_id) return; // workflow done
+    if (autoAdvancingRef.current) return;
+
+    const timer = setTimeout(() => {
+      autoAdvancingRef.current = true;
+      advanceStep(ticket.id)
+        .then(() => onRefreshTicket())
+        .finally(() => {
+          autoAdvancingRef.current = false;
+        });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [
+    autoAdvance,
+    workflowState?.step_status,
+    workflowState?.current_step_id,
+    advanceStep,
+    ticket.id,
+    onRefreshTicket,
+  ]);
+
   if (!workflowDef) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -189,6 +217,8 @@ export function WorkflowShell({
           steps={workflowDef.steps}
           currentStepId={null}
           stepHistory={workflowState.step_history}
+          autoAdvance={autoAdvance}
+          onAutoAdvanceChange={setAutoAdvance}
         />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3">
@@ -228,9 +258,8 @@ export function WorkflowShell({
             stepStatus={workflowState.step_status}
             stepOutput={currentStepOutput}
             statusText={statusText}
-            pendingFeedback={pendingFeedback}
-            onRespondToFeedback={onRespondToFeedback}
             onExecute={handleExecute}
+            onAdvanceStep={() => advanceStep(ticket.id).then(() => onRefreshTicket())}
             projectDir={projectDir}
             ticketId={ticket.id}
           />
@@ -303,6 +332,8 @@ export function WorkflowShell({
         steps={workflowDef.steps}
         currentStepId={workflowState.current_step_id}
         stepHistory={workflowState.step_history}
+        autoAdvance={autoAdvance}
+        onAutoAdvanceChange={setAutoAdvance}
       />
       {error && (
         <div className="px-6 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800">

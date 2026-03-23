@@ -34,7 +34,6 @@ export const METHOD_NAMES = {
 
   // Sidecar → Rust (requests — expect response)
   toolApproval: "toolApproval",
-  feedbackRequest: "feedbackRequest",
   reviewRequest: "reviewRequest",
 } as const;
 
@@ -77,7 +76,6 @@ export type MessageNotificationParams =
   | ErrorMessage
   | SectionUpdateMessage
   | NotificationMessage
-  | StepCompleteMessage
   | StatusUpdateMessage
   | HeartbeatMessage
   | PrUrlReportedMessage
@@ -111,17 +109,6 @@ export interface ToolApprovalParams {
 
 export interface ToolApprovalResult {
   decision: "allow" | "always-allow" | "deny";
-}
-
-export interface FeedbackRequestParams {
-  requestId: string;
-  ticketId: string;
-  summary: string;
-}
-
-export interface FeedbackRequestResult {
-  approved: boolean;
-  feedback?: string;
 }
 
 export interface ReviewRequestParams {
@@ -200,12 +187,6 @@ export interface NotificationMessage {
   title: string;
   message: string;
   level: string;
-}
-
-export interface StepCompleteMessage {
-  type: "step_complete";
-  ticket_id: string;
-  summary: string;
 }
 
 export interface StatusUpdateMessage {

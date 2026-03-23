@@ -70,8 +70,6 @@ function isValidSection(s: string): s is Section {
   return (VALID_SECTIONS as readonly string[]).includes(s);
 }
 
-export type FeedbackResponse = { approved: boolean; feedback?: string };
-
 export type ReviewSubmissionResponse = {
   action: "approve" | "request_changes";
   summary: string;
@@ -103,7 +101,6 @@ export interface ReviewFinding {
 export function createMelduiMcpServer(
   projectDir: string,
   send: (msg: OutboundMessage) => void,
-  emitFeedbackRequest?: (ticketId: string, summary: string) => Promise<FeedbackResponse>,
   emitReviewRequest?: (ticketId: string, findings: ReviewFinding[], summary: string) => Promise<ReviewSubmissionResponse>,
   ticketsDir?: string,
 ) {
@@ -186,51 +183,6 @@ export function createMelduiMcpServer(
     }
   );
 
-  // ── Workflow control tools ──
-
-  const stepComplete = tool(
-    "meldui_step_complete",
-    "Signal that the current workflow step is done. For gated steps this shows the approval UI; for non-gated steps it auto-advances.",
-    {
-      ticket_id: z.string().describe("The ticket ID"),
-      summary: z.string().describe("Brief description of what was accomplished in this step"),
-    },
-    async ({ ticket_id, summary }) => {
-      send({ type: "step_complete", ticket_id, summary });
-      return { content: [{ type: "text" as const, text: `Step completion signaled for ${ticket_id}` }] };
-    }
-  );
-
-  const requestFeedback = tool(
-    "meldui_request_feedback",
-    "Ask the user to approve your work or provide feedback. BLOCKS until the user responds. Use this after writing a deliverable to a ticket field — the user can iterate until satisfied, then approve to continue.",
-    {
-      ticket_id: z.string().describe("The ticket ID"),
-      summary: z.string().describe("Brief summary of what you produced for the user to review"),
-    },
-    async ({ ticket_id, summary }) => {
-      if (!emitFeedbackRequest) {
-        return { content: [{ type: "text" as const, text: "Feedback request not available (no callback configured)" }], isError: true };
-      }
-
-      // Emit heartbeats while waiting for user response to keep the
-      // idle timeout on the Rust side from firing.
-      const heartbeat = setInterval(() => {
-        send({ type: "heartbeat" });
-      }, 30_000);
-
-      try {
-        const response = await emitFeedbackRequest(ticket_id, summary);
-        if (response.approved) {
-          return { content: [{ type: "text" as const, text: "User approved. You may now call meldui_step_complete to advance to the next step." }] };
-        }
-        return { content: [{ type: "text" as const, text: `User feedback: ${response.feedback ?? "(no details provided)"}. Please address this feedback, update the ticket field using meldui_write_section, then call meldui_request_feedback again to re-confirm.` }] };
-      } finally {
-        clearInterval(heartbeat);
-      }
-    }
-  );
-
   // ── App communication tools ──
 
   const notify = tool(
@@ -294,7 +246,7 @@ export function createMelduiMcpServer(
 
         if (submission.action === "approve") {
           const commentCount = submission.comments.length;
-          return { content: [{ type: "text" as const, text: `User approved the review${commentCount > 0 ? ` with ${commentCount} comment(s)` : ""}. Summary: ${submission.summary || "(none)"}. You may now call meldui_step_complete to advance to the next step.` }] };
+          return { content: [{ type: "text" as const, text: `User approved the review${commentCount > 0 ? ` with ${commentCount} comment(s)` : ""}. Summary: ${submission.summary || "(none)"}. Review approved. You may now finish your response.` }] };
         }
 
         // Request changes — format the feedback for the agent
@@ -694,6 +646,6 @@ export function createMelduiMcpServer(
 
   return createSdkMcpServer({
     name: "meldui",
-    tools: [writeSection, readSection, writeTypedSection, readTypedSection, ticketShow, stepComplete, requestFeedback, submitReview, notify, showStatus, reportPrUrl, writeAcceptanceCriteria, updateAcceptanceCriterion, writeChecklist, checkItem, createSubtask, updateSubtask],
+    tools: [writeSection, readSection, writeTypedSection, readTypedSection, ticketShow, submitReview, notify, showStatus, reportPrUrl, writeAcceptanceCriteria, updateAcceptanceCriterion, writeChecklist, checkItem, createSubtask, updateSubtask],
   });
 }

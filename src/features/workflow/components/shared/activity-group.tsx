@@ -49,25 +49,15 @@ export function ActivityGroup({ activities, summaryText, isActive }: ActivityGro
         onClick={() => setUserExpanded(!expanded)}
         className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded-r-lg"
       >
-        {isActive ? (
-          <div className="relative w-3.5 h-3.5 shrink-0">
-            <div className="absolute inset-0 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
-          </div>
-        ) : (
-          <div className="w-3.5 h-3.5 rounded-full bg-zinc-300 dark:bg-zinc-600 flex items-center justify-center shrink-0">
-            <svg
-              aria-hidden="true"
-              className="w-2 h-2 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={3}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        )}
+        <span
+          className={`w-2 h-2 rounded-full shrink-0 ${
+            isActive ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+          }`}
+        />
         <span className="text-xs text-muted-foreground">{summary}</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-muted-foreground shrink-0">
+          {visibleActivities.length}
+        </span>
         <svg
           aria-hidden="true"
           className={`w-3 h-3 ml-auto text-muted-foreground transition-transform shrink-0 ${expanded ? "rotate-180" : ""}`}

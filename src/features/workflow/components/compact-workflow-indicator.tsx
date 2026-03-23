@@ -23,7 +23,7 @@ export function CompactWorkflowIndicator({
   const completedSet = new Set(completedStepIds);
 
   return (
-    <div className="flex items-center justify-center gap-2.5 rounded-full border border-border bg-muted/50 px-5 py-2">
+    <div className="flex items-center justify-center gap-2.5 rounded-full border border-emerald-500/20 bg-transparent px-5 py-2 backdrop-blur-sm">
       <div className="flex items-center gap-1">
         {steps.map((step) => (
           <div

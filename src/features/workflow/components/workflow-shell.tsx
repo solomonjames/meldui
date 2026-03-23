@@ -240,6 +240,17 @@ export function WorkflowShell({
   if (!currentStep) {
     return (
       <div className="flex flex-col h-full">
+        <div className="flex justify-center px-4 py-2.5">
+          <div className="shadow-[0_0_20px_rgba(16,185,129,0.12)] dark:shadow-[0_0_20px_rgba(16,185,129,0.15)] rounded-full">
+            <CompactWorkflowIndicator
+              steps={workflowDef.steps}
+              currentStepId={null}
+              completedStepIds={completedStepIds}
+              autoAdvance={autoAdvance}
+              onAutoAdvanceChange={setAutoAdvance}
+            />
+          </div>
+        </div>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3">
             <h2 className="text-xl font-semibold">Workflow Complete</h2>
@@ -254,15 +265,6 @@ export function WorkflowShell({
               Back to Board
             </button>
           </div>
-        </div>
-        <div className="flex justify-center border-t bg-white px-4 py-3 dark:bg-zinc-900">
-          <CompactWorkflowIndicator
-            steps={workflowDef.steps}
-            currentStepId={null}
-            completedStepIds={completedStepIds}
-            autoAdvance={autoAdvance}
-            onAutoAdvanceChange={setAutoAdvance}
-          />
         </div>
       </div>
     );
@@ -341,6 +343,17 @@ export function WorkflowShell({
           </TabsList>
         </div>
         <TabsContent value="chat" className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex justify-center px-4 py-2.5">
+            <div className="shadow-[0_0_20px_rgba(16,185,129,0.12)] dark:shadow-[0_0_20px_rgba(16,185,129,0.15)] rounded-full">
+              <CompactWorkflowIndicator
+                steps={workflowDef.steps}
+                currentStepId={workflowState.current_step_id}
+                completedStepIds={completedStepIds}
+                autoAdvance={autoAdvance}
+                onAutoAdvanceChange={setAutoAdvance}
+              />
+            </div>
+          </div>
           <div className="flex flex-1 flex-col overflow-hidden">
             <ChatView
               stepName={currentStep.name}
@@ -356,15 +369,6 @@ export function WorkflowShell({
               isInteractive={currentStep.view === "chat" || currentStep.view === "review"}
               pendingPermission={pendingPermission}
               onRespondToPermission={respondToPermission}
-            />
-          </div>
-          <div className="flex justify-center border-t bg-white px-4 py-3 dark:bg-zinc-900">
-            <CompactWorkflowIndicator
-              steps={workflowDef.steps}
-              currentStepId={workflowState.current_step_id}
-              completedStepIds={completedStepIds}
-              autoAdvance={autoAdvance}
-              onAutoAdvanceChange={setAutoAdvance}
             />
           </div>
         </TabsContent>

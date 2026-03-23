@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { snapshotToBlocks } from "./snapshot-to-blocks";
-import type { ConversationEventRecord, ConversationStepRecord } from "./types";
+import { snapshotToBlocks } from "@/shared/lib/conversations/snapshot-to-blocks";
+import type {
+  ConversationEventRecord,
+  ConversationStepRecord,
+} from "@/shared/lib/conversations/types";
 
 function makeEvent(
   overrides: Partial<ConversationEventRecord> & { event_type: string; content: string },
@@ -137,5 +140,35 @@ describe("snapshotToBlocks", () => {
     const events = [makeEvent({ event_type: "text", content: "plain text" })];
     const blocks = snapshotToBlocks(events, [defaultStep]);
     expect(blocks[1]).toEqual({ type: "text", content: "plain text" });
+  });
+
+  it("deduplicates subagent events by task_id", () => {
+    const events = [
+      makeEvent({
+        event_type: "subagent_start",
+        content: JSON.stringify({ task_id: "sub-1", description: "Analyze code" }),
+        sequence: 1,
+      }),
+      makeEvent({
+        event_type: "subagent_progress",
+        content: JSON.stringify({ task_id: "sub-1", description: "Analyze code" }),
+        sequence: 2,
+      }),
+      makeEvent({
+        event_type: "subagent_complete",
+        content: JSON.stringify({ task_id: "sub-1", description: "Analyze code", summary: "Done" }),
+        sequence: 3,
+      }),
+    ];
+    const blocks = snapshotToBlocks(events, [defaultStep]);
+    // step_divider + 1 subagent block (not 3)
+    expect(blocks).toHaveLength(2);
+    const subagent = blocks[1];
+    expect(subagent.type).toBe("subagent");
+    if (subagent.type === "subagent") {
+      expect(subagent.activity.task_id).toBe("sub-1");
+      expect(subagent.activity.status).toBe("completed");
+      expect(subagent.activity.summary).toBe("Done");
+    }
   });
 });

@@ -1,5 +1,8 @@
+import type {
+  ConversationEventRecord,
+  ConversationStepRecord,
+} from "@/shared/lib/conversations/types";
 import type { ContentBlock, ToolActivity } from "@/shared/types";
-import type { ConversationEventRecord, ConversationStepRecord } from "./types";
 
 export interface StepDivider {
   type: "step_divider";
@@ -91,15 +94,29 @@ export function snapshotToBlocks(
       case "subagent_complete": {
         flushToolGroup();
         const parsed = safeParse(event.content);
-        blocks.push({
-          type: "subagent",
-          activity: {
-            task_id: (parsed?.task_id ?? "") as string,
-            description: (parsed?.description ?? "") as string,
-            status: event.event_type === "subagent_complete" ? "completed" : "running",
-            summary: parsed?.summary as string | undefined,
-          },
-        });
+        const taskId = (parsed?.task_id ?? "") as string;
+        const status = event.event_type === "subagent_complete" ? "completed" : "running";
+        // Update existing subagent block in-place instead of creating duplicates
+        const existingBlock = blocks.find(
+          (b) => b.type === "subagent" && b.activity.task_id === taskId,
+        );
+        if (existingBlock && existingBlock.type === "subagent") {
+          existingBlock.activity.status = status;
+          if (parsed?.summary) existingBlock.activity.summary = parsed.summary as string;
+          if (parsed?.description) {
+            existingBlock.activity.description = parsed.description as string;
+          }
+        } else {
+          blocks.push({
+            type: "subagent",
+            activity: {
+              task_id: taskId,
+              description: (parsed?.description ?? "") as string,
+              status,
+              summary: parsed?.summary as string | undefined,
+            },
+          });
+        }
         break;
       }
       case "thinking": {

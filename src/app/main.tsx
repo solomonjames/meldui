@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "react-error-boundary";
 import { commands } from "@/bindings";
-import "../index.css";
+import "@/index.css";
 import App from "@/app/App";
 import { PreferencesApp } from "@/features/preferences/components/preferences-app";
 import { AppCrashFallback } from "@/shared/components/error/app-crash-fallback";

@@ -1,12 +1,7 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.8/schema.json",
   "files": {
-    "includes": [
-      "src/**",
-      "!src/agent/**",
-      "!src/bindings.ts",
-      "!src/index.css"
-    ]
+    "includes": ["src/**", "!src/agent", "!src/bindings.ts", "!src/index.css"]
   },
   "linter": {
     "enabled": true,
@@ -18,7 +13,18 @@
       },
       "style": {
         "noNonNullAssertion": "off",
-        "useComponentExportOnlyModules": "warn"
+        "useComponentExportOnlyModules": "warn",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["./*", "../*"],
+                "message": "Use absolute @/ imports instead of relative paths. See CLAUDE.md architecture rules."
+              }
+            ]
+          }
+        }
       }
     }
   },

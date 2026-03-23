@@ -2,11 +2,26 @@ import { Channel } from "@tauri-apps/api/core";
 import { useCallback, useState } from "react";
 import type {
   ContentBlock,
+  ContextUsage,
   StepOutputStream,
   StreamChunk,
   SubagentActivity,
   ToolActivity,
 } from "@/shared/types";
+
+function defaultContextUsage(): ContextUsage {
+  return {
+    tokensUsed: 0,
+    contextLimit: 200000,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReads: 0,
+    cacheCreations: 0,
+    costUsd: 0,
+    rateLimitUtilization: 0,
+    rateLimitStatus: "ok",
+  };
+}
 
 /** Update a ToolActivity inside contentBlocks by tool_id */
 function updateToolInBlocks(
@@ -39,6 +54,7 @@ function emptyStepOutput(): StepOutputStream {
     activeToolStartTime: null,
     toolUseSummaries: [],
     isCompacting: false,
+    contextUsage: undefined,
   };
 }
 
@@ -315,6 +331,31 @@ export function useWorkflowStreaming(
               }
             } catch {
               // ignore
+            }
+            break;
+          }
+          case "compact_boundary": {
+            try {
+              const { pre_tokens } = JSON.parse(chunk.content);
+              updated.contextUsage = {
+                ...(current.contextUsage ?? defaultContextUsage()),
+                tokensUsed: pre_tokens,
+              };
+            } catch {
+              /* ignore */
+            }
+            break;
+          }
+          case "rate_limit": {
+            try {
+              const { utilization, status } = JSON.parse(chunk.content);
+              updated.contextUsage = {
+                ...(current.contextUsage ?? defaultContextUsage()),
+                rateLimitUtilization: utilization,
+                rateLimitStatus: status,
+              };
+            } catch {
+              /* ignore */
             }
             break;
           }

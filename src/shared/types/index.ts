@@ -106,7 +106,9 @@ export interface StreamChunk {
     | "files_changed"
     | "tool_use_summary"
     | "compacting"
-    | "init_metadata";
+    | "init_metadata"
+    | "compact_boundary"
+    | "rate_limit";
   content: string;
 }
 
@@ -152,6 +154,18 @@ export type ContentBlock =
   | { type: "subagent"; activity: SubagentActivity }
   | { type: "thinking"; content: string };
 
+export interface ContextUsage {
+  tokensUsed: number;
+  contextLimit: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReads: number;
+  cacheCreations: number;
+  costUsd: number;
+  rateLimitUtilization: number;
+  rateLimitStatus: string;
+}
+
 export interface StepOutputStream {
   textContent: string;
   toolActivities: ToolActivity[];
@@ -166,6 +180,7 @@ export interface StepOutputStream {
   activeToolStartTime: number | null;
   toolUseSummaries: Array<{ summary: string; toolIds: string[] }>;
   isCompacting: boolean;
+  contextUsage?: ContextUsage;
 }
 
 export interface PermissionRequest {

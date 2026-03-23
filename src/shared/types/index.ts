@@ -251,20 +251,9 @@ export interface NotificationEvent {
   level: "info" | "success" | "warning" | "error";
 }
 
-export interface StepCompleteEvent {
-  ticket_id: string;
-  summary: string;
-}
-
 export interface StatusUpdateEvent {
   ticket_id: string;
   status_text: string;
-}
-
-export interface FeedbackRequestEvent {
-  request_id: string;
-  ticket_id: string;
-  summary: string;
 }
 
 // ── Git Types ──

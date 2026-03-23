@@ -35,13 +35,6 @@ export interface ToolResultEvent {
   isError: boolean;
 }
 
-export interface FeedbackRequestEvent {
-  requestId: string;
-  ticketId: string;
-  summary: string;
-  resolve: (response: { approved: boolean; feedback?: string }) => void;
-}
-
 export interface ReviewRequestEvent {
   requestId: string;
   ticketId: string;
@@ -94,7 +87,6 @@ export interface MeldAgentEvents {
   "files-persisted": (event: { files: Array<{ filename: string }> }) => void;
   "status-change": (event: { isCompacting: boolean }) => void;
   "permission-request": (event: PermissionRequestEvent) => void;
-  "feedback-request": (event: FeedbackRequestEvent) => void;
   "review-request": (event: ReviewRequestEvent) => void;
   "thinking-update": (event: { text: string }) => void;
   completed: (event: { response: string; sessionId: string }) => void;

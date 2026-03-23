@@ -1,0 +1,143 @@
+<h2>Layout Approaches</h2>
+<p class="subtitle">How should the main content area and right panel be structured?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Tabs Above Content</h3>
+      <p>Chat | Changes | Commit tabs sit at the top of the main content area. Right panel (Ticket | Workflow) extends from window top to bottom, independent of the left content tabs.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 0; font-family: monospace; font-size: 11px; line-height: 1.6;">
+          <div style="display: flex; height: 280px; background: #1a1a1a;">
+            <!-- Left sidebar -->
+            <div style="width: 44px; background: #111; border-right: 1px solid #333; display: flex; flex-direction: column; align-items: center; padding-top: 8px; gap: 12px;">
+              <div style="width: 20px; height: 20px; background: #10b981; border-radius: 4px;"></div>
+              <div style="width: 20px; height: 20px; background: #333; border-radius: 4px;"></div>
+              <div style="width: 20px; height: 20px; background: #333; border-radius: 4px;"></div>
+            </div>
+            <!-- Main content -->
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <!-- Content tabs -->
+              <div style="display: flex; gap: 0; border-bottom: 1px solid #333; background: #111;">
+                <div style="padding: 8px 16px; color: #10b981; border-bottom: 2px solid #10b981; font-size: 11px;">Chat</div>
+                <div style="padding: 8px 16px; color: #666; font-size: 11px;">Changes</div>
+                <div style="padding: 8px 16px; color: #666; font-size: 11px;">Commit</div>
+              </div>
+              <!-- Chat area -->
+              <div style="flex: 1; padding: 12px; overflow: hidden;">
+                <div style="background: #252525; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; color: #999; font-size: 10px;">Agent: Analyzing the authentication module...</div>
+                <div style="background: #252525; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; color: #999; font-size: 10px;">🔧 Tool: Read src/auth.ts</div>
+                <div style="background: #252525; border-radius: 8px; padding: 8px 12px; color: #999; font-size: 10px;">Agent: I've identified the issue in...</div>
+              </div>
+              <!-- Compact workflow indicator + input -->
+              <div style="padding: 8px 12px; border-top: 1px solid #333;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; padding: 6px 16px; background: #252525; border-radius: 20px; width: fit-content; margin-left: auto; margin-right: auto;">
+                  <span style="color: #10b981;">●●●</span><span style="color: #444;">○○○</span>
+                  <span style="color: #ccc; font-weight: 600; font-size: 12px;">implementation</span>
+                  <span style="color: #666; font-size: 11px;">[3/6]</span>
+                  <span style="color: #444;">|</span>
+                  <span style="color: #666; font-size: 11px;">auto</span>
+                  <div style="width: 28px; height: 16px; background: #10b981; border-radius: 8px; position: relative;">
+                    <div style="width: 12px; height: 12px; background: white; border-radius: 50%; position: absolute; right: 2px; top: 2px;"></div>
+                  </div>
+                </div>
+                <div style="background: #252525; border-radius: 8px; padding: 8px 12px; color: #666; font-size: 10px;">Type a message...</div>
+              </div>
+            </div>
+            <!-- Right panel (full height) -->
+            <div style="width: 200px; border-left: 1px solid #333; display: flex; flex-direction: column;">
+              <div style="display: flex; gap: 0; border-bottom: 1px solid #333; background: #111;">
+                <div style="padding: 8px 12px; color: #666; font-size: 11px;">Ticket</div>
+                <div style="padding: 8px 12px; color: #10b981; border-bottom: 2px solid #10b981; font-size: 11px;">Workflow</div>
+              </div>
+              <div style="padding: 8px; flex: 1;">
+                <div style="padding: 6px 8px; background: #252525; border-radius: 6px; margin-bottom: 4px; color: #10b981; font-size: 10px; cursor: pointer;">✓ spec-understand</div>
+                <div style="padding: 6px 8px; background: #252525; border-radius: 6px; margin-bottom: 4px; color: #10b981; font-size: 10px; cursor: pointer;">✓ spec-investigate</div>
+                <div style="padding: 6px 8px; background: #1a3a2a; border: 1px solid #10b981; border-radius: 6px; margin-bottom: 4px; color: #10b981; font-size: 10px;">● implementation</div>
+                <div style="padding: 6px 8px; background: #1a1a1a; border-radius: 6px; margin-bottom: 4px; color: #555; font-size: 10px;">○ verify</div>
+                <div style="padding: 6px 8px; background: #1a1a1a; border-radius: 6px; margin-bottom: 4px; color: #555; font-size: 10px;">○ diff-review</div>
+                <div style="padding: 6px 8px; background: #1a1a1a; border-radius: 6px; color: #555; font-size: 10px;">○ commit</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Clean separation — content tabs and panel tabs are independent</li><li>Right panel is a peer-level layout element, not nested inside workflow</li><li>Natural tab bar position (top of content)</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Two tab bars on screen (content + panel) could feel busy</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Tabs Integrated Into Chat Footer</h3>
+      <p>Instead of a separate tab bar, Chat | Changes | Commit are small pill-style tabs embedded in the bottom bar alongside the workflow indicator. Content area switches without a top bar.</p>
+      <div class="mockup" style="margin-top: 12px;">
+        <div class="mockup-body" style="padding: 0; font-family: monospace; font-size: 11px; line-height: 1.6;">
+          <div style="display: flex; height: 280px; background: #1a1a1a;">
+            <!-- Left sidebar -->
+            <div style="width: 44px; background: #111; border-right: 1px solid #333; display: flex; flex-direction: column; align-items: center; padding-top: 8px; gap: 12px;">
+              <div style="width: 20px; height: 20px; background: #10b981; border-radius: 4px;"></div>
+              <div style="width: 20px; height: 20px; background: #333; border-radius: 4px;"></div>
+              <div style="width: 20px; height: 20px; background: #333; border-radius: 4px;"></div>
+            </div>
+            <!-- Main content -->
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <!-- Chat area (no top tabs — more vertical space) -->
+              <div style="flex: 1; padding: 12px; overflow: hidden;">
+                <div style="background: #252525; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; color: #999; font-size: 10px;">Agent: Analyzing the authentication module...</div>
+                <div style="background: #252525; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; color: #999; font-size: 10px;">🔧 Tool: Read src/auth.ts</div>
+                <div style="background: #252525; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; color: #999; font-size: 10px;">Agent: I've identified the issue in...</div>
+                <div style="background: #252525; border-radius: 8px; padding: 8px 12px; color: #999; font-size: 10px;">Agent: Making the fix now...</div>
+              </div>
+              <!-- Footer with tabs + workflow indicator + input -->
+              <div style="padding: 8px 12px; border-top: 1px solid #333;">
+                <!-- Content tabs as pills -->
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <div style="display: flex; gap: 4px;">
+                    <div style="padding: 4px 12px; background: #10b981; color: #000; border-radius: 12px; font-size: 10px; font-weight: 600;">Chat</div>
+                    <div style="padding: 4px 12px; background: #252525; color: #666; border-radius: 12px; font-size: 10px;">Changes</div>
+                    <div style="padding: 4px 12px; background: #252525; color: #666; border-radius: 12px; font-size: 10px;">Commit</div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="color: #10b981; font-size: 10px;">●●●</span><span style="color: #444; font-size: 10px;">○○○</span>
+                    <span style="color: #ccc; font-size: 11px; font-weight: 600;">impl</span>
+                    <span style="color: #666; font-size: 10px;">[3/6]</span>
+                    <span style="color: #444;">|</span>
+                    <span style="color: #666; font-size: 10px;">auto</span>
+                    <div style="width: 24px; height: 14px; background: #10b981; border-radius: 7px; position: relative;">
+                      <div style="width: 10px; height: 10px; background: white; border-radius: 50%; position: absolute; right: 2px; top: 2px;"></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="background: #252525; border-radius: 8px; padding: 8px 12px; color: #666; font-size: 10px;">Type a message...</div>
+              </div>
+            </div>
+            <!-- Right panel (full height) -->
+            <div style="width: 200px; border-left: 1px solid #333; display: flex; flex-direction: column;">
+              <div style="display: flex; gap: 0; border-bottom: 1px solid #333; background: #111;">
+                <div style="padding: 8px 12px; color: #666; font-size: 11px;">Ticket</div>
+                <div style="padding: 8px 12px; color: #10b981; border-bottom: 2px solid #10b981; font-size: 11px;">Workflow</div>
+              </div>
+              <div style="padding: 8px; flex: 1;">
+                <div style="padding: 6px 8px; background: #252525; border-radius: 6px; margin-bottom: 4px; color: #10b981; font-size: 10px;">✓ spec-understand</div>
+                <div style="padding: 6px 8px; background: #252525; border-radius: 6px; margin-bottom: 4px; color: #10b981; font-size: 10px;">✓ spec-investigate</div>
+                <div style="padding: 6px 8px; background: #1a3a2a; border: 1px solid #10b981; border-radius: 6px; margin-bottom: 4px; color: #10b981; font-size: 10px;">● implementation</div>
+                <div style="padding: 6px 8px; background: #1a1a1a; border-radius: 6px; margin-bottom: 4px; color: #555; font-size: 10px;">○ verify</div>
+                <div style="padding: 6px 8px; background: #1a1a1a; border-radius: 6px; margin-bottom: 4px; color: #555; font-size: 10px;">○ diff-review</div>
+                <div style="padding: 6px 8px; background: #1a1a1a; border-radius: 6px; color: #555; font-size: 10px;">○ commit</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Maximizes vertical space for chat content</li><li>Feels more like Claude Code's bottom bar aesthetic (matches your screenshot)</li><li>Single visual zone at the bottom for all controls</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Bottom area gets crowded: tabs + dots + auto + input</li><li>When switching to Changes/Commit, the chat input disappears — might be disorienting without a top-level indicator</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

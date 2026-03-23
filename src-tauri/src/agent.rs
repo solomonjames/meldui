@@ -88,14 +88,6 @@ pub struct AgentPermissionRequest {
     pub input: serde_json::Value,
 }
 
-/// Feedback request received from the sidecar.
-#[derive(Debug, Deserialize, Serialize, Clone, specta::Type, tauri_specta::Event)]
-pub struct AgentFeedbackRequest {
-    pub request_id: String,
-    pub ticket_id: String,
-    pub summary: String,
-}
-
 /// Review findings request received from the sidecar.
 #[derive(Debug, Deserialize, Serialize, Clone, specta::Type, tauri_specta::Event)]
 pub struct AgentReviewFindingsRequest {
@@ -144,13 +136,6 @@ pub struct NotificationEvent {
     pub level: String,
 }
 
-/// Emitted when a workflow step is complete.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
-pub struct StepCompleteEvent {
-    pub ticket_id: String,
-    pub summary: String,
-}
-
 /// Emitted when the agent provides a status update.
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
 pub struct StatusUpdateEvent {
@@ -171,10 +156,6 @@ struct PendingPermission {
     json_rpc_id: serde_json::Value,
 }
 
-struct PendingFeedback {
-    json_rpc_id: serde_json::Value,
-}
-
 struct PendingReview {
     json_rpc_id: serde_json::Value,
 }
@@ -183,7 +164,6 @@ struct PendingReview {
 pub struct AgentHandle {
     socket_writer: Arc<Mutex<tokio::io::WriteHalf<UnixStream>>>,
     pending_permission: Arc<Mutex<Option<PendingPermission>>>,
-    pending_feedback: Arc<Mutex<Option<PendingFeedback>>>,
     pending_review: Arc<Mutex<Option<PendingReview>>>,
     next_id: Arc<AtomicU64>,
 }
@@ -235,26 +215,6 @@ impl AgentHandle {
             Ok(())
         } else {
             Err("No pending permission request".to_string())
-        }
-    }
-
-    /// Send a feedback response.
-    pub async fn respond_to_feedback(
-        &self,
-        _request_id: &str,
-        approved: bool,
-        feedback: Option<String>,
-    ) -> Result<(), String> {
-        let mut pending = self.pending_feedback.lock().await;
-        if let Some(p) = pending.take() {
-            self.send_response(
-                p.json_rpc_id,
-                serde_json::json!({ "approved": approved, "feedback": feedback }),
-            )
-            .await?;
-            Ok(())
-        } else {
-            Err("No pending feedback request".to_string())
         }
     }
 
@@ -617,13 +577,11 @@ pub async fn execute_step(
     // ── Set up AgentHandle ──
 
     let pending_permission: Arc<Mutex<Option<PendingPermission>>> = Arc::new(Mutex::new(None));
-    let pending_feedback: Arc<Mutex<Option<PendingFeedback>>> = Arc::new(Mutex::new(None));
     let pending_review: Arc<Mutex<Option<PendingReview>>> = Arc::new(Mutex::new(None));
 
     let agent_handle = AgentHandle {
         socket_writer: write_half.clone(),
         pending_permission: pending_permission.clone(),
-        pending_feedback: pending_feedback.clone(),
         pending_review: pending_review.clone(),
         next_id: next_id.clone(),
     };
@@ -893,38 +851,6 @@ pub async fn execute_step(
                         request_id,
                         tool_name,
                         input,
-                    }
-                    .emit(app_handle);
-                }
-            }
-
-            "feedbackRequest" => {
-                if let Some(id) = msg.id {
-                    let request_id = params
-                        .get("requestId")
-                        .and_then(|r| r.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let ticket_id = params
-                        .get("ticketId")
-                        .and_then(|t| t.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let summary = params
-                        .get("summary")
-                        .and_then(|s| s.as_str())
-                        .unwrap_or("")
-                        .to_string();
-
-                    {
-                        let mut pending = pending_feedback.lock().await;
-                        *pending = Some(PendingFeedback { json_rpc_id: id });
-                    }
-
-                    let _ = AgentFeedbackRequest {
-                        request_id,
-                        ticket_id,
-                        summary,
                     }
                     .emit(app_handle);
                 }
@@ -1243,35 +1169,6 @@ fn dispatch_message_to_tauri(
                 level,
             }
             .emit(app_handle);
-        }
-        "step_complete" => {
-            let ticket_id = params
-                .get("ticket_id")
-                .and_then(|t| t.as_str())
-                .unwrap_or("")
-                .to_string();
-            let summary = params
-                .get("summary")
-                .and_then(|s| s.as_str())
-                .unwrap_or("")
-                .to_string();
-
-            if !ticket_id.is_empty() {
-                match crate::workflow::advance_step(canonical_project_dir, &ticket_id) {
-                    Ok(_state) => {
-                        log::info!(
-                            "agent: workflow advanced for {} (summary: {})",
-                            ticket_id,
-                            summary
-                        );
-                    }
-                    Err(e) => {
-                        log::error!("agent: failed to advance workflow: {}", e);
-                    }
-                }
-            }
-
-            let _ = StepCompleteEvent { ticket_id, summary }.emit(app_handle);
         }
         "status_update" => {
             let ticket_id = params

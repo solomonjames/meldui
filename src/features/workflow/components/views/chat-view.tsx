@@ -9,6 +9,7 @@ import { FilesChanged } from "@/features/workflow/components/shared/files-change
 import { PermissionDialog } from "@/features/workflow/components/shared/permission-dialog";
 import { StepDividerBar } from "@/features/workflow/components/shared/step-divider";
 import { SubagentCard } from "@/features/workflow/components/shared/subagent-card";
+import { ThinkingBlock } from "@/features/workflow/components/shared/thinking-block";
 import { useAgentConfig } from "@/features/workflow/hooks/use-agent-config";
 import { useConversation } from "@/shared/hooks/use-conversation";
 import { snapshotToBlocks } from "@/shared/lib/conversations";
@@ -88,7 +89,6 @@ export function ChatView({
 
   const contentBlocks = stepOutput?.contentBlocks ?? [];
   const hasContent = contentBlocks.length > 0 || response.length > 0;
-  const isThinking = isExecuting && (stepOutput?.thinkingContent?.length ?? 0) > 0 && !hasContent;
   const isStepComplete = stepOutput?.resultContent != null;
   const showInput = isInteractive || !isExecuting;
 
@@ -167,34 +167,18 @@ export function ChatView({
               <PermissionDialog permission={pendingPermission} onRespond={onRespondToPermission} />
             )}
 
-            {/* Thinking indicator */}
-            {isThinking && (
-              <div className="flex items-center gap-2.5 text-sm text-muted-foreground py-1">
-                <div className="flex gap-1">
-                  <span
-                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
-                    style={{ animationDelay: "0ms" }}
-                  />
-                  <span
-                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
-                    style={{ animationDelay: "150ms" }}
-                  />
-                  <span
-                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
-                    style={{ animationDelay: "300ms" }}
-                  />
-                </div>
-                <span className="truncate max-w-[250px]">
-                  {stepOutput?.thinkingContent && stepOutput.thinkingContent.length > 0
-                    ? stepOutput.thinkingContent.slice(-60).trim()
-                    : "Thinking..."}
-                </span>
-              </div>
-            )}
-
             {/* Content blocks — text-first with activity groups */}
             {contentBlocks.map((block, i) => {
               switch (block.type) {
+                case "thinking":
+                  return (
+                    <ThinkingBlock
+                      // biome-ignore lint/suspicious/noArrayIndexKey: content blocks lack stable IDs
+                      key={`thinking-${i}`}
+                      content={block.content}
+                      isActive={isExecuting && i === contentBlocks.length - 1}
+                    />
+                  );
                 case "text":
                   return (
                     <div

@@ -721,6 +721,27 @@ pub async fn execute_step(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
+    // 7b. Open conversation writer for persistence
+    let conversation_writer =
+        match crate::conversation::ConversationWriter::open(project_dir, ticket_id) {
+            Ok(mut w) => {
+                // Write step_start marker
+                if let Err(e) = w.write_step_marker(
+                    &current_step_id,
+                    crate::conversation::StepMarker::Start {
+                        label: step.name.clone(),
+                    },
+                ) {
+                    log::error!("conversation: failed to write step_start: {}", e);
+                }
+                Some(tokio::sync::Mutex::new(w))
+            }
+            Err(e) => {
+                log::error!("conversation: failed to open writer: {}", e);
+                None
+            }
+        };
+
     // 8. Call agent sidecar with the worktree path as project_dir
     //    but keep original project_dir for tickets_dir so ticket reads/writes work
     let tickets_dir = format!("{}/.meldui/tickets", project_dir);
@@ -734,18 +755,50 @@ pub async fn execute_step(
         &app_handle,
         Some(&tickets_dir),
         Some(project_dir),
+        conversation_writer.as_ref(),
+        Some(current_step_id.as_str()),
     )
     .await
     {
         Ok(result) => result,
         Err(e) => {
-            // Mark step as failed so it's not stuck in in_progress.
-            // The session_id is already stored in metadata, so the step
-            // can be resumed by re-executing it.
+            if let Some(ref writer) = conversation_writer {
+                let mut w = writer.lock().await;
+                let _ = w.write_step_marker(
+                    &current_step_id,
+                    crate::conversation::StepMarker::End {
+                        status: "failed".to_string(),
+                    },
+                );
+                let _ = w.flush();
+            }
+            let _ = crate::conversation::snapshot_conversation(project_dir, ticket_id, None);
             let _ = update_step_status(project_dir, ticket_id, StepStatus::Failed(e.clone()));
             return Err(e);
         }
     };
+
+    // Write step_end marker and snapshot
+    if let Some(ref writer) = conversation_writer {
+        let mut w = writer.lock().await;
+        if let Err(e) = w.write_step_marker(
+            &current_step_id,
+            crate::conversation::StepMarker::End {
+                status: "completed".to_string(),
+            },
+        ) {
+            log::error!("conversation: failed to write step_end: {}", e);
+        }
+        let _ = w.flush();
+    }
+    // Snapshot the conversation
+    if let Err(e) = crate::conversation::snapshot_conversation(
+        project_dir,
+        ticket_id,
+        Some(new_session_id.as_str()).filter(|s| !s.is_empty()),
+    ) {
+        log::error!("conversation: failed to snapshot: {}", e);
+    }
 
     // 8. Store session_id back into metadata for next step
     if !new_session_id.is_empty() {
@@ -850,6 +903,8 @@ pub async fn suggest_workflow(
         Some(vec!["Read".into(), "Glob".into(), "Grep".into()]),
         &on_chunk,
         &app_handle,
+        None,
+        None,
         None,
         None,
     )
@@ -1033,6 +1088,8 @@ pub async fn execute_commit_action(
         &app_handle,
         Some(&tickets_dir),
         Some(project_dir),
+        None,
+        None,
     )
     .await?;
 

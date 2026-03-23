@@ -1,11 +1,14 @@
 import { ArrowRight, MessageSquare, Play, Send } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
 import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
 import { FilesChanged } from "@/features/workflow/components/shared/files-changed";
+import { StepDividerBar } from "@/features/workflow/components/shared/step-divider";
 import { SubagentCard } from "@/features/workflow/components/shared/subagent-card";
+import { useConversation } from "@/shared/hooks/use-conversation";
+import { snapshotToBlocks } from "@/shared/lib/conversations";
 import type { FeedbackRequestEvent, StepOutputStream, StepStatus } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
@@ -118,6 +121,8 @@ interface ChatViewProps {
   pendingFeedback?: FeedbackRequestEvent | null;
   onRespondToFeedback?: (requestId: string, approved: boolean, feedback?: string) => void;
   onExecute: () => void;
+  projectDir?: string;
+  ticketId?: string | null;
 }
 
 export function ChatView({
@@ -130,9 +135,18 @@ export function ChatView({
   pendingFeedback,
   onRespondToFeedback,
   onExecute,
+  projectDir,
+  ticketId,
 }: ChatViewProps) {
   const [input, setInput] = useState("");
   const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  // Load persisted conversation history
+  const { data: snapshot } = useConversation(projectDir ?? "", ticketId ?? null);
+  const historyBlocks = useMemo(
+    () => (snapshot ? snapshotToBlocks(snapshot.events, snapshot.steps) : []),
+    [snapshot],
+  );
 
   const contentBlocks = stepOutput?.contentBlocks ?? [];
   const hasContent = contentBlocks.length > 0 || response.length > 0;
@@ -173,6 +187,35 @@ export function ChatView({
 
         <div className="flex-1 overflow-y-auto p-4 relative">
           <div className="space-y-1">
+            {/* Persisted conversation history */}
+            {historyBlocks.map((block, i) => {
+              if (block.type === "step_divider") {
+                return <StepDividerBar key={`hist-div-${block.stepId}`} label={block.label} />;
+              }
+              if (block.type === "text") {
+                return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: history blocks lack stable IDs
+                  <div key={`hist-${i}`} className="prose prose-sm dark:prose-invert max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.content}</ReactMarkdown>
+                  </div>
+                );
+              }
+              if (block.type === "tool_group") {
+                return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: history blocks lack stable IDs
+                  <ActivityGroup key={`hist-${i}`} activities={block.activities} isActive={false} />
+                );
+              }
+              if (block.type === "subagent") {
+                // biome-ignore lint/suspicious/noArrayIndexKey: history blocks lack stable IDs
+                return <SubagentCard key={`hist-${i}`} activity={block.activity} />;
+              }
+              return null;
+            })}
+
+            {/* Current step divider (if we have history and are currently executing) */}
+            {historyBlocks.length > 0 && isExecuting && <StepDividerBar label={stepName} />}
+
             {/* Thinking indicator */}
             {isThinking && (
               <div className="flex items-center gap-2.5 text-sm text-muted-foreground py-1">

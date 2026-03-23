@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ChatView } from "@/features/workflow/components/views/chat-view";
+import { createQueryWrapper } from "@/shared/test/helpers/query-wrapper";
 import type { Ticket, StepStatus } from "@/shared/types";
 
 const makeTicket = (): Ticket => ({
@@ -29,6 +30,7 @@ describe("ChatView display states", () => {
         isExecuting={false}
         stepStatus={"completed" as StepStatus}
       />,
+      { wrapper: createQueryWrapper() },
     );
 
     expect(screen.getByText("Here is the analysis")).toBeInTheDocument();
@@ -42,6 +44,7 @@ describe("ChatView display states", () => {
         isExecuting={true}
         stepStatus={"in_progress" as StepStatus}
       />,
+      { wrapper: createQueryWrapper() },
     );
 
     // Processing state is shown via the ActivityBar component
@@ -56,6 +59,7 @@ describe("ChatView display states", () => {
         isExecuting={false}
         stepStatus={"pending" as StepStatus}
       />,
+      { wrapper: createQueryWrapper() },
     );
 
     expect(screen.getByText("Starting execution...")).toBeInTheDocument();
@@ -85,6 +89,7 @@ describe("ChatView display states", () => {
           isCompacting: false,
         }}
       />,
+      { wrapper: createQueryWrapper() },
     );
 
     expect(screen.getByText("Agent returned an error:")).toBeInTheDocument();
@@ -105,6 +110,7 @@ describe("ChatView display states", () => {
         }}
         onRespondToFeedback={vi.fn()}
       />,
+      { wrapper: createQueryWrapper() },
     );
 
     expect(screen.getByText("Ready for Review")).toBeInTheDocument();

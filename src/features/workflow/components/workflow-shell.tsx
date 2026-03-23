@@ -15,6 +15,7 @@ interface WorkflowShellProps {
   projectDir: string;
   onNavigateToBacklog: () => void;
   onRefreshTicket: () => Promise<void>;
+  scrollToStepRef?: React.MutableRefObject<(stepId: string) => void>;
 }
 
 export function WorkflowShell({
@@ -22,6 +23,7 @@ export function WorkflowShell({
   projectDir,
   onNavigateToBacklog,
   onRefreshTicket,
+  scrollToStepRef,
 }: WorkflowShellProps) {
   const {
     currentState: workflowState,
@@ -70,6 +72,22 @@ export function WorkflowShell({
     if (currentStep?.view === "diff_review") setActiveTab("changes");
     else if (currentStep?.view === "commit") setActiveTab("commit");
   }, [currentStep?.view]);
+
+  // Expose scrollToStep to parent via ref
+  const scrollToStep = useCallback((stepId: string) => {
+    setActiveTab("chat");
+    // Wait a tick for the tab content to render, then scroll
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-step-id="${stepId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (scrollToStepRef) {
+      scrollToStepRef.current = scrollToStep;
+    }
+  }, [scrollToStepRef, scrollToStep]);
 
   // Reset executing guard and clear stale result when step changes.
   // Render-time ref check is the React-recommended pattern for responding to prop changes.

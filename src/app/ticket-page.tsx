@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Hash, Loader2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { WorkflowStartPanel } from "@/app/workflow-start-panel";
 import { commands } from "@/bindings";
 import { TicketDetailsPanel } from "@/features/tickets/components/ticket-details-panel";
@@ -56,6 +56,7 @@ export function TicketPage({
 }: TicketPageProps) {
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   const queryClient = useQueryClient();
+  const scrollToStepRef = useRef<(stepId: string) => void>(() => {});
 
   // Fetch ticket by ID via TanStack Query
   const {
@@ -149,6 +150,7 @@ export function TicketPage({
                   projectDir={projectDir}
                   onNavigateToBacklog={onNavigateToBacklog}
                   onRefreshTicket={handleRefreshTicket}
+                  scrollToStepRef={scrollToStepRef}
                 />
               ) : (
                 <WorkflowStartPanel
@@ -185,7 +187,7 @@ export function TicketPage({
                 workflowSteps={workflowDef?.steps}
                 currentStepId={workflowCtx.currentState?.current_step_id}
                 stepHistory={workflowCtx.currentState?.step_history}
-                onStepClick={() => {}}
+                onStepClick={(stepId) => scrollToStepRef.current(stepId)}
               />
             </ResizablePanel>
           )}

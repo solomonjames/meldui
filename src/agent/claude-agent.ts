@@ -248,6 +248,27 @@ export class ClaudeAgent
             }
             break;
           }
+
+          case "compact_boundary": {
+            const cbMsg = msg as Record<string, unknown>;
+            this.sendFn({
+              type: "compact_boundary",
+              pre_tokens: (cbMsg.pre_tokens as number) ?? 0,
+              trigger: (cbMsg.trigger as string) ?? "auto",
+            });
+            break;
+          }
+
+          case "rate_limit": {
+            const rlMsg = msg as Record<string, unknown>;
+            this.sendFn({
+              type: "rate_limit",
+              status: (rlMsg.status as string) ?? "ok",
+              utilization: (rlMsg.utilization as number) ?? 0,
+              resets_at: rlMsg.resets_at as string | undefined,
+            });
+            break;
+          }
         }
 
         // Handle system subtypes (subagent lifecycle, files_persisted, status)

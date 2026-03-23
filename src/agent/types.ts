@@ -71,8 +71,18 @@ export interface ReviewSubmissionData {
   }>;
 }
 
+export interface InitMetadataEvent {
+  model: string;
+  available_models: string[];
+  tools: string[];
+  slash_commands: string[];
+  skills: string[];
+  mcp_servers: Array<{ name: string; status: string }>;
+}
+
 export interface MeldAgentEvents {
   "chat-session": (event: { sessionId: string }) => void;
+  "init-metadata": (event: InitMetadataEvent) => void;
   "chat-agent-message": (event: { content: string }) => void;
   "chat-tool-use": (event: ToolUseEvent) => void;
   "chat-tool-result": (event: ToolResultEvent) => void;

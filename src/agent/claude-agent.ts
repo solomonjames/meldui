@@ -153,6 +153,26 @@ export class ClaudeAgent
             if (msg.subtype === "init") {
               sessionId = msg.session_id as string;
               this.emit("chat-session", { sessionId });
+              // Emit init metadata for the frontend
+              this.emit("init-metadata", {
+                model: (msg as Record<string, unknown>).model as string ?? "unknown",
+                available_models: ["claude-opus-4-6-1m", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+                tools: Array.isArray((msg as Record<string, unknown>).tools)
+                  ? ((msg as Record<string, unknown>).tools as Array<{ name: string }>).map(t => t.name)
+                  : [],
+                slash_commands: Array.isArray((msg as Record<string, unknown>).slash_commands)
+                  ? (msg as Record<string, unknown>).slash_commands as string[]
+                  : [],
+                skills: Array.isArray((msg as Record<string, unknown>).skills)
+                  ? (msg as Record<string, unknown>).skills as string[]
+                  : [],
+                mcp_servers: Array.isArray((msg as Record<string, unknown>).mcp_servers)
+                  ? ((msg as Record<string, unknown>).mcp_servers as Array<{ name: string; status: string }>).map(s => ({
+                      name: s.name,
+                      status: s.status,
+                    }))
+                  : [],
+              });
             }
             break;
           }

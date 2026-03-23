@@ -1548,6 +1548,15 @@ fn dispatch_message_to_tauri(
                 })
                 .ok();
         }
+        "compact_boundary" | "rate_limit" => {
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: msg_type.to_string(),
+                    content: serde_json::to_string(&params).unwrap_or_default(),
+                })
+                .ok();
+        }
         "heartbeat" => {
             log::debug!("agent: heartbeat received");
         }

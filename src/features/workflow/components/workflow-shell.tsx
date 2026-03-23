@@ -1,21 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { toast } from "sonner";
+import { ChangesTab } from "@/features/workflow/components/changes-tab";
+import { CommitTab } from "@/features/workflow/components/commit-tab";
+import { CompactWorkflowIndicator } from "@/features/workflow/components/compact-workflow-indicator";
 import { DebugPanel } from "@/features/workflow/components/debug-panel";
-import { StageBar } from "@/features/workflow/components/stage-bar";
 import { ChatView } from "@/features/workflow/components/views/chat-view";
-import { CommitView } from "@/features/workflow/components/views/commit-view";
-import { DiffReviewView } from "@/features/workflow/components/views/diff-review-view";
-import { ProgressView } from "@/features/workflow/components/views/progress-view";
-import { ReviewView } from "@/features/workflow/components/views/review-view";
 import { useWorkflowContext } from "@/features/workflow/context";
 import { useDebugLog } from "@/shared/hooks/use-debug-log";
 import type { StepExecutionResult, Ticket } from "@/shared/types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
 interface WorkflowShellProps {
   ticket: Ticket;
   projectDir: string;
   onNavigateToBacklog: () => void;
   onRefreshTicket: () => Promise<void>;
+  scrollToStepRef?: React.MutableRefObject<(stepId: string) => void>;
 }
 
 export function WorkflowShell({
@@ -23,6 +24,7 @@ export function WorkflowShell({
   projectDir,
   onNavigateToBacklog,
   onRefreshTicket,
+  scrollToStepRef,
 }: WorkflowShellProps) {
   const {
     currentState: workflowState,
@@ -64,6 +66,26 @@ export function WorkflowShell({
   const debug = useDebugLog();
 
   const currentStep = workflowDef?.steps.find((s) => s.id === workflowState?.current_step_id);
+  const [activeTab, setActiveTab] = useState<"chat" | "changes" | "commit">("chat");
+
+  // Auto-switch tab based on step view type
+  useEffect(() => {
+    if (currentStep?.view === "diff_review") setActiveTab("changes");
+    else if (currentStep?.view === "commit") setActiveTab("commit");
+  }, [currentStep?.view]);
+
+  // Expose scrollToStep to parent via ref
+  const scrollToStep = useCallback((stepId: string) => {
+    flushSync(() => setActiveTab("chat"));
+    const el = document.querySelector(`[data-step-id="${stepId}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  useEffect(() => {
+    if (scrollToStepRef) {
+      scrollToStepRef.current = scrollToStep;
+    }
+  }, [scrollToStepRef, scrollToStep]);
 
   // Reset executing guard and clear stale result when step changes.
   // Render-time ref check is the React-recommended pattern for responding to prop changes.
@@ -209,17 +231,24 @@ export function WorkflowShell({
     return null;
   }
 
+  // Derive completed step IDs from step history
+  const completedStepIds = (workflowState?.step_history ?? []).map((r) => r.step_id);
+
   // Workflow completed
   if (!currentStep) {
     return (
       <div className="flex flex-col h-full">
-        <StageBar
-          steps={workflowDef.steps}
-          currentStepId={null}
-          stepHistory={workflowState.step_history}
-          autoAdvance={autoAdvance}
-          onAutoAdvanceChange={setAutoAdvance}
-        />
+        <div className="flex justify-center px-4 py-2.5">
+          <div className="shadow-[0_0_20px_rgba(16,185,129,0.12)] dark:shadow-[0_0_20px_rgba(16,185,129,0.15)] rounded-full">
+            <CompactWorkflowIndicator
+              steps={workflowDef.steps}
+              currentStepId={null}
+              completedStepIds={completedStepIds}
+              autoAdvance={autoAdvance}
+              onAutoAdvanceChange={setAutoAdvance}
+            />
+          </div>
+        </div>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3">
             <h2 className="text-xl font-semibold">Workflow Complete</h2>
@@ -240,85 +269,12 @@ export function WorkflowShell({
   }
 
   const isExecuting = workflowState.step_status === "in_progress" || loading;
-  const isCompleted = workflowState.step_status === "completed";
   const isFailed =
     typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
   const currentStepOutput = currentStep ? stepOutputs[currentStep.id] : undefined;
   const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
   const reviewDisabled = !pendingReviewRequestId;
-
-  const renderView = () => {
-    switch (currentStep.view) {
-      case "chat":
-        return (
-          <ChatView
-            stepName={currentStep.name}
-            response={responseText}
-            isExecuting={isExecuting}
-            stepStatus={workflowState.step_status}
-            stepOutput={currentStepOutput}
-            statusText={statusText}
-            onExecute={handleExecute}
-            onAdvanceStep={() => advanceStep(ticket.id).then(() => onRefreshTicket())}
-            projectDir={projectDir}
-            ticketId={ticket.id}
-          />
-        );
-      case "review":
-        return (
-          <ReviewView
-            ticket={ticket}
-            stepName={currentStep.name}
-            response={responseText}
-            stepHistory={workflowState.step_history}
-            isExecuting={isExecuting}
-          />
-        );
-      case "progress":
-        return (
-          <ProgressView
-            stepName={currentStep.name}
-            stepOutput={currentStepOutput}
-            isExecuting={isExecuting}
-            isCompleted={isCompleted}
-            pendingPermission={pendingPermission}
-            onRespondToPermission={respondToPermission}
-          />
-        );
-      case "diff_review":
-        return (
-          <DiffReviewView
-            ticket={ticket}
-            onGetDiff={onGetDiff}
-            reviewFindings={reviewFindings}
-            reviewComments={reviewComments}
-            onAddComment={onAddReviewComment}
-            onDeleteComment={onDeleteReviewComment}
-            onSubmitReview={onSubmitReview}
-            reviewDisabled={reviewDisabled}
-            reviewRoundKey={reviewRoundKey}
-          />
-        );
-      case "commit":
-        return (
-          <CommitView
-            ticket={ticket}
-            response={responseText}
-            onNavigateToBacklog={onNavigateToBacklog}
-            onGetDiff={onGetDiff}
-            onGetBranchInfo={onGetBranchInfo}
-            onExecuteCommitAction={onExecuteCommitAction}
-            onCleanupWorktree={onCleanupWorktree}
-          />
-        );
-      default:
-        return (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-muted-foreground">Unknown view type: {currentStep.view}</p>
-          </div>
-        );
-    }
-  };
+  const agentCommitMessage = lastResult?.response ?? currentStepOutput?.textContent ?? null;
 
   return (
     <div
@@ -328,13 +284,6 @@ export function WorkflowShell({
       }
       className="flex flex-col h-full bg-zinc-100 dark:bg-zinc-950"
     >
-      <StageBar
-        steps={workflowDef.steps}
-        currentStepId={workflowState.current_step_id}
-        stepHistory={workflowState.step_history}
-        autoAdvance={autoAdvance}
-        onAutoAdvanceChange={setAutoAdvance}
-      />
       {error && (
         <div className="px-6 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800">
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -364,7 +313,89 @@ export function WorkflowShell({
             </div>
           );
         })()}
-      <div className="flex-1 overflow-hidden">{renderView()}</div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as "chat" | "changes" | "commit")}
+        className="flex flex-1 flex-col overflow-hidden"
+      >
+        <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+          <TabsList className="ml-2 rounded-none border-0 bg-transparent h-auto p-0">
+            <TabsTrigger
+              value="chat"
+              className="rounded-none border-0 px-3 py-2.5 text-xs font-medium data-active:shadow-none data-active:bg-transparent"
+            >
+              Chat
+            </TabsTrigger>
+            <TabsTrigger
+              value="changes"
+              className="rounded-none border-0 px-3 py-2.5 text-xs font-medium data-active:shadow-none data-active:bg-transparent"
+            >
+              Changes
+            </TabsTrigger>
+            <TabsTrigger
+              value="commit"
+              className="rounded-none border-0 px-3 py-2.5 text-xs font-medium data-active:shadow-none data-active:bg-transparent"
+            >
+              Commit
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="chat" keepMounted className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex justify-center px-4 py-2.5">
+            <div className="shadow-[0_0_20px_rgba(16,185,129,0.12)] dark:shadow-[0_0_20px_rgba(16,185,129,0.15)] rounded-full">
+              <CompactWorkflowIndicator
+                steps={workflowDef.steps}
+                currentStepId={workflowState.current_step_id}
+                completedStepIds={completedStepIds}
+                autoAdvance={autoAdvance}
+                onAutoAdvanceChange={setAutoAdvance}
+              />
+            </div>
+          </div>
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <ChatView
+              stepName={currentStep.name}
+              response={responseText}
+              isExecuting={isExecuting}
+              stepStatus={workflowState.step_status}
+              stepOutput={currentStepOutput}
+              statusText={statusText}
+              onExecute={handleExecute}
+              onAdvanceStep={() => advanceStep(ticket.id).then(() => onRefreshTicket())}
+              projectDir={projectDir}
+              ticketId={ticket.id}
+              isInteractive={currentStep.view === "chat" || currentStep.view === "review"}
+              pendingPermission={pendingPermission}
+              onRespondToPermission={respondToPermission}
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="changes" className="flex flex-1 flex-col overflow-hidden">
+          <ChangesTab
+            ticket={ticket}
+            onGetDiff={onGetDiff}
+            reviewFindings={reviewFindings}
+            reviewComments={reviewComments}
+            onAddComment={onAddReviewComment}
+            onDeleteComment={onDeleteReviewComment}
+            onSubmitReview={onSubmitReview}
+            reviewDisabled={reviewDisabled}
+            reviewRoundKey={reviewRoundKey}
+          />
+        </TabsContent>
+        <TabsContent value="commit" className="flex flex-1 flex-col overflow-hidden">
+          <CommitTab
+            ticket={ticket}
+            agentCommitMessage={agentCommitMessage}
+            onNavigateToBacklog={onNavigateToBacklog}
+            onGetDiff={onGetDiff}
+            onGetBranchInfo={onGetBranchInfo}
+            onExecuteCommitAction={onExecuteCommitAction}
+            onCleanupWorktree={onCleanupWorktree}
+            onRefreshTicket={onRefreshTicket}
+          />
+        </TabsContent>
+      </Tabs>
       <DebugPanel
         entries={debug.getEntries()}
         stateSnapshot={{

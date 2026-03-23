@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
@@ -20,9 +19,9 @@ import { Button } from "@/shared/ui/button";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { Textarea } from "@/shared/ui/textarea";
 
-interface CommitViewProps {
+interface CommitTabProps {
   ticket: Ticket;
-  response: string;
+  agentCommitMessage?: string | null;
   onNavigateToBacklog: () => void;
   onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
   onGetBranchInfo: (dirOverride?: string) => Promise<BranchInfo | null>;
@@ -32,6 +31,7 @@ interface CommitViewProps {
     commitMessage: string,
   ) => Promise<CommitActionResult | null>;
   onCleanupWorktree: (issueId: string) => Promise<void>;
+  onRefreshTicket: () => Promise<void>;
 }
 
 type ActionState =
@@ -47,18 +47,19 @@ const FILE_STATUS_CONFIG: Record<string, { icon: typeof FileText; label: string;
     modified: { icon: FilePen, label: "Modified", color: "text-amber-500" },
   };
 
-export function CommitView({
+export function CommitTab({
   ticket,
-  response,
+  agentCommitMessage,
   onNavigateToBacklog,
   onGetDiff,
   onGetBranchInfo,
   onExecuteCommitAction,
   onCleanupWorktree,
-}: CommitViewProps) {
+  onRefreshTicket,
+}: CommitTabProps) {
   const fallbackMessage = `feat: ${ticket.title.toLowerCase()}`;
   const [userOverride, setUserOverride] = useState<string | null>(null);
-  const commitMessage = userOverride ?? (response || fallbackMessage);
+  const commitMessage = userOverride ?? (agentCommitMessage || fallbackMessage);
 
   const [diffFiles, setDiffFiles] = useState<DiffFile[]>([]);
   const [branchInfo, setBranchInfo] = useState<BranchInfo | null>(null);
@@ -67,11 +68,9 @@ export function CommitView({
   const [actionState, setActionState] = useState<ActionState>({ status: "idle" });
   const [cleanedUp, setCleanedUp] = useState(false);
 
-  // Resolve the worktree path and base commit from ticket metadata (if available)
   const worktreePath = ticket.metadata?.worktree_path as string | undefined;
   const worktreeBaseCommit = ticket.metadata?.worktree_base_commit as string | undefined;
 
-  // Fetch diff and branch info on mount (using worktree path and base commit if available)
   useEffect(() => {
     onGetDiff(worktreePath, worktreeBaseCommit).then((files) => {
       setDiffFiles(files);
@@ -97,6 +96,7 @@ export function CommitView({
         const result = await onExecuteCommitAction(ticket.id, action, commitMessage);
         if (result) {
           setActionState({ status: "success", result });
+          await onRefreshTicket();
         } else {
           setActionState({ status: "error", message: "Action failed — no response from agent" });
         }
@@ -104,7 +104,7 @@ export function CommitView({
         setActionState({ status: "error", message: String(err) });
       }
     },
-    [ticket.id, commitMessage, onExecuteCommitAction],
+    [ticket.id, commitMessage, onExecuteCommitAction, onRefreshTicket],
   );
 
   const handleCleanupWorktree = useCallback(async () => {
@@ -115,13 +115,21 @@ export function CommitView({
   const isLoading = actionState.status === "loading";
   const hasWorktree = !!worktreePath;
 
+  if (diffFiles.length === 0 && actionState.status === "idle" && !isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        Nothing to commit
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="px-6 py-4 border-b bg-white dark:bg-zinc-900">
+      <div className="border-b bg-white px-6 py-4 dark:bg-zinc-900">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <GitCommit className="w-5 h-5 text-emerald-500" />
+            <GitCommit className="h-5 w-5 text-emerald-500" />
             <div>
               <h3 className="text-sm font-semibold">Commit & Complete</h3>
               <p className="text-xs text-muted-foreground">{ticket.title}</p>
@@ -129,10 +137,10 @@ export function CommitView({
           </div>
           {branchInfo && (
             <div className="flex items-center gap-2 text-xs">
-              <GitBranch className="w-3.5 h-3.5 text-muted-foreground" />
+              <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="font-mono font-medium">{branchInfo.branch}</span>
               {branchInfo.remote_tracking && (
-                <span className="text-muted-foreground">→ {branchInfo.remote_tracking}</span>
+                <span className="text-muted-foreground">&rarr; {branchInfo.remote_tracking}</span>
               )}
             </div>
           )}
@@ -140,9 +148,9 @@ export function CommitView({
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="max-w-3xl mx-auto p-6 space-y-6">
+        <div className="mx-auto max-w-3xl space-y-6 p-6">
           {/* Stat Cards */}
-          <div className="grid grid-cols-3 gap-0 rounded-lg border bg-white dark:bg-zinc-900 shadow-sm overflow-hidden">
+          <div className="grid grid-cols-3 gap-0 overflow-hidden rounded-lg border bg-white shadow-sm dark:bg-zinc-900">
             <StatCard label="Files Changed" value={String(diffFiles.length)} />
             <StatCard
               label="Lines Added"
@@ -161,27 +169,27 @@ export function CommitView({
           {/* Commit Message */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Commit Message
               </h4>
               <button
                 type="button"
                 onClick={handleCopy}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
               >
                 {copied ? (
-                  <Check className="w-3 h-3 text-emerald-500" />
+                  <Check className="h-3 w-3 text-emerald-500" />
                 ) : (
-                  <Copy className="w-3 h-3" />
+                  <Copy className="h-3 w-3" />
                 )}
                 {copied ? "Copied" : "Copy"}
               </button>
             </div>
-            <div className="rounded-lg border bg-white dark:bg-zinc-900 shadow-sm overflow-hidden">
+            <div className="overflow-hidden rounded-lg border bg-white shadow-sm dark:bg-zinc-900">
               <Textarea
                 value={commitMessage}
                 onChange={(e) => setUserOverride(e.target.value)}
-                className="min-h-[120px] font-mono text-sm border-0 shadow-none focus-visible:ring-0 resize-y"
+                className="min-h-[120px] resize-y border-0 font-mono text-sm shadow-none focus-visible:ring-0"
                 placeholder="feat: describe your changes..."
               />
             </div>
@@ -195,19 +203,19 @@ export function CommitView({
             <button
               type="button"
               onClick={() => setFilesExpanded((prev) => !prev)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+              className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
             >
               {filesExpanded ? (
-                <ChevronDown className="w-3.5 h-3.5" />
+                <ChevronDown className="h-3.5 w-3.5" />
               ) : (
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="h-3.5 w-3.5" />
               )}
               {diffFiles.length > 0
                 ? `${diffFiles.length} file${diffFiles.length !== 1 ? "s" : ""} changed`
                 : "No changes detected"}
             </button>
             {filesExpanded && diffFiles.length > 0 && (
-              <div className="rounded-lg border bg-white dark:bg-zinc-900 shadow-sm divide-y">
+              <div className="divide-y rounded-lg border bg-white shadow-sm dark:bg-zinc-900">
                 {diffFiles.map((file) => {
                   const config = FILE_STATUS_CONFIG[file.status] ?? FILE_STATUS_CONFIG.modified;
                   const Icon = config.icon;
@@ -216,16 +224,16 @@ export function CommitView({
                       key={file.path}
                       className="flex items-center justify-between px-3 py-2 text-xs"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${config.color}`} />
-                        <span className="font-mono truncate">{file.path}</span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Icon className={`h-3.5 w-3.5 shrink-0 ${config.color}`} />
+                        <span className="truncate font-mono">{file.path}</span>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                      <div className="ml-3 flex shrink-0 items-center gap-2">
                         {file.additions > 0 && (
-                          <span className="text-emerald-600 font-mono">+{file.additions}</span>
+                          <span className="font-mono text-emerald-600">+{file.additions}</span>
                         )}
                         {file.deletions > 0 && (
-                          <span className="text-red-500 font-mono">-{file.deletions}</span>
+                          <span className="font-mono text-red-500">-{file.deletions}</span>
                         )}
                       </div>
                     </div>
@@ -235,14 +243,14 @@ export function CommitView({
             )}
           </div>
 
-          {/* Success / Error States */}
+          {/* Success State */}
           {actionState.status === "success" && (
-            <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 space-y-3">
+            <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/30">
               <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
                 {actionState.result.pr_url ? "Pull request created" : "Changes committed"}
               </p>
               {actionState.result.commit_hash && (
-                <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400">
+                <p className="font-mono text-xs text-emerald-600 dark:text-emerald-400">
                   Commit: {actionState.result.commit_hash}
                 </p>
               )}
@@ -251,21 +259,21 @@ export function CommitView({
                   href={actionState.result.pr_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
+                  className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline dark:text-emerald-400"
                 >
                   {actionState.result.pr_url}
-                  <ExternalLink className="w-3 h-3" />
+                  <ExternalLink className="h-3 w-3" />
                 </a>
               )}
               {hasWorktree && !cleanedUp && (
-                <div className="pt-2 border-t border-emerald-200 dark:border-emerald-800">
+                <div className="border-t border-emerald-200 pt-2 dark:border-emerald-800">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleCleanupWorktree}
                     className="text-xs"
                   >
-                    <Trash2 className="w-3 h-3 mr-1.5" />
+                    <Trash2 className="mr-1.5 h-3 w-3" />
                     Clean up worktree
                   </Button>
                 </div>
@@ -277,8 +285,10 @@ export function CommitView({
               )}
             </div>
           )}
+
+          {/* Error State */}
           {actionState.status === "error" && (
-            <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
               <p className="text-sm text-red-700 dark:text-red-300">{actionState.message}</p>
             </div>
           )}
@@ -286,9 +296,8 @@ export function CommitView({
       </ScrollArea>
 
       {/* Actions */}
-      <div className="px-6 py-4 border-t bg-white dark:bg-zinc-900 flex items-center justify-between">
+      <div className="flex items-center justify-between border-t bg-white px-6 py-4 dark:bg-zinc-900">
         <Button variant="outline" size="sm" onClick={onNavigateToBacklog}>
-          <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
           Back to Board
         </Button>
         <div className="flex items-center gap-3">
@@ -299,9 +308,9 @@ export function CommitView({
             onClick={() => handleCommitAction("commit")}
           >
             {actionState.status === "loading" && actionState.action === "commit" ? (
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             ) : (
-              <GitCommit className="w-3.5 h-3.5 mr-1.5" />
+              <GitCommit className="mr-1.5 h-3.5 w-3.5" />
             )}
             Commit Only
           </Button>
@@ -312,7 +321,7 @@ export function CommitView({
             className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
           >
             {actionState.status === "loading" && actionState.action === "commit_and_pr" && (
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             )}
             Create Pull Request
           </Button>
@@ -334,8 +343,8 @@ function StatCard({
   bordered?: boolean;
 }) {
   return (
-    <div className={`flex flex-col items-center gap-2 py-5 px-6 ${bordered ? "border-l" : ""}`}>
-      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+    <div className={`flex flex-col items-center gap-2 px-6 py-5 ${bordered ? "border-l" : ""}`}>
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       <span className={`text-2xl font-bold ${valueColor ?? ""}`}>{value}</span>

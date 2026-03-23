@@ -9,7 +9,7 @@ import type {
   Ticket,
 } from "@/shared/types";
 
-interface DiffReviewViewProps {
+interface ChangesTabProps {
   ticket: Ticket;
   onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
   reviewFindings: ReviewFinding[];
@@ -26,7 +26,7 @@ interface DiffReviewViewProps {
   reviewRoundKey?: number;
 }
 
-export function DiffReviewView({
+export function ChangesTab({
   ticket,
   onGetDiff,
   reviewFindings,
@@ -36,7 +36,7 @@ export function DiffReviewView({
   onSubmitReview,
   reviewDisabled,
   reviewRoundKey,
-}: DiffReviewViewProps) {
+}: ChangesTabProps) {
   const [files, setFiles] = useState<DiffFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [findingActions, setFindingActions] = useState<FindingAction[]>([]);
@@ -89,6 +89,14 @@ export function DiffReviewView({
       finding_actions: findingActions,
     });
   };
+
+  if (!loading && files.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        No changes yet
+      </div>
+    );
+  }
 
   return (
     <DiffViewer

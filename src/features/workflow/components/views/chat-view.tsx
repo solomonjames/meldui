@@ -5,11 +5,12 @@ import remarkGfm from "remark-gfm";
 import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
 import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
 import { FilesChanged } from "@/features/workflow/components/shared/files-changed";
+import { PermissionDialog } from "@/features/workflow/components/shared/permission-dialog";
 import { StepDividerBar } from "@/features/workflow/components/shared/step-divider";
 import { SubagentCard } from "@/features/workflow/components/shared/subagent-card";
 import { useConversation } from "@/shared/hooks/use-conversation";
 import { snapshotToBlocks } from "@/shared/lib/conversations";
-import type { StepOutputStream, StepStatus } from "@/shared/types";
+import type { PermissionRequest, StepOutputStream, StepStatus } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
 
@@ -54,6 +55,9 @@ interface ChatViewProps {
   onExecute: () => void;
   projectDir?: string;
   ticketId?: string | null;
+  isInteractive?: boolean;
+  pendingPermission?: PermissionRequest | null;
+  onRespondToPermission?: (requestId: string, allowed: boolean) => void;
 }
 
 export function ChatView({
@@ -67,6 +71,9 @@ export function ChatView({
   onExecute,
   projectDir,
   ticketId,
+  isInteractive = true,
+  pendingPermission,
+  onRespondToPermission,
 }: ChatViewProps) {
   const [input, setInput] = useState("");
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -82,6 +89,7 @@ export function ChatView({
   const hasContent = contentBlocks.length > 0 || response.length > 0;
   const isThinking = isExecuting && (stepOutput?.thinkingContent?.length ?? 0) > 0 && !hasContent;
   const isStepComplete = stepOutput?.resultContent != null;
+  const showInput = isInteractive || !isExecuting;
 
   // Auto-scroll chat panel when new content arrives
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll should fire on content/response changes
@@ -106,21 +114,41 @@ export function ChatView({
     <div data-testid="chat-view" className="flex flex-col h-full">
       {/* Chat */}
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="px-4 py-3 border-b bg-white dark:bg-zinc-900 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-medium">{stepName}</h3>
-            {statusText && (
-              <span className="text-xs text-muted-foreground animate-pulse">{statusText}</span>
-            )}
-          </div>
-        </div>
-
         <div className="flex-1 overflow-y-auto p-4 relative">
+          {/* Step status indicator */}
+          {(isExecuting || statusText) && (
+            <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
+              {isExecuting && (
+                <div className="flex gap-0.5">
+                  <span
+                    className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  />
+                  <span
+                    className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
+                </div>
+              )}
+              <span className="font-medium">{stepName}</span>
+              {statusText && <span className="animate-pulse">{statusText}</span>}
+            </div>
+          )}
           <div className="space-y-1">
             {/* Persisted conversation history */}
             {historyBlocks.map((block, i) => {
               if (block.type === "step_divider") {
-                return <StepDividerBar key={`hist-div-${block.stepId}`} label={block.label} />;
+                return (
+                  <StepDividerBar
+                    key={`hist-div-${block.stepId}`}
+                    label={block.label}
+                    stepId={block.stepId}
+                  />
+                );
               }
               if (block.type === "text") {
                 return (
@@ -145,6 +173,11 @@ export function ChatView({
 
             {/* Current step divider (if we have history and are currently executing) */}
             {historyBlocks.length > 0 && isExecuting && <StepDividerBar label={stepName} />}
+
+            {/* Permission dialog — inline in chat timeline */}
+            {pendingPermission && onRespondToPermission && (
+              <PermissionDialog permission={pendingPermission} onRespond={onRespondToPermission} />
+            )}
 
             {/* Thinking indicator */}
             {isThinking && (
@@ -258,27 +291,29 @@ export function ChatView({
           <div ref={chatScrollRef} />
         </div>
 
-        {/* Chat input */}
-        <div className="p-4 border-t bg-white dark:bg-zinc-900">
-          <div className="flex gap-2">
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Add context or ask questions... (Enter to send)"
-              className="min-h-[44px] max-h-[120px] resize-none"
-              disabled={isExecuting}
-            />
-            <Button
-              onClick={handleSend}
-              disabled={!input.trim() || isExecuting}
-              className="self-end"
-              size="sm"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
+        {/* Chat input — hidden for non-interactive steps while executing */}
+        {showInput && (
+          <div className="p-4 border-t bg-white dark:bg-zinc-900">
+            <div className="flex gap-2">
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Add context or ask questions... (Enter to send)"
+                className="min-h-[44px] max-h-[120px] resize-none"
+                disabled={isExecuting}
+              />
+              <Button
+                onClick={handleSend}
+                disabled={!input.trim() || isExecuting}
+                className="self-end"
+                size="sm"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

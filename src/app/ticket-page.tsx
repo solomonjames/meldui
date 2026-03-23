@@ -182,6 +182,10 @@ export function TicketPage({
                 lastUpdatedSectionId={workflowCtx.lastUpdatedSectionId}
                 isCollapsed={false}
                 onToggleCollapse={() => setDetailsCollapsed(true)}
+                workflowSteps={workflowDef?.steps}
+                currentStepId={workflowCtx.currentState?.current_step_id}
+                stepHistory={workflowCtx.currentState?.step_history}
+                onStepClick={() => {}}
               />
             </ResizablePanel>
           )}
@@ -202,6 +206,10 @@ export function TicketPage({
               lastUpdatedSectionId={workflowCtx.lastUpdatedSectionId}
               isCollapsed={true}
               onToggleCollapse={() => setDetailsCollapsed(false)}
+              workflowSteps={workflowDef?.steps}
+              currentStepId={workflowCtx.currentState?.current_step_id}
+              stepHistory={workflowCtx.currentState?.step_history}
+              onStepClick={() => {}}
             />
           </div>
         )}

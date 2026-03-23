@@ -19,6 +19,7 @@ const defaultProps = {
   ticket: makeTicket(),
   stepName: "Understand",
   onExecute: vi.fn(),
+  onAdvanceStep: vi.fn(),
 };
 
 describe("ChatView display states", () => {
@@ -95,27 +96,84 @@ describe("ChatView display states", () => {
     expect(screen.getByText("Agent returned an error:")).toBeInTheDocument();
     expect(screen.getByText("Retry")).toBeInTheDocument();
   });
+});
 
-  it("shows FeedbackCard when pendingFeedback is set", () => {
+describe("ChatView step complete card", () => {
+  it("shows StepCompleteCard when step is complete and not executing", () => {
+    const onAdvanceStep = vi.fn();
     render(
       <ChatView
         {...defaultProps}
-        response="Some response"
-        isExecuting={true}
-        stepStatus={"in_progress" as StepStatus}
-        pendingFeedback={{
-          request_id: "feedback-123",
-          ticket_id: "ticket-1",
-          summary: "Captured problem statement and scope",
+        response="Done analyzing"
+        isExecuting={false}
+        stepStatus={"completed" as StepStatus}
+        stepOutput={{
+          textContent: "Done",
+          toolActivities: [],
+          stderrLines: [],
+          resultContent: "complete",
+          thinkingContent: "",
+          lastChunkType: "",
+          contentBlocks: [],
+          subagentActivities: [],
+          filesChanged: [],
+          activeToolName: null,
+          activeToolStartTime: null,
+          toolUseSummaries: [],
+          isCompacting: false,
         }}
-        onRespondToFeedback={vi.fn()}
+        onAdvanceStep={onAdvanceStep}
       />,
       { wrapper: createQueryWrapper() },
     );
 
-    expect(screen.getByText("Ready for Review")).toBeInTheDocument();
-    expect(screen.getByText("Captured problem statement and scope")).toBeInTheDocument();
-    expect(screen.getByText("Approve & Continue")).toBeInTheDocument();
-    expect(screen.getByText("Give Feedback")).toBeInTheDocument();
+    expect(screen.getByText("Step complete")).toBeInTheDocument();
+    expect(screen.getByText(/Next Step/)).toBeInTheDocument();
+    expect(screen.getByText(/Continue Chatting/)).toBeInTheDocument();
+  });
+
+  it("does NOT show StepCompleteCard when still executing", () => {
+    render(
+      <ChatView
+        {...defaultProps}
+        response="Working..."
+        isExecuting={true}
+        stepStatus={"in_progress" as StepStatus}
+        onAdvanceStep={vi.fn()}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+
+    expect(screen.queryByText("Step complete")).not.toBeInTheDocument();
+  });
+
+  it("does NOT show StepCompleteCard when step has no resultContent", () => {
+    render(
+      <ChatView
+        {...defaultProps}
+        response="Some text"
+        isExecuting={false}
+        stepStatus={"completed" as StepStatus}
+        stepOutput={{
+          textContent: "Some text",
+          toolActivities: [],
+          stderrLines: [],
+          resultContent: null,
+          thinkingContent: "",
+          lastChunkType: "",
+          contentBlocks: [],
+          subagentActivities: [],
+          filesChanged: [],
+          activeToolName: null,
+          activeToolStartTime: null,
+          toolUseSummaries: [],
+          isCompacting: false,
+        }}
+        onAdvanceStep={vi.fn()}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+
+    expect(screen.queryByText("Step complete")).not.toBeInTheDocument();
   });
 });

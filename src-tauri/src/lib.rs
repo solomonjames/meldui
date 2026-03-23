@@ -388,8 +388,10 @@ async fn workflow_cleanup_worktree(project_dir: String, issue_id: String) -> Res
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use agent::{
-        AgentPermissionRequest, AgentReviewFindingsRequest, NotificationEvent, PrUrlReportedEvent,
-        SectionUpdateEvent, StatusUpdateEvent, SubtaskClosed, SubtaskCreated, SubtaskUpdated,
+        agent_set_effort, agent_set_fast_mode, agent_set_model, agent_set_thinking,
+        AgentInitMetadata, AgentPermissionRequest, AgentReviewFindingsRequest, NotificationEvent,
+        PrUrlReportedEvent, SectionUpdateEvent, StatusUpdateEvent, SubtaskClosed, SubtaskCreated,
+        SubtaskUpdated,
     };
     let builder = tauri_specta::Builder::<tauri::Wry>::new()
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
@@ -399,6 +401,10 @@ pub fn run() {
             claude_login,
             agent_permission_respond,
             agent_review_respond,
+            agent_set_model,
+            agent_set_thinking,
+            agent_set_effort,
+            agent_set_fast_mode,
             ticket_list,
             ticket_create,
             ticket_update,
@@ -432,6 +438,7 @@ pub fn run() {
         .events(tauri_specta::collect_events![
             AgentPermissionRequest,
             AgentReviewFindingsRequest,
+            AgentInitMetadata,
             SubtaskCreated,
             SubtaskUpdated,
             SubtaskClosed,

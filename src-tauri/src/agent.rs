@@ -97,6 +97,23 @@ pub struct AgentReviewFindingsRequest {
     pub summary: String,
 }
 
+/// Emitted when the agent sidecar initializes and reports its configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct AgentInitMetadata {
+    pub model: String,
+    pub available_models: Vec<String>,
+    pub tools: Vec<String>,
+    pub slash_commands: Vec<String>,
+    pub skills: Vec<String>,
+    pub mcp_servers: Vec<McpServerInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct McpServerInfo {
+    pub name: String,
+    pub status: String,
+}
+
 /// Emitted when a subtask is created by the agent.
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
 pub struct SubtaskCreated {
@@ -263,6 +280,111 @@ impl AgentState {
         Self {
             handle: Mutex::new(None),
         }
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_set_model(
+    model: String,
+    state: tauri::State<'_, AgentState>,
+) -> Result<(), String> {
+    let handle_guard = state.handle.lock().await;
+    if let Some(handle) = handle_guard.as_ref() {
+        let id = handle
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "agent/set_model",
+            "params": { "model": model },
+            "id": id
+        });
+        handle
+            .send_raw(&serde_json::to_string(&request).unwrap())
+            .await
+    } else {
+        Err("No active agent session".to_string())
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_set_thinking(
+    thinking_type: String,
+    budget_tokens: Option<u32>,
+    state: tauri::State<'_, AgentState>,
+) -> Result<(), String> {
+    let handle_guard = state.handle.lock().await;
+    if let Some(handle) = handle_guard.as_ref() {
+        let id = handle
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut params = serde_json::json!({ "type": thinking_type });
+        if let Some(tokens) = budget_tokens {
+            params["budgetTokens"] = serde_json::json!(tokens);
+        }
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "agent/set_thinking",
+            "params": params,
+            "id": id
+        });
+        handle
+            .send_raw(&serde_json::to_string(&request).unwrap())
+            .await
+    } else {
+        Err("No active agent session".to_string())
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_set_effort(
+    effort: String,
+    state: tauri::State<'_, AgentState>,
+) -> Result<(), String> {
+    let handle_guard = state.handle.lock().await;
+    if let Some(handle) = handle_guard.as_ref() {
+        let id = handle
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "agent/set_effort",
+            "params": { "effort": effort },
+            "id": id
+        });
+        handle
+            .send_raw(&serde_json::to_string(&request).unwrap())
+            .await
+    } else {
+        Err("No active agent session".to_string())
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_set_fast_mode(
+    enabled: bool,
+    state: tauri::State<'_, AgentState>,
+) -> Result<(), String> {
+    let handle_guard = state.handle.lock().await;
+    if let Some(handle) = handle_guard.as_ref() {
+        let id = handle
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "agent/set_fast_mode",
+            "params": { "enabled": enabled },
+            "id": id
+        });
+        handle
+            .send_raw(&serde_json::to_string(&request).unwrap())
+            .await
+    } else {
+        Err("No active agent session".to_string())
     }
 }
 
@@ -1381,6 +1503,48 @@ fn dispatch_message_to_tauri(
                     issue_id: issue_id.to_string(),
                     chunk_type: "compacting".to_string(),
                     content: is_compacting.to_string(),
+                })
+                .ok();
+        }
+        "init_metadata" => {
+            // Parse mcp_servers from params
+            let mcp_servers: Vec<McpServerInfo> = params
+                .get("mcp_servers")
+                .and_then(|s| serde_json::from_value(s.clone()).ok())
+                .unwrap_or_default();
+
+            let _ = AgentInitMetadata {
+                model: params
+                    .get("model")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("unknown")
+                    .to_string(),
+                available_models: params
+                    .get("available_models")
+                    .and_then(|a| serde_json::from_value(a.clone()).ok())
+                    .unwrap_or_default(),
+                tools: params
+                    .get("tools")
+                    .and_then(|t| serde_json::from_value(t.clone()).ok())
+                    .unwrap_or_default(),
+                slash_commands: params
+                    .get("slash_commands")
+                    .and_then(|s| serde_json::from_value(s.clone()).ok())
+                    .unwrap_or_default(),
+                skills: params
+                    .get("skills")
+                    .and_then(|s| serde_json::from_value(s.clone()).ok())
+                    .unwrap_or_default(),
+                mcp_servers,
+            }
+            .emit(app_handle);
+
+            // Also forward as StreamChunk
+            on_chunk
+                .send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "init_metadata".to_string(),
+                    content: serde_json::to_string(params).unwrap_or_default(),
                 })
                 .ok();
         }

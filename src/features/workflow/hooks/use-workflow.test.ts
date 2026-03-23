@@ -244,7 +244,7 @@ describe("useWorkflow", () => {
   });
 
   describe("executeStep error handling", () => {
-    it("clears pendingFeedback and pendingPermission on error", async () => {
+    it("clears pendingPermission on error", async () => {
       mockInvoke.mockImplementation((cmd: string) => {
         if (cmd === "workflow_list") return Promise.resolve([]);
         if (cmd === "workflow_execute_step") return Promise.reject(new Error("sidecar timed out"));
@@ -266,17 +266,17 @@ describe("useWorkflow", () => {
       });
       await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
-      // Simulate pending feedback being set (as if sidecar requested it before dying)
+      // Simulate pending permission being set (as if sidecar requested it before dying)
       act(() => {
-        emitTauriEvent("agent-feedback-request", {
-          request_id: "fb-1",
-          ticket_id: "issue-1",
-          summary: "Review this",
+        emitTauriEvent("agent-permission-request", {
+          request_id: "perm-1",
+          tool_name: "Bash",
+          input: { command: "rm -rf" },
         });
       });
 
       await waitFor(() => {
-        expect(result.current.pendingFeedback).not.toBeNull();
+        expect(result.current.pendingPermission).not.toBeNull();
       });
 
       // Now executeStep fails
@@ -284,76 +284,9 @@ describe("useWorkflow", () => {
         await result.current.executeStep("issue-1");
       });
 
-      // pendingFeedback should be cleared
-      expect(result.current.pendingFeedback).toBeNull();
+      // pendingPermission should be cleared
+      expect(result.current.pendingPermission).toBeNull();
       expect(result.current.error).toContain("Step execution failed");
-    });
-  });
-
-  describe("respondToFeedback broken pipe handling", () => {
-    it("clears pendingFeedback and shows session expired on broken pipe", async () => {
-      const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
-      await waitFor(() => expect(result.current.listenersReady).toBe(true));
-
-      act(() => {
-        result.current.setActiveTicketId("issue-1");
-      });
-      await waitFor(() => expect(result.current.listenersReady).toBe(true));
-
-      // Simulate feedback request
-      act(() => {
-        emitTauriEvent("agent-feedback-request", {
-          request_id: "fb-1",
-          ticket_id: "issue-1",
-          summary: "Review this",
-        });
-      });
-
-      await waitFor(() => {
-        expect(result.current.pendingFeedback).not.toBeNull();
-      });
-
-      // Mock broken pipe error when responding
-      mockInvoke.mockRejectedValueOnce(
-        new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)"),
-      );
-
-      await act(async () => {
-        await result.current.respondToFeedback("fb-1", true);
-      });
-
-      // Should clear feedback and show friendly error
-      expect(result.current.pendingFeedback).toBeNull();
-      expect(result.current.error).toContain("session expired");
-    });
-
-    it("shows generic error for non-broken-pipe failures", async () => {
-      const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
-      await waitFor(() => expect(result.current.listenersReady).toBe(true));
-
-      act(() => {
-        result.current.setActiveTicketId("issue-1");
-      });
-      await waitFor(() => expect(result.current.listenersReady).toBe(true));
-
-      act(() => {
-        emitTauriEvent("agent-feedback-request", {
-          request_id: "fb-1",
-          ticket_id: "issue-1",
-          summary: "Review",
-        });
-      });
-
-      await waitFor(() => expect(result.current.pendingFeedback).not.toBeNull());
-
-      mockInvoke.mockRejectedValueOnce(new Error("Some other error"));
-
-      await act(async () => {
-        await result.current.respondToFeedback("fb-1", true);
-      });
-
-      expect(result.current.pendingFeedback).toBeNull();
-      expect(result.current.error).toContain("Failed to respond to feedback");
     });
   });
 

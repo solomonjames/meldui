@@ -1,4 +1,15 @@
-import { Brain, ChevronDown, FileText, Gauge, Send, Sparkles, Zap } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import {
+  Brain,
+  ChevronDown,
+  FileText,
+  Gauge,
+  Paperclip,
+  Send,
+  Sparkles,
+  X,
+  Zap,
+} from "lucide-react";
 import { type KeyboardEvent, useRef, useState } from "react";
 import { ContextIndicator } from "@/features/workflow/components/shared/context-indicator";
 import {
@@ -32,7 +43,10 @@ interface ComposeToolbarProps {
   }) => void;
   onSetEffort: (effort: "low" | "medium" | "high" | "max") => void;
   onSetFastMode: (enabled: boolean) => void;
-  onSend: (message: string) => void;
+  onSend: (
+    message: string,
+    attachments?: Array<{ name: string; path: string; type: string }>,
+  ) => void;
   disabled?: boolean;
   placeholder?: string;
   contextUsage?: ContextUsage;
@@ -100,7 +114,28 @@ export function ComposeToolbar({
 }: ComposeToolbarProps) {
   const [input, setInput] = useState("");
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [attachments, setAttachments] = useState<
+    Array<{ name: string; path: string; type: string }>
+  >([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleAttach = async () => {
+    const selected = await open({
+      multiple: true,
+      filters: [
+        { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] },
+        { name: "Text", extensions: ["txt", "md", "json", "yaml", "toml", "csv"] },
+      ],
+    });
+    if (!selected) return;
+    const paths = Array.isArray(selected) ? selected : [selected];
+    const newAttachments = paths.slice(0, 5 - attachments.length).map((p) => ({
+      name: p.split("/").pop() ?? p,
+      path: p,
+      type: p.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? "image" : "text",
+    }));
+    setAttachments((prev) => [...prev, ...newAttachments].slice(0, 5));
+  };
 
   const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
     setCursorPosition(e.currentTarget.selectionStart ?? 0);
@@ -148,13 +183,18 @@ export function ComposeToolbar({
       e.preventDefault();
       handleSend();
     }
+    if (e.key === "u" && e.metaKey) {
+      e.preventDefault();
+      handleAttach();
+    }
   };
 
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed || disabled) return;
-    onSend(trimmed);
+    onSend(trimmed, attachments.length > 0 ? attachments : undefined);
     setInput("");
+    setAttachments([]);
   };
 
   const modelDisplayName = MODEL_DISPLAY_NAMES[config.model] ?? config.model;
@@ -292,6 +332,39 @@ export function ComposeToolbar({
               usage={contextUsage}
               visibility={contextIndicatorVisibility ?? "threshold"}
             />
+
+            {/* Attachment chips */}
+            {attachments.length > 0 && (
+              <div className="flex items-center gap-1">
+                {attachments.map((a, i) => (
+                  <span
+                    key={a.path}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-secondary text-[10px]"
+                  >
+                    <Paperclip className="w-2.5 h-2.5" />
+                    {a.name}
+                    <button
+                      type="button"
+                      onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Paperclip button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleAttach}>
+                  <Paperclip className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                Attach files (Cmd+U)
+              </TooltipContent>
+            </Tooltip>
 
             {/* Spacer */}
             <div className="flex-1" />

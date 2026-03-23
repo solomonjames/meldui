@@ -38,6 +38,7 @@ export function AutocompleteMenu({
 
   const filtered = items.filter((item) => fuzzyMatch(item.name, filter));
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filter is a prop — we reset index when filter changes
   useEffect(() => {
     setSelectedIndex(0);
   }, [filter]);

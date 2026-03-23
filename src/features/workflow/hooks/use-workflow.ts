@@ -261,11 +261,15 @@ export function useWorkflow(projectDir: string) {
       try {
         const newState = await commands.workflowAdvance(projectDir, issueId);
         setCurrentState(newState);
+        // Invalidate conversation cache so the next step sees prior step history
+        queryClient.invalidateQueries({
+          queryKey: ["conversations", projectDir, issueId],
+        });
       } catch (err) {
         setError(`Failed to advance step: ${err}`);
       }
     },
-    [projectDir],
+    [projectDir, queryClient],
   );
 
   const setOnRefreshTicket = useCallback((fn: () => Promise<void>) => {

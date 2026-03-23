@@ -27,6 +27,9 @@ import type {
   ReviewRequestResult,
   MessageNotificationParams,
   OutboundMessage,
+  SetThinkingParams,
+  SetEffortParams,
+  SetFastModeParams,
 } from "./protocol.js";
 import { METHOD_NAMES } from "./protocol.js";
 import type { PermissionRequestEvent, ReviewRequestEvent, ReviewSubmissionData } from "./types.js";
@@ -70,6 +73,14 @@ const ppidWatchdog = setInterval(() => {
   }
 }, 2000);
 ppidWatchdog.unref();
+
+// ── Sidecar config state ──
+
+const sidecarConfig = {
+  thinking: { type: "adaptive" as "adaptive" | "enabled" | "disabled", budgetTokens: undefined as number | undefined },
+  effort: "high" as "low" | "medium" | "high" | "max",
+  fastMode: false,
+};
 
 // ── Main ──
 
@@ -217,6 +228,13 @@ async function main(): Promise<void> {
       sendMessage({ type: "compacting", is_compacting: isCompacting });
     });
 
+    agent.on("init-metadata", (metadata) => {
+      sendMessage({
+        type: "init_metadata",
+        ...metadata,
+      });
+    });
+
     agent.on("permission-request", (event: PermissionRequestEvent) => {
       // Send JSON-RPC request to Rust with heartbeats while awaiting response
       const heartbeat = setInterval(() => {
@@ -302,6 +320,26 @@ async function main(): Promise<void> {
       activeAgent.stop();
     }
     return { status: "cancelled" as const };
+  });
+
+  rpc.addMethod(METHOD_NAMES.setModel, async (_params: { model: string }) => {
+    // Model switching is a future capability - store for now
+    return { status: "ok" };
+  });
+
+  rpc.addMethod(METHOD_NAMES.setThinking, async (params: SetThinkingParams) => {
+    sidecarConfig.thinking = { type: params.type, budgetTokens: params.budgetTokens };
+    return { status: "ok" };
+  });
+
+  rpc.addMethod(METHOD_NAMES.setEffort, async (params: SetEffortParams) => {
+    sidecarConfig.effort = params.effort;
+    return { status: "ok" };
+  });
+
+  rpc.addMethod(METHOD_NAMES.setFastMode, async (params: SetFastModeParams) => {
+    sidecarConfig.fastMode = params.enabled;
+    return { status: "ok" };
   });
 
   // Keep process alive while socket is open

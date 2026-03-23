@@ -1,5 +1,6 @@
-import { Brain, ChevronDown, Gauge, Send, Sparkles, Zap } from "lucide-react";
+import { Brain, ChevronDown, FileText, Gauge, Send, Sparkles, Zap } from "lucide-react";
 import { type KeyboardEvent, useRef, useState } from "react";
+import { ContextIndicator } from "@/features/workflow/components/shared/context-indicator";
 import {
   COMMAND_DESCRIPTIONS,
   COMMAND_ICON_FALLBACK,
@@ -11,7 +12,7 @@ import {
   AutocompleteMenu,
 } from "@/shared/components/chat/autocomplete-menu";
 import { useAutocompleteTrigger } from "@/shared/components/chat/autocomplete-utils";
-import type { AgentConfig } from "@/shared/types";
+import type { AgentConfig, ContextUsage } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
@@ -34,6 +35,9 @@ interface ComposeToolbarProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  contextUsage?: ContextUsage;
+  contextIndicatorVisibility?: "threshold" | "always" | "never";
+  projectFiles?: string[];
 }
 
 const THINKING_OPTIONS = [
@@ -90,6 +94,9 @@ export function ComposeToolbar({
   onSend,
   disabled = false,
   placeholder = "Add context or ask questions... (Enter to send)",
+  contextUsage,
+  contextIndicatorVisibility,
+  projectFiles,
 }: ComposeToolbarProps) {
   const [input, setInput] = useState("");
   const [cursorPosition, setCursorPosition] = useState(0);
@@ -104,7 +111,7 @@ export function ComposeToolbar({
     trigger: activeTrigger,
     filter: autocompleteFilter,
     triggerIndex,
-  } = useAutocompleteTrigger(["/", "#"], input, cursorPosition);
+  } = useAutocompleteTrigger(["/", "#", "@"], input, cursorPosition);
 
   const autocompleteItems: AutocompleteItem[] =
     activeTrigger === "/"
@@ -119,7 +126,12 @@ export function ComposeToolbar({
             icon: Sparkles,
             accentColor: "purple",
           }))
-        : [];
+        : activeTrigger === "@"
+          ? (projectFiles ?? []).map((path) => ({
+              name: path,
+              icon: FileText,
+            }))
+          : [];
 
   const handleAutocompleteSelect = (item: AutocompleteItem) => {
     const before = input.slice(0, triggerIndex);
@@ -275,6 +287,11 @@ export function ComposeToolbar({
               <Zap className="w-3 h-3" />
               Fast
             </PillButton>
+
+            <ContextIndicator
+              usage={contextUsage}
+              visibility={contextIndicatorVisibility ?? "threshold"}
+            />
 
             {/* Spacer */}
             <div className="flex-1" />

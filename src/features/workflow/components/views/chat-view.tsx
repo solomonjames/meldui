@@ -275,6 +275,8 @@ export function ChatView({
               onExecute(message);
             }}
             disabled={isExecuting}
+            contextUsage={stepOutput?.contextUsage}
+            contextIndicatorVisibility="threshold"
           />
         )}
       </div>

@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { commands } from "@/bindings";
-import { useWorkflowFeedback } from "@/features/workflow/hooks/use-workflow-feedback";
 import { useWorkflowNotifications } from "@/features/workflow/hooks/use-workflow-notifications";
 import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
 import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
@@ -32,6 +31,7 @@ export function useWorkflow(projectDir: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const [autoAdvance, setAutoAdvance] = useState(false);
 
   const currentStepRef = useRef<string | null>(null);
   const executingStepRef = useRef<string | null>(null);
@@ -49,7 +49,6 @@ export function useWorkflow(projectDir: string) {
   const streaming = useWorkflowStreaming(activeTicketId, executingStepRef);
   createStreamChannelRef.current = streaming.createStreamChannel;
   const permissions = useWorkflowPermissions(activeTicketId, setError);
-  const feedback = useWorkflowFeedback(activeTicketId, setError);
   const review = useWorkflowReview(activeTicketId, setError);
   const notifications = useWorkflowNotifications(
     activeTicketId,
@@ -60,7 +59,6 @@ export function useWorkflow(projectDir: string) {
   const listenersReady =
     streaming.streamingReady &&
     permissions.permissionsReady &&
-    feedback.feedbackReady &&
     review.reviewReady &&
     notifications.notificationsReady;
 
@@ -159,7 +157,6 @@ export function useWorkflow(projectDir: string) {
     [projectDir],
   );
 
-  const { clearPending: clearFeedbackPending } = feedback;
   const { clearPending: clearPermissionPending } = permissions;
 
   const executeStep = useCallback(
@@ -189,7 +186,6 @@ export function useWorkflow(projectDir: string) {
         return result as StepExecutionResult;
       } catch (err) {
         executingStepRef.current = null;
-        clearFeedbackPending();
         clearPermissionPending();
         setError(`Step execution failed: ${err}`);
         await getWorkflowState(issueId);
@@ -198,14 +194,7 @@ export function useWorkflow(projectDir: string) {
         setLoading(false);
       }
     },
-    [
-      projectDir,
-      getWorkflowState,
-      currentState?.workflow_id,
-      workflows,
-      clearFeedbackPending,
-      clearPermissionPending,
-    ],
+    [projectDir, getWorkflowState, currentState?.workflow_id, workflows, clearPermissionPending],
   );
 
   const suggestWorkflow = useCallback(
@@ -274,11 +263,22 @@ export function useWorkflow(projectDir: string) {
     [projectDir],
   );
 
+  const advanceStep = useCallback(
+    async (issueId: string) => {
+      try {
+        const newState = await commands.workflowAdvance(projectDir, issueId);
+        setCurrentState(newState);
+      } catch (err) {
+        setError(`Failed to advance step: ${err}`);
+      }
+    },
+    [projectDir],
+  );
+
   const setOnRefreshTicket = useCallback((fn: () => Promise<void>) => {
     onRefreshTicketRef.current = fn;
   }, []);
 
-  const respondToFeedback = feedback.respondToFeedback;
   const respondToPermission = permissions.respondToPermission;
 
   return {
@@ -296,8 +296,9 @@ export function useWorkflow(projectDir: string) {
     clearNotification: notifications.clearNotification,
     statusText: notifications.statusText,
     lastUpdatedSectionId: notifications.lastUpdatedSectionId,
-    pendingFeedback: feedback.pendingFeedback,
-    respondToFeedback,
+    autoAdvance,
+    setAutoAdvance,
+    advanceStep,
     setOnRefreshTicket,
     listWorkflows,
     getWorkflow,

@@ -1,6 +1,16 @@
-import { Brain, ChevronDown, Gauge, Send, Zap } from "lucide-react";
+import { Brain, ChevronDown, Gauge, Send, Sparkles, Zap } from "lucide-react";
 import { type KeyboardEvent, useRef, useState } from "react";
-import { MODEL_DISPLAY_NAMES } from "@/features/workflow/constants";
+import {
+  COMMAND_DESCRIPTIONS,
+  COMMAND_ICON_FALLBACK,
+  COMMAND_ICONS,
+  MODEL_DISPLAY_NAMES,
+} from "@/features/workflow/constants";
+import {
+  type AutocompleteItem,
+  AutocompleteMenu,
+} from "@/shared/components/chat/autocomplete-menu";
+import { useAutocompleteTrigger } from "@/shared/components/chat/autocomplete-utils";
 import type { AgentConfig } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 import {
@@ -82,7 +92,44 @@ export function ComposeToolbar({
   placeholder = "Add context or ask questions... (Enter to send)",
 }: ComposeToolbarProps) {
   const [input, setInput] = useState("");
+  const [cursorPosition, setCursorPosition] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    setCursorPosition(e.currentTarget.selectionStart ?? 0);
+  };
+
+  const {
+    isOpen: autocompleteOpen,
+    trigger: activeTrigger,
+    filter: autocompleteFilter,
+    triggerIndex,
+  } = useAutocompleteTrigger(["/", "#"], input, cursorPosition);
+
+  const autocompleteItems: AutocompleteItem[] =
+    activeTrigger === "/"
+      ? config.slashCommands.map((name) => ({
+          name: `/${name}`,
+          description: COMMAND_DESCRIPTIONS[name],
+          icon: COMMAND_ICONS[name] ?? COMMAND_ICON_FALLBACK,
+        }))
+      : activeTrigger === "#"
+        ? config.skills.map((name) => ({
+            name: `#${name}`,
+            icon: Sparkles,
+            accentColor: "purple",
+          }))
+        : [];
+
+  const handleAutocompleteSelect = (item: AutocompleteItem) => {
+    const before = input.slice(0, triggerIndex);
+    const after = input.slice(cursorPosition);
+    const newInput = `${before}${item.name} ${after}`;
+    setInput(newInput);
+    const newPos = before.length + item.name.length + 1;
+    setCursorPosition(newPos);
+    textareaRef.current?.focus();
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -108,15 +155,33 @@ export function ComposeToolbar({
       <div className="border-t bg-white dark:bg-zinc-900 p-3">
         <div className="rounded-lg border bg-background">
           {/* Textarea */}
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            className="min-h-[44px] max-h-[120px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-            disabled={disabled}
-          />
+          <div className="relative">
+            {autocompleteOpen && (
+              <AutocompleteMenu
+                items={autocompleteItems}
+                filter={autocompleteFilter}
+                onSelect={handleAutocompleteSelect}
+                _onClose={() => {
+                  /* noop — closing handled by filter going empty */
+                }}
+                _anchorRef={textareaRef}
+              />
+            )}
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setCursorPosition(e.target.selectionStart ?? 0);
+              }}
+              onKeyDown={handleKeyDown}
+              onSelect={handleSelect}
+              onClick={handleSelect}
+              placeholder={placeholder}
+              className="min-h-[44px] max-h-[120px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              disabled={disabled}
+            />
+          </div>
 
           {/* Toolbar row */}
           <div className="flex items-center gap-1.5 px-3 pb-2 pt-1">

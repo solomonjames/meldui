@@ -320,6 +320,9 @@ export function WorkflowShell({
               onAdvanceStep={() => advanceStep(ticket.id).then(() => onRefreshTicket())}
               projectDir={projectDir}
               ticketId={ticket.id}
+              isInteractive={currentStep.view === "chat" || currentStep.view === "review"}
+              pendingPermission={pendingPermission}
+              onRespondToPermission={respondToPermission}
             />
           </div>
           <div className="flex justify-center border-t bg-white px-4 py-3 dark:bg-zinc-900">

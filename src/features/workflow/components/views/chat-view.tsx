@@ -231,16 +231,6 @@ export function ChatView({
             )}
 
             {/* Empty states */}
-            {/* ActivityBar below handles processing state */}
-            {!isExecuting && stepStatus === "pending" && (
-              <div className="flex flex-col items-center justify-center gap-3 py-8">
-                <p className="text-sm text-muted-foreground">Starting execution...</p>
-                <Button variant="outline" size="sm" onClick={onExecute}>
-                  <Play className="w-3.5 h-3.5 mr-1.5" />
-                  Run manually
-                </Button>
-              </div>
-            )}
             {!isExecuting &&
               !hasContent &&
               stepOutput?.stderrLines &&

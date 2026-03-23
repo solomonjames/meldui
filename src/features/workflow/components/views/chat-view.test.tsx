@@ -52,7 +52,7 @@ describe("ChatView display states", () => {
     expect(screen.getByText("Processing...")).toBeInTheDocument();
   });
 
-  it("shows manual Run button when pending and not executing", () => {
+  it("does not show manual Run button when pending", () => {
     render(
       <ChatView
         {...defaultProps}
@@ -63,8 +63,8 @@ describe("ChatView display states", () => {
       { wrapper: createQueryWrapper() },
     );
 
-    expect(screen.getByText("Starting execution...")).toBeInTheDocument();
-    expect(screen.getByText("Run manually")).toBeInTheDocument();
+    expect(screen.queryByText("Starting execution...")).not.toBeInTheDocument();
+    expect(screen.queryByText("Run manually")).not.toBeInTheDocument();
   });
 
   it("shows Retry button when not executing and has stderr errors", () => {

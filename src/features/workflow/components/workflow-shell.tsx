@@ -131,13 +131,16 @@ export function WorkflowShell({
     }
   }, [notifications, onClearNotification]);
 
-  const handleExecute = useCallback(async () => {
-    const result = await onExecuteStep(ticket.id);
-    if (result) {
-      setLastResult(result);
-      await onRefreshTicket();
-    }
-  }, [ticket.id, onExecuteStep, onRefreshTicket]);
+  const handleExecute = useCallback(
+    async (_message?: string) => {
+      const result = await onExecuteStep(ticket.id);
+      if (result) {
+        setLastResult(result);
+        await onRefreshTicket();
+      }
+    },
+    [ticket.id, onExecuteStep, onRefreshTicket],
+  );
 
   // Auto-execute on pending steps
   useEffect(() => {

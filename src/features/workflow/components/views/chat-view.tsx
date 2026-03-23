@@ -1,18 +1,19 @@
-import { ArrowRight, Check, Play, Send } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, Check, Play } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
 import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
+import { ComposeToolbar } from "@/features/workflow/components/shared/compose-toolbar";
 import { FilesChanged } from "@/features/workflow/components/shared/files-changed";
 import { PermissionDialog } from "@/features/workflow/components/shared/permission-dialog";
 import { StepDividerBar } from "@/features/workflow/components/shared/step-divider";
 import { SubagentCard } from "@/features/workflow/components/shared/subagent-card";
+import { useAgentConfig } from "@/features/workflow/hooks/use-agent-config";
 import { useConversation } from "@/shared/hooks/use-conversation";
 import { snapshotToBlocks } from "@/shared/lib/conversations";
 import type { PermissionRequest, StepOutputStream, StepStatus } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
-import { Textarea } from "@/shared/ui/textarea";
 
 function StepCompleteCard({
   onAdvance,
@@ -52,7 +53,7 @@ interface ChatViewProps {
   stepOutput?: StepOutputStream;
   statusText?: string | null;
   onAdvanceStep?: () => void;
-  onExecute: () => void;
+  onExecute: (message?: string) => void;
   projectDir?: string;
   ticketId?: string | null;
   isInteractive?: boolean;
@@ -64,7 +65,7 @@ export function ChatView({
   stepName,
   response,
   isExecuting,
-  stepStatus,
+  stepStatus: _stepStatus,
   stepOutput,
   statusText,
   onAdvanceStep,
@@ -75,8 +76,8 @@ export function ChatView({
   pendingPermission,
   onRespondToPermission,
 }: ChatViewProps) {
-  const [input, setInput] = useState("");
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const { config, setModel, setThinking, setEffort, setFastMode } = useAgentConfig();
 
   // Load persisted conversation history
   const { data: snapshot } = useConversation(projectDir ?? "", ticketId ?? null);
@@ -96,19 +97,6 @@ export function ChatView({
   useEffect(() => {
     chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [contentBlocks.length, response, isStepComplete]);
-
-  const handleSend = () => {
-    if (!input.trim() || isExecuting) return;
-    onExecute();
-    setInput("");
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
 
   return (
     <div data-testid="chat-view" className="flex flex-col h-full">
@@ -293,26 +281,17 @@ export function ChatView({
 
         {/* Chat input — hidden for non-interactive steps while executing */}
         {showInput && (
-          <div className="p-4 border-t bg-white dark:bg-zinc-900">
-            <div className="flex gap-2">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Add context or ask questions... (Enter to send)"
-                className="min-h-[44px] max-h-[120px] resize-none"
-                disabled={isExecuting}
-              />
-              <Button
-                onClick={handleSend}
-                disabled={!input.trim() || isExecuting}
-                className="self-end"
-                size="sm"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
+          <ComposeToolbar
+            config={config}
+            onSetModel={setModel}
+            onSetThinking={setThinking}
+            onSetEffort={setEffort}
+            onSetFastMode={setFastMode}
+            onSend={(message) => {
+              onExecute(message);
+            }}
+            disabled={isExecuting}
+          />
         )}
       </div>
     </div>

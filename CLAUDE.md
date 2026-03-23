@@ -176,7 +176,7 @@ WebdriverIO tests in `e2e/` with a mock sidecar (`e2e/mock-sidecar/`). Run `bun 
 
 **Beads parent-child relationships**: `bd list --json` doesn't return a `parent_id` field. Sub-tickets have a `dependencies` array with entries where `type === "parent-child"`. The Rust `list_issues()` function derives `parent_id` from this at fetch time.
 
-**Hook pattern**: Each integration has a custom hook wrapping Tauri invoke calls via TanStack Query. Feature hooks live in `src/features/*/hooks/`, shared hooks in `src/shared/hooks/`. Workflow is split across `useWorkflow`, `useWorkflowStreaming`, `useWorkflowPermissions`, `useWorkflowFeedback`, `useWorkflowReview`, and `useWorkflowNotifications`.
+**Hook pattern**: Each integration has a custom hook wrapping Tauri invoke calls via TanStack Query. Feature hooks live in `src/features/*/hooks/`, shared hooks in `src/shared/hooks/`. Workflow is split across `useWorkflow`, `useWorkflowStreaming`, `useWorkflowPermissions`, `useWorkflowReview`, and `useWorkflowNotifications`.
 
 **Agent permission flow**: When the agent needs permission for a dangerous tool (e.g., Bash outside project dir), the sidecar emits a `permission_request` on stdout → Rust emits `agent-permission-request` Tauri event → frontend shows inline dialog → user clicks Allow/Deny → frontend invokes `agent_permission_respond` → Rust writes response to sidecar stdin → `canUseTool` Promise resolves.
 

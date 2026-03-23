@@ -1,14 +1,24 @@
 import { Check, ChevronRight } from "lucide-react";
 import type { StepRecord, WorkflowStep } from "@/shared/types";
+import { Switch } from "@/shared/ui/switch";
 
 interface StageBarProps {
   steps: WorkflowStep[];
   currentStepId: string | null;
   stepHistory: StepRecord[];
   onStepClick?: (stepId: string) => void;
+  autoAdvance: boolean;
+  onAutoAdvanceChange: (value: boolean) => void;
 }
 
-export function StageBar({ steps, currentStepId, stepHistory, onStepClick }: StageBarProps) {
+export function StageBar({
+  steps,
+  currentStepId,
+  stepHistory,
+  onStepClick,
+  autoAdvance,
+  onAutoAdvanceChange,
+}: StageBarProps) {
   const completedIds = new Set(
     stepHistory.filter((r) => r.status === "completed").map((r) => r.step_id),
   );
@@ -52,6 +62,15 @@ export function StageBar({ steps, currentStepId, stepHistory, onStepClick }: Sta
           </div>
         );
       })}
+      <div className="flex items-center gap-2 ml-auto shrink-0">
+        <span className="text-xs text-muted-foreground select-none">Auto</span>
+        <Switch
+          aria-label="Auto"
+          checked={autoAdvance}
+          onCheckedChange={(checked) => onAutoAdvanceChange(checked)}
+          className="data-[checked]:bg-emerald-600"
+        />
+      </div>
     </div>
   );
 }

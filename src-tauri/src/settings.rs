@@ -1,9 +1,30 @@
 //! Project-level settings management (worktree config, workflow config).
 use std::path::PathBuf;
 
+use thiserror::Error;
+
 use crate::constants::{MELDUI_DIR, SETTINGS_FILE};
 
 use serde::{Deserialize, Serialize};
+
+/// Structured error type for settings operations.
+#[derive(Debug, Error)]
+pub(crate) enum SettingsError {
+    #[error("failed to read settings")]
+    ReadFailed(#[source] std::io::Error),
+
+    #[error("failed to write settings")]
+    WriteFailed(#[source] std::io::Error),
+
+    #[error("failed to parse settings")]
+    ParseFailed(#[source] serde_json::Error),
+
+    #[error("failed to serialize settings")]
+    SerializeFailed(#[source] serde_json::Error),
+
+    #[error("failed to create settings directory")]
+    DirCreateFailed(#[source] std::io::Error),
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, specta::Type)]
 pub struct SyncSettings {
@@ -38,28 +59,36 @@ fn settings_path(project_dir: &str) -> PathBuf {
         .join(SETTINGS_FILE)
 }
 
-pub fn get_settings(project_dir: &str) -> Result<ProjectSettings, String> {
+fn get_settings_inner(project_dir: &str) -> Result<ProjectSettings, SettingsError> {
     let path = settings_path(project_dir);
     if !path.exists() {
         return Ok(ProjectSettings::default());
     }
-    let content =
-        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read settings: {e}"))?;
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse settings: {e}"))
+    let content = std::fs::read_to_string(&path).map_err(SettingsError::ReadFailed)?;
+    serde_json::from_str(&content).map_err(SettingsError::ParseFailed)
 }
 
-pub fn update_settings(project_dir: &str, settings: &ProjectSettings) -> Result<(), String> {
+fn update_settings_inner(
+    project_dir: &str,
+    settings: &ProjectSettings,
+) -> Result<(), SettingsError> {
     let path = settings_path(project_dir);
 
     // Ensure .meldui directory exists
     if let Some(parent) = path.parent() {
         if !parent.exists() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create settings directory: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(SettingsError::DirCreateFailed)?;
         }
     }
 
-    let content = serde_json::to_string_pretty(settings)
-        .map_err(|e| format!("Failed to serialize settings: {e}"))?;
-    std::fs::write(&path, content).map_err(|e| format!("Failed to write settings: {e}"))
+    let content = serde_json::to_string_pretty(settings).map_err(SettingsError::SerializeFailed)?;
+    std::fs::write(&path, content).map_err(SettingsError::WriteFailed)
+}
+
+pub fn get_settings(project_dir: &str) -> Result<ProjectSettings, String> {
+    get_settings_inner(project_dir).map_err(|e| e.to_string())
+}
+
+pub fn update_settings(project_dir: &str, settings: &ProjectSettings) -> Result<(), String> {
+    update_settings_inner(project_dir, settings).map_err(|e| e.to_string())
 }

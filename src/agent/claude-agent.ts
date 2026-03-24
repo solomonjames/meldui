@@ -104,6 +104,26 @@ export class ClaudeAgent
       },
     };
 
+    // Apply thinking configuration
+    if (config.thinking) {
+      if (config.thinking.type === "enabled") {
+        options.thinking = { type: "enabled", budgetTokens: config.thinking.budgetTokens ?? 10000 };
+      } else if (config.thinking.type === "disabled") {
+        options.thinking = { type: "disabled" };
+      }
+      // "adaptive" is the SDK default — no override needed
+    }
+
+    // Store effort and fastMode for future SDK support
+    // These are not yet supported by the Agent SDK query() options,
+    // but are tracked in config for when they become available.
+    if (config.effort) {
+      process.stderr.write(`[agent] Effort level set to: ${config.effort}\n`);
+    }
+    if (config.fastMode) {
+      process.stderr.write(`[agent] Fast mode enabled\n`);
+    }
+
     // Session resumption
     if (config.sessionId) {
       options.resume = config.sessionId;

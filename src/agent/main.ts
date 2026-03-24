@@ -77,6 +77,7 @@ ppidWatchdog.unref();
 // ── Sidecar config state ──
 
 const sidecarConfig = {
+  model: undefined as string | undefined,
   thinking: { type: "adaptive" as "adaptive" | "enabled" | "disabled", budgetTokens: undefined as number | undefined },
   effort: "high" as "low" | "medium" | "high" | "max",
   fastMode: false,
@@ -167,6 +168,15 @@ async function main(): Promise<void> {
 
   rpc.addMethod(METHOD_NAMES.query, async (params: QueryParams): Promise<QueryResult> => {
     const config = parseAgentConfig(params.config);
+
+    // Apply sidecar runtime config overrides
+    if (sidecarConfig.model) {
+      config.model = sidecarConfig.model;
+    }
+    config.thinking = { ...sidecarConfig.thinking };
+    config.effort = sidecarConfig.effort;
+    config.fastMode = sidecarConfig.fastMode;
+
     const agent = new ClaudeAgent(sendMessage);
     activeAgent = agent;
 
@@ -322,8 +332,8 @@ async function main(): Promise<void> {
     return { status: "cancelled" as const };
   });
 
-  rpc.addMethod(METHOD_NAMES.setModel, async (_params: { model: string }) => {
-    // Model switching is a future capability - store for now
+  rpc.addMethod(METHOD_NAMES.setModel, async (params: { model: string }) => {
+    sidecarConfig.model = params.model;
     return { status: "ok" };
   });
 

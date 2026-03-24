@@ -14,6 +14,9 @@ export interface AgentConfig {
   projectDir: string;
   maxTurns?: number;
   ticketsDir?: string;
+  thinking?: { type: "adaptive" | "enabled" | "disabled"; budgetTokens?: number };
+  effort?: "low" | "medium" | "high" | "max";
+  fastMode?: boolean;
 }
 
 export interface PermissionRequestEvent {

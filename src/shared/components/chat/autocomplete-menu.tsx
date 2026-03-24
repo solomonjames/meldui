@@ -14,6 +14,8 @@ interface AutocompleteMenuProps {
   onSelect: (item: AutocompleteItem) => void;
   _onClose?: () => void;
   _anchorRef?: React.RefObject<HTMLElement | null>;
+  selectedIndex?: number;
+  onSelectedIndexChange?: (index: number) => void;
 }
 
 function fuzzyMatch(text: string, query: string): boolean {
@@ -32,9 +34,17 @@ export function AutocompleteMenu({
   onSelect,
   _onClose,
   _anchorRef,
+  selectedIndex: controlledIndex,
+  onSelectedIndexChange,
 }: AutocompleteMenuProps) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [internalIndex, setInternalIndex] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const isControlled = controlledIndex !== undefined;
+  const selectedIndex = isControlled ? controlledIndex : internalIndex;
+  const setSelectedIndex = isControlled
+    ? (index: number) => onSelectedIndexChange?.(index)
+    : setInternalIndex;
 
   const filtered = items.filter((item) => fuzzyMatch(item.name, filter));
 

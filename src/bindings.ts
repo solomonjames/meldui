@@ -95,8 +95,8 @@ async workflowAdvance(projectDir: string, issueId: string) : Promise<WorkflowSta
 async workflowState(projectDir: string, issueId: string) : Promise<WorkflowState | null> {
     return await TAURI_INVOKE("workflow_state", { projectDir, issueId });
 },
-async workflowExecuteStep(projectDir: string, issueId: string, onChunk: TAURI_CHANNEL<StreamChunk>) : Promise<StepExecutionResult> {
-    return await TAURI_INVOKE("workflow_execute_step", { projectDir, issueId, onChunk });
+async workflowExecuteStep(projectDir: string, issueId: string, onChunk: TAURI_CHANNEL<StreamChunk>, userMessage: string | null) : Promise<StepExecutionResult> {
+    return await TAURI_INVOKE("workflow_execute_step", { projectDir, issueId, onChunk, userMessage });
 },
 async workflowSuggest(projectDir: string, issueId: string, onChunk: TAURI_CHANNEL<StreamChunk>) : Promise<WorkflowSuggestion> {
     return await TAURI_INVOKE("workflow_suggest", { projectDir, issueId, onChunk });

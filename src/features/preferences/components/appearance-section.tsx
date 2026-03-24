@@ -52,7 +52,8 @@ function useContextIndicator() {
 
   const setVisibilityMutation = useMutation({
     mutationFn: async (value: string) => {
-      await commands.setAppPreferences({ context_indicator_visibility: value });
+      const current = await commands.getAppPreferences();
+      await commands.setAppPreferences({ ...current, context_indicator_visibility: value });
       return value;
     },
     onSuccess: (value) => {

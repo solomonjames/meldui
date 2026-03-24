@@ -135,8 +135,8 @@ export function WorkflowShell({
   }, [notifications, onClearNotification]);
 
   const handleExecute = useCallback(
-    async (_message?: string) => {
-      const result = await onExecuteStep(ticket.id);
+    async (message?: string) => {
+      const result = await onExecuteStep(ticket.id, message);
       if (result) {
         setLastResult(result);
         await onRefreshTicket();
@@ -216,9 +216,10 @@ export function WorkflowShell({
     debug.log("lifecycle", `auto-resume fired for step ${currentStep.id}`);
     setAutoResuming(true);
 
+    let cancelled = false;
     onExecuteStep(ticket.id)
       .then(async (result) => {
-        if (result) {
+        if (!cancelled && result) {
           debug.log("lifecycle", `auto-resume completed for step ${currentStep.id}`);
           setLastResult(result);
           await onRefreshTicket();
@@ -228,8 +229,14 @@ export function WorkflowShell({
         debug.log("error", `auto-resume failed: ${err}`);
       })
       .finally(() => {
-        setAutoResuming(false);
+        if (!cancelled) {
+          setAutoResuming(false);
+        }
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     workflowState?.step_status,
     loading,

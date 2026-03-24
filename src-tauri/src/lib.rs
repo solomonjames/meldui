@@ -356,9 +356,10 @@ async fn workflow_execute_step(
     project_dir: String,
     issue_id: String,
     on_chunk: tauri::ipc::Channel<claude::StreamChunk>,
+    user_message: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<StepExecutionResult, String> {
-    workflow::execute_step(&project_dir, &issue_id, on_chunk, app).await
+    workflow::execute_step(&project_dir, &issue_id, on_chunk, app, user_message).await
 }
 
 #[tauri::command]

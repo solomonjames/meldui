@@ -22,7 +22,7 @@ import {
   type AutocompleteItem,
   AutocompleteMenu,
 } from "@/shared/components/chat/autocomplete-menu";
-import { useAutocompleteTrigger } from "@/shared/components/chat/autocomplete-utils";
+import { fuzzyMatch, useAutocompleteTrigger } from "@/shared/components/chat/autocomplete-utils";
 import type { AgentConfig, ContextUsage } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 import {
@@ -117,6 +117,7 @@ export function ComposeToolbar({
   const [attachments, setAttachments] = useState<
     Array<{ name: string; path: string; type: string }>
   >([]);
+  const [autocompleteIndex, setAutocompleteIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleAttach = async () => {
@@ -178,7 +179,45 @@ export function ComposeToolbar({
     textareaRef.current?.focus();
   };
 
+  // Compute filtered items for keyboard navigation (must match AutocompleteMenu's filtering)
+  const filteredAutocompleteItems = autocompleteOpen
+    ? autocompleteItems.filter((item) => fuzzyMatch(item.name, autocompleteFilter)).slice(0, 8)
+    : [];
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // When autocomplete is open, intercept navigation keys
+    if (autocompleteOpen && filteredAutocompleteItems.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setAutocompleteIndex((prev) =>
+          prev < filteredAutocompleteItems.length - 1 ? prev + 1 : 0,
+        );
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setAutocompleteIndex((prev) =>
+          prev > 0 ? prev - 1 : filteredAutocompleteItems.length - 1,
+        );
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const item = filteredAutocompleteItems[autocompleteIndex];
+        if (item) {
+          handleAutocompleteSelect(item);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        // Clear the trigger character to close the menu
+        setInput((prev) => prev.slice(0, triggerIndex) + prev.slice(triggerIndex + 1));
+        setCursorPosition(triggerIndex);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -217,6 +256,8 @@ export function ComposeToolbar({
                   /* noop — closing handled by filter going empty */
                 }}
                 _anchorRef={textareaRef}
+                selectedIndex={autocompleteIndex}
+                onSelectedIndexChange={setAutocompleteIndex}
               />
             )}
             <Textarea

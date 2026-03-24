@@ -51,6 +51,7 @@ describe("useWorkflow", () => {
     expect(mockInvoke).toHaveBeenCalledWith("workflow_execute_step", {
       projectDir: "/test/project",
       issueId: "issue-1",
+      userMessage: null,
       onChunk: expect.any(MockChannel),
     });
   });

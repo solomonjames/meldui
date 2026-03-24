@@ -1,7 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Check, Play, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { commands } from "@/bindings";
 import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
 import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
 import { ComposeToolbar } from "@/features/workflow/components/shared/compose-toolbar";
@@ -95,6 +97,10 @@ export function ChatView({
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [userMessages, setUserMessages] = useState<Array<{ id: string; content: string }>>([]);
   const { config, setModel, setThinking, setEffort, setFastMode } = useAgentConfig();
+  const { data: appPreferences } = useQuery({
+    queryKey: ["app", "preferences"],
+    queryFn: () => commands.getAppPreferences(),
+  });
 
   const handleSend = useCallback(
     (message?: string) => {
@@ -307,7 +313,10 @@ export function ChatView({
             }}
             disabled={isExecuting}
             contextUsage={stepOutput?.contextUsage}
-            contextIndicatorVisibility="threshold"
+            contextIndicatorVisibility={
+              (appPreferences?.context_indicator_visibility as "threshold" | "always" | "never") ??
+              "threshold"
+            }
           />
         )}
       </div>

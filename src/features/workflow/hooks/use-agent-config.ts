@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
+import { commands, events } from "@/bindings";
 import type { AgentConfig } from "@/shared/types";
 
 const AGENT_CONFIG_KEY = ["agent", "config"] as const;
@@ -58,28 +57,22 @@ export function useAgentConfig() {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
 
-    listen<{
-      model: string;
-      available_models: string[];
-      tools: string[];
-      slash_commands: string[];
-      skills: string[];
-      mcp_servers: Array<{ name: string; status: string }>;
-    }>("agent-init-metadata", (event) => {
-      if (cancelled) return;
-      const metadata = event.payload;
-      const updated: AgentConfig = {
-        ...(queryClient.getQueryData<AgentConfig>(AGENT_CONFIG_KEY) ?? DEFAULT_CONFIG),
-        model: metadata.model,
-        availableModels: metadata.available_models,
-        tools: metadata.tools,
-        slashCommands: metadata.slash_commands,
-        skills: metadata.skills,
-        mcpServers: metadata.mcp_servers,
-      };
-      queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, updated);
-      persistConfig(updated);
-    })
+    events.agentInitMetadata
+      .listen((event) => {
+        if (cancelled) return;
+        const metadata = event.payload;
+        const updated: AgentConfig = {
+          ...(queryClient.getQueryData<AgentConfig>(AGENT_CONFIG_KEY) ?? DEFAULT_CONFIG),
+          model: metadata.model,
+          availableModels: metadata.available_models,
+          tools: metadata.tools,
+          slashCommands: metadata.slash_commands,
+          skills: metadata.skills,
+          mcpServers: metadata.mcp_servers,
+        };
+        queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, updated);
+        persistConfig(updated);
+      })
       .then((u) => {
         if (cancelled) {
           u();
@@ -109,27 +102,24 @@ export function useAgentConfig() {
   };
 
   const setModel = useMutation({
-    mutationFn: (model: string) => invoke("agent_set_model", { model }).catch(() => {}),
+    mutationFn: (model: string) => commands.agentSetModel(model).catch(() => {}),
     onMutate: (model) => updateConfig({ model }),
   });
 
   const setThinking = useMutation({
     mutationFn: (params: { type: "adaptive" | "enabled" | "disabled"; budgetTokens?: number }) =>
-      invoke("agent_set_thinking", {
-        thinkingType: params.type,
-        budgetTokens: params.budgetTokens ?? null,
-      }).catch(() => {}),
+      commands.agentSetThinking(params.type, params.budgetTokens ?? null).catch(() => {}),
     onMutate: (params) => updateConfig({ thinking: params }),
   });
 
   const setEffort = useMutation({
     mutationFn: (effort: "low" | "medium" | "high" | "max") =>
-      invoke("agent_set_effort", { effort }).catch(() => {}),
+      commands.agentSetEffort(effort).catch(() => {}),
     onMutate: (effort) => updateConfig({ effort }),
   });
 
   const setFastMode = useMutation({
-    mutationFn: (enabled: boolean) => invoke("agent_set_fast_mode", { enabled }).catch(() => {}),
+    mutationFn: (enabled: boolean) => commands.agentSetFastMode(enabled).catch(() => {}),
     onMutate: (enabled) => updateConfig({ fastMode: enabled }),
   });
 

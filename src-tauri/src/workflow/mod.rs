@@ -10,7 +10,11 @@ pub use diff::*;
 pub use state::*;
 pub use worktree::*;
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
+
+use crate::constants::{MELDUI_DIR, TICKETS_DIR};
 
 // ── Step Execution ──
 
@@ -200,7 +204,11 @@ pub async fn execute_step(
 
     // 8. Call agent sidecar with the worktree path as project_dir
     //    but keep original project_dir for tickets_dir so ticket reads/writes work
-    let tickets_dir = format!("{project_dir}/.meldui/tickets");
+    let tickets_dir = PathBuf::from(project_dir)
+        .join(MELDUI_DIR)
+        .join(TICKETS_DIR)
+        .to_string_lossy()
+        .to_string();
     let (response_text, new_session_id) = match crate::agent::execute_step(
         &agent_project_dir,
         ticket_id,

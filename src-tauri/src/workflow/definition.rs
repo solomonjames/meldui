@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+use crate::constants::{MELDUI_DIR, WORKFLOWS_DIR};
+
 use serde::{Deserialize, Serialize};
 
 // ── Types ──
@@ -79,7 +81,9 @@ pub fn load_bundled_workflows() -> Vec<WorkflowDefinition> {
 
 /// Load workflow definitions from a project's .meldui/workflows/ directory
 pub fn load_project_workflows(project_dir: &str) -> Vec<WorkflowDefinition> {
-    let workflows_dir = PathBuf::from(project_dir).join(".meldui").join("workflows");
+    let workflows_dir = PathBuf::from(project_dir)
+        .join(MELDUI_DIR)
+        .join(WORKFLOWS_DIR);
     let mut workflows = Vec::new();
 
     if !workflows_dir.exists() {

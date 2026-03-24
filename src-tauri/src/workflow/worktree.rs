@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+use crate::constants::{MELDUI_DIR, WORKTREES_DIR};
+
 use serde::Serialize;
 
 /// Information about a created git worktree.
@@ -24,8 +26,8 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
 
     let branch_name = format!("meld/{ticket_id}");
     let worktree_path = PathBuf::from(project_dir)
-        .join(".meldui")
-        .join("worktrees")
+        .join(MELDUI_DIR)
+        .join(WORKTREES_DIR)
         .join(ticket_id);
     let worktree_str = worktree_path
         .to_str()
@@ -146,8 +148,8 @@ pub async fn remove_worktree(project_dir: &str, ticket_id: &str) -> Result<(), S
     use tokio::process::Command;
 
     let worktree_path = PathBuf::from(project_dir)
-        .join(".meldui")
-        .join("worktrees")
+        .join(MELDUI_DIR)
+        .join(WORKTREES_DIR)
         .join(ticket_id);
     let worktree_str = worktree_path
         .to_str()

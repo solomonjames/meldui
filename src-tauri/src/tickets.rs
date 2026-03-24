@@ -3,6 +3,8 @@
 //! Tickets are stored as individual JSON files in `.meldui/tickets/`.
 use std::path::PathBuf;
 
+use crate::constants::{MELDUI_DIR, TICKETS_DIR};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
@@ -75,7 +77,9 @@ pub struct Ticket {
 
 /// Get path to the .meldui/tickets/ directory, creating if needed.
 fn tickets_dir(project_dir: &str) -> Result<PathBuf, String> {
-    let dir = PathBuf::from(project_dir).join(".meldui").join("tickets");
+    let dir = PathBuf::from(project_dir)
+        .join(MELDUI_DIR)
+        .join(TICKETS_DIR);
     if !dir.exists() {
         std::fs::create_dir_all(&dir)
             .map_err(|e| format!("Failed to create tickets directory: {e}"))?;

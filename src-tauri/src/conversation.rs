@@ -5,6 +5,8 @@ use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 
+use crate::constants::{CONVERSATIONS_DIR, MELDUI_DIR};
+
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
@@ -81,8 +83,8 @@ pub struct ConversationWriter {
 
 fn conversations_dir(project_dir: &str) -> PathBuf {
     PathBuf::from(project_dir)
-        .join(".meldui")
-        .join("conversations")
+        .join(MELDUI_DIR)
+        .join(CONVERSATIONS_DIR)
 }
 
 fn ndjson_path(project_dir: &str, ticket_id: &str) -> PathBuf {

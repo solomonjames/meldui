@@ -1,6 +1,8 @@
 //! Project-level settings management (worktree config, workflow config).
 use std::path::PathBuf;
 
+use crate::constants::{MELDUI_DIR, SETTINGS_FILE};
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, specta::Type)]
@@ -32,8 +34,8 @@ pub struct ProjectSettings {
 
 fn settings_path(project_dir: &str) -> PathBuf {
     PathBuf::from(project_dir)
-        .join(".meldui")
-        .join("settings.json")
+        .join(MELDUI_DIR)
+        .join(SETTINGS_FILE)
 }
 
 pub fn get_settings(project_dir: &str) -> Result<ProjectSettings, String> {

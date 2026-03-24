@@ -1,8 +1,11 @@
 //! Diff parsing, branch operations, commit actions, and review types.
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use super::effective_project_dir;
+use crate::constants::{MELDUI_DIR, TICKETS_DIR};
 
 // ── Diff Types ──
 
@@ -152,7 +155,11 @@ pub async fn execute_commit_action(
     // Use the worktree path if available — that's where the changes live
     let agent_project_dir = effective_project_dir(project_dir, issue_id);
 
-    let tickets_dir = format!("{project_dir}/.meldui/tickets");
+    let tickets_dir = PathBuf::from(project_dir)
+        .join(MELDUI_DIR)
+        .join(TICKETS_DIR)
+        .to_string_lossy()
+        .to_string();
     let (response_text, _session_id) = crate::agent::execute_step(
         &agent_project_dir,
         issue_id,

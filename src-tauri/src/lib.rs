@@ -9,6 +9,7 @@ mod agent;
 #[allow(dead_code)]
 mod beads;
 mod claude;
+mod constants;
 mod conversation;
 mod menu;
 mod preferences;

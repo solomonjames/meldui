@@ -22,6 +22,8 @@ use std::sync::Arc;
 
 use tauri::Manager;
 use tauri_specta::Event;
+
+use crate::constants::{MELDUI_DIR, TICKETS_DIR};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process::Command;
@@ -419,7 +421,13 @@ pub async fn execute_step(
         tickets_dir: Some(
             tickets_dir_override
                 .map(|d| d.to_string())
-                .unwrap_or_else(|| format!("{project_dir}/.meldui/tickets")),
+                .unwrap_or_else(|| {
+                    PathBuf::from(project_dir)
+                        .join(MELDUI_DIR)
+                        .join(TICKETS_DIR)
+                        .to_string_lossy()
+                        .to_string()
+                }),
         ),
     };
 

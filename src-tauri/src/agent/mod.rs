@@ -1,10 +1,20 @@
+//! Agent sidecar orchestration and JSON-RPC 2.0 communication.
+
+mod events;
+mod protocol;
+
+// Re-export public event types (used by lib.rs for specta registration)
+pub use events::*;
+
+// Internal imports from submodules
+use protocol::{JsonRpcMessage, JsonRpcRequest, JsonRpcResponse, SidecarConfig};
+
 use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tauri_specta::Event;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -13,170 +23,6 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 
 use crate::claude::StreamChunk;
-
-// ── JSON-RPC 2.0 Structs ──
-
-#[derive(Debug, Serialize)]
-struct JsonRpcRequest {
-    jsonrpc: &'static str,
-    id: u64,
-    method: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    params: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct JsonRpcMessage {
-    #[allow(dead_code)]
-    jsonrpc: Option<String>,
-    // Present if this is a request or notification
-    method: Option<String>,
-    params: Option<serde_json::Value>,
-    // Present if this is a request (not notification)
-    id: Option<serde_json::Value>,
-    // Present if this is a response
-    result: Option<serde_json::Value>,
-    error: Option<JsonRpcError>,
-}
-
-#[derive(Debug, Deserialize)]
-struct JsonRpcError {
-    #[allow(dead_code)]
-    code: i64,
-    message: String,
-    #[allow(dead_code)]
-    data: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize)]
-struct JsonRpcResponse {
-    jsonrpc: &'static str,
-    id: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    result: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<serde_json::Value>,
-}
-
-// ── Config sent as `query` params ──
-
-#[derive(Debug, Serialize, Clone)]
-struct SidecarConfig {
-    project_dir: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    system_prompt: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    allowed_tools: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    disallowed_tools: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    session_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_turns: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tickets_dir: Option<String>,
-}
-
-// ── Event types emitted to frontend (unchanged) ──
-
-/// Permission request received from the sidecar.
-#[derive(Debug, Deserialize, Serialize, Clone, specta::Type, tauri_specta::Event)]
-pub struct AgentPermissionRequest {
-    pub request_id: String,
-    pub tool_name: String,
-    pub input: serde_json::Value,
-}
-
-/// Review findings request received from the sidecar.
-#[derive(Debug, Deserialize, Serialize, Clone, specta::Type, tauri_specta::Event)]
-pub struct AgentReviewFindingsRequest {
-    pub request_id: String,
-    pub ticket_id: String,
-    pub findings: serde_json::Value,
-    pub summary: String,
-}
-
-/// Emitted when the agent sidecar initializes and reports its configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
-pub struct AgentInitMetadata {
-    pub model: String,
-    pub available_models: Vec<String>,
-    pub tools: Vec<String>,
-    pub slash_commands: Vec<String>,
-    pub skills: Vec<String>,
-    pub mcp_servers: Vec<McpServerInfo>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-pub struct McpServerInfo {
-    pub name: String,
-    pub status: String,
-}
-
-/// Emitted when a subtask is created by the agent.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
-pub struct SubtaskCreated {
-    pub subtask_id: String,
-    pub parent_id: String,
-}
-
-/// Emitted when a subtask is updated by the agent.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
-pub struct SubtaskUpdated {
-    pub subtask_id: String,
-    pub parent_id: String,
-}
-
-/// Emitted when a subtask is closed by the agent.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
-pub struct SubtaskClosed {
-    pub subtask_id: String,
-    pub parent_id: String,
-}
-
-/// Emitted when a ticket section is updated by the agent.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
-pub struct SectionUpdateEvent {
-    pub ticket_id: String,
-    pub section: String,
-    #[serde(default)]
-    pub section_id: Option<String>,
-    pub content: String,
-}
-
-/// Emitted when the agent sends a notification.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
-pub struct NotificationEvent {
-    pub title: String,
-    pub message: String,
-    pub level: String,
-}
-
-/// Emitted when the agent provides a status update.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
-pub struct StatusUpdateEvent {
-    pub ticket_id: String,
-    pub status_text: String,
-}
-
-/// Emitted when the agent reports a pull request URL.
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
-pub struct PrUrlReportedEvent {
-    pub ticket_id: String,
-    pub url: String,
-}
-
-// ── Pending request types for oneshot channels ──
-
-struct PendingPermission {
-    json_rpc_id: serde_json::Value,
-}
-
-struct PendingReview {
-    json_rpc_id: serde_json::Value,
-}
 
 /// Active agent handle — holds socket writer and pending request channels.
 pub struct AgentHandle {
@@ -597,6 +443,11 @@ pub async fn execute_step(
     for key in [
         "HOME",
         "USER",
+        "LOGNAME",
+        "TMPDIR",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
         "ANTHROPIC_API_KEY",
         "CLAUDE_CODE_USE_BEDROCK",
         "CLAUDE_CODE_USE_VERTEX",

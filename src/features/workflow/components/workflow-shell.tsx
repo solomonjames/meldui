@@ -63,6 +63,8 @@ export function WorkflowShell({
     stepId: null,
     generation: 0,
   });
+  const autoResumeAttemptRef = useRef<string | null>(null);
+  const [autoResuming, setAutoResuming] = useState(false);
   const debug = useDebugLog();
 
   const currentStep = workflowDef?.steps.find((s) => s.id === workflowState?.current_step_id);
@@ -94,6 +96,7 @@ export function WorkflowShell({
   if (prevStepIdRef.current !== workflowState?.current_step_id) {
     prevStepIdRef.current = workflowState?.current_step_id;
     executingRef.current.stepId = null;
+    autoResumeAttemptRef.current = null;
     setLastResult(null);
   }
   /* eslint-enable react-hooks/refs */
@@ -184,6 +187,49 @@ export function WorkflowShell({
     return () => {
       cancelled = true;
     };
+  }, [
+    workflowState?.step_status,
+    loading,
+    listenersReady,
+    currentStep,
+    onExecuteStep,
+    onRefreshTicket,
+    ticket.id,
+    debug,
+  ]);
+
+  // Auto-resume interrupted sessions on app reopen
+  useEffect(() => {
+    if (!currentStep || loading || !listenersReady) return;
+    if (typeof workflowState?.step_status !== "object") return;
+    if (!("failed" in workflowState.step_status)) return;
+
+    const failReason = workflowState.step_status.failed;
+    const isResumable = failReason.includes("timed out") || failReason.includes("interrupted");
+    if (!isResumable) return;
+
+    // Only attempt auto-resume once per step
+    const resumeKey = `${currentStep.id}-${failReason}`;
+    if (autoResumeAttemptRef.current === resumeKey) return;
+    autoResumeAttemptRef.current = resumeKey;
+
+    debug.log("lifecycle", `auto-resume fired for step ${currentStep.id}`);
+    setAutoResuming(true);
+
+    onExecuteStep(ticket.id)
+      .then(async (result) => {
+        if (result) {
+          debug.log("lifecycle", `auto-resume completed for step ${currentStep.id}`);
+          setLastResult(result);
+          await onRefreshTicket();
+        }
+      })
+      .catch((err) => {
+        debug.log("error", `auto-resume failed: ${err}`);
+      })
+      .finally(() => {
+        setAutoResuming(false);
+      });
   }, [
     workflowState?.step_status,
     loading,
@@ -297,6 +343,27 @@ export function WorkflowShell({
           const failReason = (workflowState.step_status as { failed: string }).failed;
           const isResumable =
             failReason.includes("timed out") || failReason.includes("interrupted");
+          if (autoResuming) {
+            return (
+              <div className="px-6 py-2 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-800 flex items-center gap-2">
+                <div className="flex gap-0.5">
+                  <span
+                    className="w-1 h-1 rounded-full bg-blue-500 animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  />
+                  <span
+                    className="w-1 h-1 rounded-full bg-blue-500 animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="w-1 h-1 rounded-full bg-blue-500 animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
+                </div>
+                <p className="text-sm text-blue-600 dark:text-blue-400">Resuming session...</p>
+              </div>
+            );
+          }
           return (
             <div className="px-6 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800 flex items-center gap-3">
               <div className="flex-1">

@@ -55,6 +55,10 @@ unreachable_pub = "warn"
 unused_lifetimes = "warn"
 unused_qualifications = "warn"
 
+[profile.release]
+strip = "symbols"
+lto = "thin"
+
 [lints.clippy]
 # Correctness & safety
 await_holding_lock = "warn"

@@ -22,6 +22,7 @@ use std::sync::Arc;
 
 use tauri::Manager;
 use tauri_specta::Event;
+use thiserror::Error;
 
 use crate::constants::{MELDUI_DIR, TICKETS_DIR};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -30,6 +31,67 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 
 use crate::claude::StreamChunk;
+
+/// Structured error type for agent sidecar operations.
+#[derive(Debug, Error)]
+pub(crate) enum AgentError {
+    #[error("agent sidecar binary not found — run 'bun run agent:build' first")]
+    BinaryNotFound,
+
+    #[error("failed to spawn agent sidecar: {0}")]
+    SpawnFailed(#[source] std::io::Error),
+
+    #[error("failed to capture sidecar {0}")]
+    StdioCaptureError(&'static str),
+
+    #[error("sidecar failed to announce socket path within timeout")]
+    SocketPathTimeout,
+
+    #[error("sidecar exited before announcing socket path")]
+    SocketPathEof,
+
+    #[error("sidecar printed unexpected first line: {0}")]
+    SocketPathInvalid(String),
+
+    #[error("failed to read sidecar stdout: {0}")]
+    StdoutReadFailed(#[source] std::io::Error),
+
+    #[error("failed to connect to sidecar socket: {0}")]
+    SocketConnectFailed(#[source] std::io::Error),
+
+    #[error("failed to write to socket: {0}")]
+    SocketWriteFailed(#[source] std::io::Error),
+
+    #[error("failed to read from socket: {0}")]
+    SocketReadFailed(#[source] std::io::Error),
+
+    #[error("failed to serialize message: {0}")]
+    SerializeFailed(#[source] serde_json::Error),
+
+    #[error("agent is not running")]
+    NotRunning,
+
+    #[error("no pending permission request")]
+    NoPendingPermission,
+
+    #[error("no pending review request")]
+    NoPendingReview,
+
+    #[error("query failed: {0}")]
+    QueryFailed(String),
+
+    #[error("agent sidecar exited with status {status}{detail}")]
+    SidecarExitError {
+        status: String,
+        detail: &'static str,
+    },
+
+    #[error("agent sidecar timed out after {0} seconds of inactivity")]
+    IdleTimeout(u64),
+
+    #[error("failed to wait for agent sidecar: {0}")]
+    WaitFailed(#[source] std::io::Error),
+}
 
 /// Active agent handle — holds socket writer and pending request channels.
 pub struct AgentHandle {
@@ -41,16 +103,16 @@ pub struct AgentHandle {
 
 impl AgentHandle {
     /// Send a JSON-RPC message over the socket.
-    async fn send_raw(&self, json: &str) -> Result<(), String> {
+    async fn send_raw(&self, json: &str) -> Result<(), AgentError> {
         let mut writer = self.socket_writer.lock().await;
         writer
             .write_all(format!("{json}\n").as_bytes())
             .await
-            .map_err(|e| format!("Failed to write to socket: {e}"))?;
+            .map_err(AgentError::SocketWriteFailed)?;
         writer
             .flush()
             .await
-            .map_err(|e| format!("Failed to flush socket: {e}"))?;
+            .map_err(AgentError::SocketWriteFailed)?;
         Ok(())
     }
 
@@ -59,14 +121,14 @@ impl AgentHandle {
         &self,
         id: serde_json::Value,
         result: serde_json::Value,
-    ) -> Result<(), String> {
+    ) -> Result<(), AgentError> {
         let response = JsonRpcResponse {
             jsonrpc: "2.0",
             id,
             result: Some(result),
             error: None,
         };
-        let json = serde_json::to_string(&response).map_err(|e| format!("Serialize error: {e}"))?;
+        let json = serde_json::to_string(&response).map_err(AgentError::SerializeFailed)?;
         self.send_raw(&json).await
     }
 
@@ -75,7 +137,7 @@ impl AgentHandle {
         &self,
         _request_id: &str,
         allowed: bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), AgentError> {
         let mut pending = self.pending_permission.lock().await;
         if let Some(p) = pending.take() {
             // Send JSON-RPC response to sidecar
@@ -84,7 +146,7 @@ impl AgentHandle {
                 .await?;
             Ok(())
         } else {
-            Err("No pending permission request".to_string())
+            Err(AgentError::NoPendingPermission)
         }
     }
 
@@ -93,7 +155,7 @@ impl AgentHandle {
         &self,
         _request_id: &str,
         submission: serde_json::Value,
-    ) -> Result<(), String> {
+    ) -> Result<(), AgentError> {
         let mut pending = self.pending_review.lock().await;
         if let Some(p) = pending.take() {
             self.send_response(
@@ -103,13 +165,13 @@ impl AgentHandle {
             .await?;
             Ok(())
         } else {
-            Err("No pending review request".to_string())
+            Err(AgentError::NoPendingReview)
         }
     }
 
     /// Send cancel JSON-RPC request.
     #[allow(dead_code)] // Planned for future agent cancellation support
-    pub async fn cancel(&self) -> Result<(), String> {
+    pub async fn cancel(&self) -> Result<(), AgentError> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let request = JsonRpcRequest {
             jsonrpc: "2.0",
@@ -117,7 +179,7 @@ impl AgentHandle {
             method: "cancel".to_string(),
             params: Some(serde_json::json!({})),
         };
-        let json = serde_json::to_string(&request).map_err(|e| format!("Serialize error: {e}"))?;
+        let json = serde_json::to_string(&request).map_err(AgentError::SerializeFailed)?;
         self.send_raw(&json).await
     }
 }
@@ -141,21 +203,23 @@ pub async fn agent_set_model(
     model: String,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
+    agent_set_model_inner(model, &state)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn agent_set_model_inner(model: String, state: &AgentState) -> Result<(), AgentError> {
     let handle_guard = state.handle.lock().await;
-    if let Some(handle) = handle_guard.as_ref() {
-        let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
-        let request = serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": "agent/set_model",
-            "params": { "model": model },
-            "id": id
-        });
-        handle
-            .send_raw(&serde_json::to_string(&request).unwrap())
-            .await
-    } else {
-        Err("No active agent session".to_string())
-    }
+    let handle = handle_guard.as_ref().ok_or(AgentError::NotRunning)?;
+    let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "agent/set_model",
+        "params": { "model": model },
+        "id": id
+    });
+    let json = serde_json::to_string(&request).map_err(AgentError::SerializeFailed)?;
+    handle.send_raw(&json).await
 }
 
 #[tauri::command]
@@ -165,25 +229,31 @@ pub async fn agent_set_thinking(
     budget_tokens: Option<u32>,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
+    agent_set_thinking_inner(thinking_type, budget_tokens, &state)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn agent_set_thinking_inner(
+    thinking_type: String,
+    budget_tokens: Option<u32>,
+    state: &AgentState,
+) -> Result<(), AgentError> {
     let handle_guard = state.handle.lock().await;
-    if let Some(handle) = handle_guard.as_ref() {
-        let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
-        let mut params = serde_json::json!({ "type": thinking_type });
-        if let Some(tokens) = budget_tokens {
-            params["budgetTokens"] = serde_json::json!(tokens);
-        }
-        let request = serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": "agent/set_thinking",
-            "params": params,
-            "id": id
-        });
-        handle
-            .send_raw(&serde_json::to_string(&request).unwrap())
-            .await
-    } else {
-        Err("No active agent session".to_string())
+    let handle = handle_guard.as_ref().ok_or(AgentError::NotRunning)?;
+    let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
+    let mut params = serde_json::json!({ "type": thinking_type });
+    if let Some(tokens) = budget_tokens {
+        params["budgetTokens"] = serde_json::json!(tokens);
     }
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "agent/set_thinking",
+        "params": params,
+        "id": id
+    });
+    let json = serde_json::to_string(&request).map_err(AgentError::SerializeFailed)?;
+    handle.send_raw(&json).await
 }
 
 #[tauri::command]
@@ -192,21 +262,23 @@ pub async fn agent_set_effort(
     effort: String,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
+    agent_set_effort_inner(effort, &state)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn agent_set_effort_inner(effort: String, state: &AgentState) -> Result<(), AgentError> {
     let handle_guard = state.handle.lock().await;
-    if let Some(handle) = handle_guard.as_ref() {
-        let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
-        let request = serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": "agent/set_effort",
-            "params": { "effort": effort },
-            "id": id
-        });
-        handle
-            .send_raw(&serde_json::to_string(&request).unwrap())
-            .await
-    } else {
-        Err("No active agent session".to_string())
-    }
+    let handle = handle_guard.as_ref().ok_or(AgentError::NotRunning)?;
+    let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "agent/set_effort",
+        "params": { "effort": effort },
+        "id": id
+    });
+    let json = serde_json::to_string(&request).map_err(AgentError::SerializeFailed)?;
+    handle.send_raw(&json).await
 }
 
 #[tauri::command]
@@ -215,21 +287,23 @@ pub async fn agent_set_fast_mode(
     enabled: bool,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
+    agent_set_fast_mode_inner(enabled, &state)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn agent_set_fast_mode_inner(enabled: bool, state: &AgentState) -> Result<(), AgentError> {
     let handle_guard = state.handle.lock().await;
-    if let Some(handle) = handle_guard.as_ref() {
-        let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
-        let request = serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": "agent/set_fast_mode",
-            "params": { "enabled": enabled },
-            "id": id
-        });
-        handle
-            .send_raw(&serde_json::to_string(&request).unwrap())
-            .await
-    } else {
-        Err("No active agent session".to_string())
-    }
+    let handle = handle_guard.as_ref().ok_or(AgentError::NotRunning)?;
+    let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "agent/set_fast_mode",
+        "params": { "enabled": enabled },
+        "id": id
+    });
+    let json = serde_json::to_string(&request).map_err(AgentError::SerializeFailed)?;
+    handle.send_raw(&json).await
 }
 
 /// Find the agent sidecar binary.
@@ -395,9 +469,7 @@ pub async fn execute_step(
     conversation_writer: Option<&Mutex<crate::conversation::ConversationWriter>>,
     current_step_id: Option<&str>,
 ) -> Result<(String, String), String> {
-    let agent_bin = find_agent_binary().ok_or_else(|| {
-        "Agent sidecar binary not found. Run 'bun run agent:build' first.".to_string()
-    })?;
+    let agent_bin = find_agent_binary().ok_or_else(|| AgentError::BinaryNotFound.to_string())?;
 
     log::info!("agent: using binary at {agent_bin:?}");
 
@@ -478,14 +550,14 @@ pub async fn execute_step(
 
     let mut child = cmd
         .spawn()
-        .map_err(|e| format!("Failed to spawn agent sidecar: {e}"))?;
+        .map_err(|e| AgentError::SpawnFailed(e).to_string())?;
 
     // ── Read SOCKET_PATH from stdout ──
 
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| "Failed to capture sidecar stdout".to_string())?;
+        .ok_or_else(|| AgentError::StdioCaptureError("stdout").to_string())?;
 
     let mut stdout_reader = BufReader::new(stdout);
     let mut first_line = String::new();
@@ -500,15 +572,15 @@ pub async fn execute_step(
         match read_result {
             Err(_) => {
                 let _ = child.kill().await;
-                return Err("Sidecar failed to announce socket path within 10 seconds".to_string());
+                return Err(AgentError::SocketPathTimeout.to_string());
             }
             Ok(Err(e)) => {
                 let _ = child.kill().await;
-                return Err(format!("Failed to read sidecar stdout: {e}"));
+                return Err(AgentError::StdoutReadFailed(e).to_string());
             }
             Ok(Ok(0)) => {
                 let _ = child.kill().await;
-                return Err("Sidecar exited before announcing socket path".to_string());
+                return Err(AgentError::SocketPathEof.to_string());
             }
             Ok(Ok(_)) => {
                 let trimmed = first_line.trim();
@@ -516,10 +588,8 @@ pub async fn execute_step(
                     PathBuf::from(path)
                 } else {
                     let _ = child.kill().await;
-                    return Err(format!(
-                        "Sidecar printed unexpected first line (expected SOCKET_PATH=...): {}",
-                        &trimmed[..trimmed.len().min(200)]
-                    ));
+                    let preview = &trimmed[..trimmed.len().min(200)];
+                    return Err(AgentError::SocketPathInvalid(preview.to_string()).to_string());
                 }
             }
         }
@@ -531,7 +601,7 @@ pub async fn execute_step(
 
     let stream = UnixStream::connect(&socket_path)
         .await
-        .map_err(|e| format!("Failed to connect to sidecar socket: {e}"))?;
+        .map_err(|e| AgentError::SocketConnectFailed(e).to_string())?;
 
     let (read_half, write_half) = tokio::io::split(stream);
     let write_half = Arc::new(Mutex::new(write_half));
@@ -568,18 +638,18 @@ pub async fn execute_step(
         })),
     };
     let query_json = serde_json::to_string(&query_request)
-        .map_err(|e| format!("Failed to serialize query request: {e}"))?;
+        .map_err(|e| AgentError::SerializeFailed(e).to_string())?;
 
     {
         let mut writer = write_half.lock().await;
         writer
             .write_all(format!("{query_json}\n").as_bytes())
             .await
-            .map_err(|e| format!("Failed to write query to socket: {e}"))?;
+            .map_err(|e| AgentError::SocketWriteFailed(e).to_string())?;
         writer
             .flush()
             .await
-            .map_err(|e| format!("Failed to flush socket: {e}"))?;
+            .map_err(|e| AgentError::SocketWriteFailed(e).to_string())?;
     }
 
     // Capture to file if enabled
@@ -599,7 +669,7 @@ pub async fn execute_step(
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| "Failed to capture sidecar stderr".to_string())?;
+        .ok_or_else(|| AgentError::StdioCaptureError("stderr").to_string())?;
 
     let stderr_chunk_channel = on_chunk.clone();
     let stderr_issue_id = issue_id.to_string();
@@ -645,7 +715,7 @@ pub async fn execute_step(
                 timed_out = true;
                 break 'outer Ok(());
             }
-            Ok(Err(e)) => break 'outer Err(format!("Failed to read from socket: {e}")),
+            Ok(Err(e)) => break 'outer Err(AgentError::SocketReadFailed(e).to_string()),
             Ok(Ok(None)) => break 'outer Ok(()),
             Ok(Ok(Some(line))) => line,
         };
@@ -684,7 +754,7 @@ pub async fn execute_step(
                 if id.as_u64() == Some(query_id) {
                     // Response to our `query` request
                     if let Some(ref err) = msg.error {
-                        break 'outer Err(format!("Query failed: {}", err.message));
+                        break 'outer Err(AgentError::QueryFailed(err.message.clone()).to_string());
                     }
                     got_query_response = true;
                     log::info!("agent: query accepted by sidecar");
@@ -864,10 +934,8 @@ pub async fn execute_step(
     // ── Cleanup ──
 
     if timed_out {
-        let timeout_msg = format!(
-            "Agent sidecar timed out after {} seconds of inactivity. The session can be resumed.",
-            idle_timeout.as_secs()
-        );
+        let err = AgentError::IdleTimeout(idle_timeout.as_secs());
+        let timeout_msg = format!("{err}. The session can be resumed.");
         let _ = on_chunk.send(StreamChunk {
             issue_id: issue_id.to_string(),
             chunk_type: "error".to_string(),
@@ -917,7 +985,7 @@ pub async fn execute_step(
     let status = child
         .wait()
         .await
-        .map_err(|e| format!("Failed to wait for agent sidecar: {e}"))?;
+        .map_err(|e| AgentError::WaitFailed(e).to_string())?;
 
     let elapsed = start_time.elapsed();
     log::info!(
@@ -931,15 +999,15 @@ pub async fn execute_step(
     let _ = std::fs::remove_file(&socket_path);
 
     if !status.success() && !got_query_response {
-        return Err(format!(
-            "Agent sidecar exited with status {}{}",
-            status,
-            if response_text.is_empty() {
+        return Err(AgentError::SidecarExitError {
+            status: status.to_string(),
+            detail: if response_text.is_empty() {
                 " and no output"
             } else {
                 ""
-            }
-        ));
+            },
+        }
+        .to_string());
     }
 
     Ok((response_text, final_session_id))

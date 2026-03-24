@@ -72,7 +72,10 @@ async fn agent_permission_respond(
 ) -> Result<(), String> {
     let handle_guard = state.handle.lock().await;
     if let Some(handle) = handle_guard.as_ref() {
-        handle.respond_to_permission(&request_id, allowed).await
+        handle
+            .respond_to_permission(&request_id, allowed)
+            .await
+            .map_err(|e| e.to_string())
     } else {
         Err("No active agent session".to_string())
     }
@@ -87,7 +90,10 @@ async fn agent_review_respond(
 ) -> Result<(), String> {
     let handle_guard = state.handle.lock().await;
     if let Some(handle) = handle_guard.as_ref() {
-        handle.respond_to_review(&request_id, submission).await
+        handle
+            .respond_to_review(&request_id, submission)
+            .await
+            .map_err(|e| e.to_string())
     } else {
         Err("No active agent session".to_string())
     }

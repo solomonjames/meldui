@@ -143,7 +143,7 @@ async fn login_inner() -> Result<ClaudeStatus, ClaudeError> {
 }
 
 /// Status of the Claude Code CLI installation and authentication.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct ClaudeStatus {
     pub installed: bool,
     pub authenticated: bool,
@@ -153,7 +153,7 @@ pub struct ClaudeStatus {
 }
 
 /// Streaming event payload emitted to frontend
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct StreamChunk {
     pub issue_id: String,
     pub chunk_type: String, // "text", "tool_start", "tool_input", "tool_end", "tool_result", "thinking", "result", "error", "stderr"

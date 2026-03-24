@@ -45,7 +45,7 @@ pub enum StepStatus {
     Failed(String),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct WorkflowState {
     pub workflow_id: String,
     pub current_step_id: Option<String>,
@@ -53,7 +53,7 @@ pub struct WorkflowState {
     pub step_history: Vec<StepRecord>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct StepRecord {
     pub step_id: String,
     pub status: StepStatus,

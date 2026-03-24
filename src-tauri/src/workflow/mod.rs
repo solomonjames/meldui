@@ -311,7 +311,7 @@ pub async fn execute_step(
     })
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct StepExecutionResult {
     pub step_id: String,
     pub response: String,
@@ -320,7 +320,7 @@ pub struct StepExecutionResult {
 
 // ── Workflow Suggestion ──
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct WorkflowSuggestion {
     pub workflow_id: String,
     pub reasoning: String,

@@ -20,7 +20,7 @@ pub struct AgentReviewFindingsRequest {
 }
 
 /// Emitted when the agent sidecar initializes and reports its configuration.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct AgentInitMetadata {
     pub model: String,
     pub available_models: Vec<String>,
@@ -30,35 +30,35 @@ pub struct AgentInitMetadata {
     pub mcp_servers: Vec<McpServerInfo>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct McpServerInfo {
     pub name: String,
     pub status: String,
 }
 
 /// Emitted when a subtask is created by the agent.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct SubtaskCreated {
     pub subtask_id: String,
     pub parent_id: String,
 }
 
 /// Emitted when a subtask is updated by the agent.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct SubtaskUpdated {
     pub subtask_id: String,
     pub parent_id: String,
 }
 
 /// Emitted when a subtask is closed by the agent.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct SubtaskClosed {
     pub subtask_id: String,
     pub parent_id: String,
 }
 
 /// Emitted when a ticket section is updated by the agent.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct SectionUpdateEvent {
     pub ticket_id: String,
     pub section: String,
@@ -68,7 +68,7 @@ pub struct SectionUpdateEvent {
 }
 
 /// Emitted when the agent sends a notification.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct NotificationEvent {
     pub title: String,
     pub message: String,
@@ -76,14 +76,14 @@ pub struct NotificationEvent {
 }
 
 /// Emitted when the agent provides a status update.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct StatusUpdateEvent {
     pub ticket_id: String,
     pub status_text: String,
 }
 
 /// Emitted when the agent reports a pull request URL.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct PrUrlReportedEvent {
     pub ticket_id: String,
     pub url: String,

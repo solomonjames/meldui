@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 // ── Types ──
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct WorkflowSectionDef {
     pub id: String,
     pub label: String,
@@ -21,7 +21,7 @@ pub struct WorkflowSectionDef {
     pub collapsed: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct WorkflowDefinition {
     pub id: String,
     pub name: String,
@@ -42,7 +42,7 @@ pub enum StepViewType {
     Commit,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct WorkflowStep {
     pub id: String,
     pub name: String,
@@ -51,7 +51,7 @@ pub struct WorkflowStep {
     pub view: StepViewType,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 #[serde(untagged)]
 pub enum StepInstructions {
     Prompt { prompt: String },

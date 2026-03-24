@@ -21,7 +21,7 @@ pub(crate) enum DiffError {
 
 // ── Diff Types ──
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffLineType {
     Added,
@@ -29,7 +29,7 @@ pub enum DiffLineType {
     Context,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct DiffLine {
     pub line_type: DiffLineType,
     pub content: String,
@@ -39,7 +39,7 @@ pub struct DiffLine {
     pub new_line_no: Option<u32>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct DiffHunk {
     pub header: String,
     pub old_start: u32,
@@ -49,7 +49,7 @@ pub struct DiffHunk {
     pub lines: Vec<DiffLine>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct DiffFile {
     pub path: String,
     pub status: String,
@@ -61,7 +61,7 @@ pub struct DiffFile {
 // ── Branch Info ──
 
 /// Branch information for the commit view.
-#[derive(Clone, Debug, Serialize, specta::Type)]
+#[derive(Clone, Debug, PartialEq, Serialize, specta::Type)]
 pub struct BranchInfo {
     pub branch: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -128,7 +128,7 @@ async fn get_branch_info_inner(project_dir: &str) -> Result<BranchInfo, DiffErro
 // ── Commit Action ──
 
 /// Result of a commit action executed via the agent sidecar.
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct CommitActionResult {
     pub success: bool,
     pub message: String,
@@ -364,7 +364,7 @@ fn parse_diff(diff_text: &str) -> Vec<DiffFile> {
 // The Rust side currently passes review data as serde_json::Value, but these are kept
 // for future use when the review flow needs Rust-side validation or persistence.
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 #[allow(dead_code)] // Mirrors TypeScript ReviewFinding; reserved for Rust-side review validation
 pub struct ReviewFinding {
     pub id: String,
@@ -379,7 +379,7 @@ pub struct ReviewFinding {
     pub suggestion: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 #[allow(dead_code)] // Mirrors TypeScript ReviewComment; reserved for Rust-side review validation
 pub struct ReviewComment {
     pub id: String,
@@ -392,7 +392,7 @@ pub struct ReviewComment {
     pub resolved: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 #[allow(dead_code)] // Mirrors TypeScript ReviewSubmission; reserved for Rust-side review validation
 pub struct ReviewSubmission {
     pub action: String,
@@ -401,7 +401,7 @@ pub struct ReviewSubmission {
     pub finding_actions: Vec<FindingAction>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 #[allow(dead_code)] // Mirrors TypeScript FindingAction; reserved for Rust-side review validation
 pub struct FindingAction {
     pub finding_id: String,

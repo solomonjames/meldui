@@ -47,7 +47,6 @@ interface ComposeToolbarProps {
     message: string,
     attachments?: Array<{ name: string; path: string; type: string }>,
   ) => void;
-  disabled?: boolean;
   placeholder?: string;
   contextUsage?: ContextUsage;
   contextIndicatorVisibility?: "threshold" | "always" | "never";
@@ -106,7 +105,6 @@ export function ComposeToolbar({
   onSetEffort,
   onSetFastMode,
   onSend,
-  disabled = false,
   placeholder = "Add context or ask questions... (Enter to send)",
   contextUsage,
   contextIndicatorVisibility,
@@ -230,7 +228,7 @@ export function ComposeToolbar({
 
   const handleSend = () => {
     const trimmed = input.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed) return;
     onSend(trimmed, attachments.length > 0 ? attachments : undefined);
     setInput("");
     setAttachments([]);
@@ -272,7 +270,6 @@ export function ComposeToolbar({
               onClick={handleSelect}
               placeholder={placeholder}
               className="min-h-[88px] max-h-[200px] resize-none border-0 bg-transparent rounded-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              disabled={disabled}
             />
           </div>
 
@@ -411,12 +408,7 @@ export function ComposeToolbar({
             <div className="flex-1" />
 
             {/* Send button */}
-            <Button
-              onClick={handleSend}
-              disabled={!input.trim() || disabled}
-              size="sm"
-              className="h-7"
-            >
+            <Button onClick={handleSend} disabled={!input.trim()} size="sm" className="h-7">
               <Send className="w-3.5 h-3.5" />
             </Button>
           </div>

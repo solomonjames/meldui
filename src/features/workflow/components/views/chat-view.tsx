@@ -331,7 +331,6 @@ export function ChatView({
             onSend={(message) => {
               handleSend(message);
             }}
-            disabled={isExecuting}
             contextUsage={stepOutput?.contextUsage}
             contextIndicatorVisibility={
               (appPreferences?.context_indicator_visibility as "threshold" | "always" | "never") ??

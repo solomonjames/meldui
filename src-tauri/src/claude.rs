@@ -1,7 +1,8 @@
-use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
+
+use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
 /// Find the claude CLI binary by searching common locations.

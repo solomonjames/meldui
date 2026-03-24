@@ -18,6 +18,7 @@ use workflow::{
     BranchInfo, CommitActionResult, DiffFile, StepExecutionResult, WorkflowDefinition,
     WorkflowState, WorkflowSuggestion,
 };
+
 // ── Folder dialog command ──
 
 #[tauri::command]

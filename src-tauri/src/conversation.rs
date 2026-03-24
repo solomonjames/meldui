@@ -1,8 +1,9 @@
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 const SCHEMA_VERSION: u32 = 1;
 

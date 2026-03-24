@@ -119,6 +119,9 @@ jobs:
       - name: Type check (Rust)
         run: cd src-tauri && cargo check
 
+      - name: Clippy lint (Rust)
+        run: cd src-tauri && cargo clippy -- -D warnings
+
   test-frontend:
     needs: detect-changes
     if: >-

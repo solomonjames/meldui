@@ -3,9 +3,75 @@
 //! Tickets are stored as individual JSON files in `.meldui/tickets/`.
 use std::path::PathBuf;
 
+use thiserror::Error;
+
 use crate::constants::{MELDUI_DIR, TICKETS_DIR};
 
 use serde::{Deserialize, Serialize};
+
+/// Structured error type for ticket operations.
+#[derive(Debug, Error)]
+pub(crate) enum TicketError {
+    #[error("ticket '{id}' not found")]
+    NotFound { id: String },
+
+    #[error("failed to read ticket '{id}'")]
+    ReadFailed {
+        id: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("failed to write ticket '{id}'")]
+    WriteFailed {
+        id: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("failed to parse ticket '{id}'")]
+    ParseFailed {
+        id: String,
+        #[source]
+        source: serde_json::Error,
+    },
+
+    #[error("failed to serialize ticket '{id}'")]
+    SerializeFailed {
+        id: String,
+        #[source]
+        source: serde_json::Error,
+    },
+
+    #[error("failed to delete ticket '{id}'")]
+    DeleteFailed {
+        id: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("failed to create tickets directory")]
+    DirCreateFailed(#[source] std::io::Error),
+
+    #[error("failed to list tickets")]
+    ListFailed(#[source] std::io::Error),
+
+    #[error("invalid metadata JSON")]
+    InvalidMetadata(#[source] serde_json::Error),
+
+    #[error("section '{section_id}' not found on ticket '{ticket_id}'")]
+    SectionNotFound {
+        section_id: String,
+        ticket_id: String,
+    },
+}
+
+/// Allow `?` to propagate `TicketError` in functions returning `Result<T, String>`.
+impl From<TicketError> for String {
+    fn from(err: TicketError) -> Self {
+        err.to_string()
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
 pub struct TicketComment {
@@ -76,45 +142,55 @@ pub struct Ticket {
 }
 
 /// Get path to the .meldui/tickets/ directory, creating if needed.
-fn tickets_dir(project_dir: &str) -> Result<PathBuf, String> {
+fn tickets_dir(project_dir: &str) -> Result<PathBuf, TicketError> {
     let dir = PathBuf::from(project_dir)
         .join(MELDUI_DIR)
         .join(TICKETS_DIR);
     if !dir.exists() {
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create tickets directory: {e}"))?;
+        std::fs::create_dir_all(&dir).map_err(TicketError::DirCreateFailed)?;
     }
     Ok(dir)
 }
 
 /// Path to a specific ticket file.
-fn ticket_path(project_dir: &str, id: &str) -> Result<PathBuf, String> {
+fn ticket_path(project_dir: &str, id: &str) -> Result<PathBuf, TicketError> {
     let dir = tickets_dir(project_dir)?;
     Ok(dir.join(format!("{id}.json")))
 }
 
 /// Read a single ticket from disk.
-fn read_ticket(project_dir: &str, id: &str) -> Result<Ticket, String> {
+fn read_ticket(project_dir: &str, id: &str) -> Result<Ticket, TicketError> {
     let path = ticket_path(project_dir, id)?;
     if !path.exists() {
-        return Err(format!("Ticket '{id}' not found"));
+        return Err(TicketError::NotFound { id: id.to_owned() });
     }
-    let content =
-        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read ticket: {e}"))?;
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse ticket: {e}"))
+    let content = std::fs::read_to_string(&path).map_err(|e| TicketError::ReadFailed {
+        id: id.to_owned(),
+        source: e,
+    })?;
+    serde_json::from_str(&content).map_err(|e| TicketError::ParseFailed {
+        id: id.to_owned(),
+        source: e,
+    })
 }
 
 /// Write a ticket to disk (public for sync module).
 pub fn write_ticket_raw(project_dir: &str, ticket: &Ticket) -> Result<(), String> {
-    write_ticket(project_dir, ticket)
+    write_ticket(project_dir, ticket).map_err(|e| e.to_string())
 }
 
 /// Write a ticket to disk.
-fn write_ticket(project_dir: &str, ticket: &Ticket) -> Result<(), String> {
+fn write_ticket(project_dir: &str, ticket: &Ticket) -> Result<(), TicketError> {
     let path = ticket_path(project_dir, &ticket.id)?;
-    let content = serde_json::to_string_pretty(ticket)
-        .map_err(|e| format!("Failed to serialize ticket: {e}"))?;
-    std::fs::write(&path, content).map_err(|e| format!("Failed to write ticket: {e}"))
+    let content =
+        serde_json::to_string_pretty(ticket).map_err(|e| TicketError::SerializeFailed {
+            id: ticket.id.clone(),
+            source: e,
+        })?;
+    std::fs::write(&path, content).map_err(|e| TicketError::WriteFailed {
+        id: ticket.id.clone(),
+        source: e,
+    })
 }
 
 /// Generate a new ticket ID.
@@ -130,10 +206,20 @@ pub fn list_tickets(
     ticket_type: Option<&str>,
     show_all: bool,
 ) -> Result<Vec<Ticket>, String> {
+    list_tickets_inner(project_dir, status, ticket_type, show_all).map_err(|e| e.to_string())
+}
+
+/// Inner implementation returning structured errors.
+fn list_tickets_inner(
+    project_dir: &str,
+    status: Option<&str>,
+    ticket_type: Option<&str>,
+    show_all: bool,
+) -> Result<Vec<Ticket>, TicketError> {
     let dir = tickets_dir(project_dir)?;
     let mut tickets = Vec::new();
 
-    let entries = std::fs::read_dir(&dir).map_err(|e| format!("Failed to read tickets: {e}"))?;
+    let entries = std::fs::read_dir(&dir).map_err(TicketError::ListFailed)?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -187,6 +273,18 @@ pub fn create_ticket(
     ticket_type: &str,
     priority: i32,
 ) -> Result<Ticket, String> {
+    create_ticket_inner(project_dir, title, description, ticket_type, priority)
+        .map_err(|e| e.to_string())
+}
+
+/// Inner implementation returning structured errors.
+fn create_ticket_inner(
+    project_dir: &str,
+    title: &str,
+    description: Option<&str>,
+    ticket_type: &str,
+    priority: i32,
+) -> Result<Ticket, TicketError> {
     let now = chrono::Utc::now().to_rfc3339();
     let ticket = Ticket {
         id: generate_id(),
@@ -232,6 +330,35 @@ pub fn update_ticket(
     acceptance_criteria: Option<&str>,
     metadata: Option<&str>,
 ) -> Result<Ticket, String> {
+    update_ticket_inner(
+        project_dir,
+        id,
+        title,
+        status,
+        priority,
+        description,
+        notes,
+        design,
+        acceptance_criteria,
+        metadata,
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Inner implementation returning structured errors.
+#[allow(clippy::too_many_arguments)]
+fn update_ticket_inner(
+    project_dir: &str,
+    id: &str,
+    title: Option<&str>,
+    status: Option<&str>,
+    priority: Option<i32>,
+    description: Option<&str>,
+    notes: Option<&str>,
+    design: Option<&str>,
+    acceptance_criteria: Option<&str>,
+    metadata: Option<&str>,
+) -> Result<Ticket, TicketError> {
     let mut ticket = read_ticket(project_dir, id)?;
 
     if let Some(t) = title {
@@ -257,7 +384,7 @@ pub fn update_ticket(
     }
     if let Some(m) = metadata {
         let meta: serde_json::Value =
-            serde_json::from_str(m).map_err(|e| format!("Invalid metadata JSON: {e}"))?;
+            serde_json::from_str(m).map_err(TicketError::InvalidMetadata)?;
         ticket.metadata = meta;
     }
 
@@ -268,6 +395,15 @@ pub fn update_ticket(
 
 /// Close a ticket.
 pub fn close_ticket(project_dir: &str, id: &str, reason: Option<&str>) -> Result<Ticket, String> {
+    close_ticket_inner(project_dir, id, reason).map_err(|e| e.to_string())
+}
+
+/// Inner implementation returning structured errors.
+fn close_ticket_inner(
+    project_dir: &str,
+    id: &str,
+    reason: Option<&str>,
+) -> Result<Ticket, TicketError> {
     let mut ticket = read_ticket(project_dir, id)?;
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -284,16 +420,24 @@ pub fn close_ticket(project_dir: &str, id: &str, reason: Option<&str>) -> Result
 
 /// Show a single ticket by ID.
 pub fn show_ticket(project_dir: &str, id: &str) -> Result<Ticket, String> {
-    read_ticket(project_dir, id)
+    read_ticket(project_dir, id).map_err(|e| e.to_string())
 }
 
 /// Delete a ticket.
 pub fn delete_ticket(project_dir: &str, id: &str) -> Result<(), String> {
+    delete_ticket_inner(project_dir, id).map_err(|e| e.to_string())
+}
+
+/// Inner implementation returning structured errors.
+fn delete_ticket_inner(project_dir: &str, id: &str) -> Result<(), TicketError> {
     let path = ticket_path(project_dir, id)?;
     if !path.exists() {
-        return Err(format!("Ticket '{id}' not found"));
+        return Err(TicketError::NotFound { id: id.to_owned() });
     }
-    std::fs::remove_file(&path).map_err(|e| format!("Failed to delete ticket: {e}"))
+    std::fs::remove_file(&path).map_err(|e| TicketError::DeleteFailed {
+        id: id.to_owned(),
+        source: e,
+    })
 }
 
 /// Add a comment to a ticket.
@@ -303,6 +447,16 @@ pub fn add_comment(
     author: &str,
     text: &str,
 ) -> Result<Ticket, String> {
+    add_comment_inner(project_dir, id, author, text).map_err(|e| e.to_string())
+}
+
+/// Inner implementation returning structured errors.
+fn add_comment_inner(
+    project_dir: &str,
+    id: &str,
+    author: &str,
+    text: &str,
+) -> Result<Ticket, TicketError> {
     let mut ticket = read_ticket(project_dir, id)?;
 
     let comment = TicketComment {
@@ -336,6 +490,16 @@ pub fn update_section(
     section_id: &str,
     content: serde_json::Value,
 ) -> Result<Ticket, String> {
+    update_section_inner(project_dir, ticket_id, section_id, content).map_err(|e| e.to_string())
+}
+
+/// Inner implementation returning structured errors.
+fn update_section_inner(
+    project_dir: &str,
+    ticket_id: &str,
+    section_id: &str,
+    content: serde_json::Value,
+) -> Result<Ticket, TicketError> {
     let mut ticket = read_ticket(project_dir, ticket_id)?;
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -343,7 +507,10 @@ pub fn update_section(
         .sections
         .iter_mut()
         .find(|s| s.id == section_id)
-        .ok_or_else(|| format!("Section '{section_id}' not found on ticket '{ticket_id}'"))?;
+        .ok_or_else(|| TicketError::SectionNotFound {
+            section_id: section_id.to_owned(),
+            ticket_id: ticket_id.to_owned(),
+        })?;
 
     section.content = content;
     section.updated_at = now.clone();
@@ -360,6 +527,16 @@ pub fn initialize_ticket_sections(
     ticket_id: &str,
     section_defs: Vec<TicketSectionDef>,
 ) -> Result<Ticket, String> {
+    initialize_ticket_sections_inner(project_dir, ticket_id, section_defs)
+        .map_err(|e| e.to_string())
+}
+
+/// Inner implementation returning structured errors.
+fn initialize_ticket_sections_inner(
+    project_dir: &str,
+    ticket_id: &str,
+    section_defs: Vec<TicketSectionDef>,
+) -> Result<Ticket, TicketError> {
     let mut ticket = read_ticket(project_dir, ticket_id)?;
     let now = chrono::Utc::now().to_rfc3339();
 

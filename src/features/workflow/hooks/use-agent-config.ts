@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import type { AgentConfig } from "@/shared/types";
 
 const AGENT_CONFIG_KEY = ["agent", "config"] as const;
+const STORAGE_KEY = "meldui:agent-config";
 
 const DEFAULT_CONFIG: AgentConfig = {
   model: "claude-opus-4-6",
@@ -23,12 +24,32 @@ const DEFAULT_CONFIG: AgentConfig = {
   fastMode: false,
 };
 
+function loadPersistedConfig(): AgentConfig {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+    }
+  } catch {
+    // Corrupt data — fall through to default
+  }
+  return DEFAULT_CONFIG;
+}
+
+function persistConfig(config: AgentConfig) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    // Storage full or unavailable — non-fatal
+  }
+}
+
 export function useAgentConfig() {
   const queryClient = useQueryClient();
 
   const { data: config = DEFAULT_CONFIG } = useQuery({
     queryKey: AGENT_CONFIG_KEY,
-    queryFn: () => queryClient.getQueryData<AgentConfig>(AGENT_CONFIG_KEY) ?? DEFAULT_CONFIG,
+    queryFn: () => queryClient.getQueryData<AgentConfig>(AGENT_CONFIG_KEY) ?? loadPersistedConfig(),
     staleTime: Number.POSITIVE_INFINITY,
   });
 
@@ -47,15 +68,17 @@ export function useAgentConfig() {
     }>("agent-init-metadata", (event) => {
       if (cancelled) return;
       const metadata = event.payload;
-      queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, (prev) => ({
-        ...(prev ?? DEFAULT_CONFIG),
+      const updated: AgentConfig = {
+        ...(queryClient.getQueryData<AgentConfig>(AGENT_CONFIG_KEY) ?? DEFAULT_CONFIG),
         model: metadata.model,
         availableModels: metadata.available_models,
         tools: metadata.tools,
         slashCommands: metadata.slash_commands,
         skills: metadata.skills,
         mcpServers: metadata.mcp_servers,
-      }));
+      };
+      queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, updated);
+      persistConfig(updated);
     })
       .then((u) => {
         if (cancelled) {
@@ -76,14 +99,18 @@ export function useAgentConfig() {
     };
   }, [queryClient]);
 
+  const updateConfig = (patch: Partial<AgentConfig>) => {
+    const updated = {
+      ...(queryClient.getQueryData<AgentConfig>(AGENT_CONFIG_KEY) ?? DEFAULT_CONFIG),
+      ...patch,
+    };
+    queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, updated);
+    persistConfig(updated);
+  };
+
   const setModel = useMutation({
     mutationFn: (model: string) => invoke("agent_set_model", { model }).catch(() => {}),
-    onMutate: (model) => {
-      queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, (prev) => ({
-        ...(prev ?? DEFAULT_CONFIG),
-        model,
-      }));
-    },
+    onMutate: (model) => updateConfig({ model }),
   });
 
   const setThinking = useMutation({
@@ -92,33 +119,18 @@ export function useAgentConfig() {
         thinkingType: params.type,
         budgetTokens: params.budgetTokens ?? null,
       }).catch(() => {}),
-    onMutate: (params) => {
-      queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, (prev) => ({
-        ...(prev ?? DEFAULT_CONFIG),
-        thinking: params,
-      }));
-    },
+    onMutate: (params) => updateConfig({ thinking: params }),
   });
 
   const setEffort = useMutation({
     mutationFn: (effort: "low" | "medium" | "high" | "max") =>
       invoke("agent_set_effort", { effort }).catch(() => {}),
-    onMutate: (effort) => {
-      queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, (prev) => ({
-        ...(prev ?? DEFAULT_CONFIG),
-        effort,
-      }));
-    },
+    onMutate: (effort) => updateConfig({ effort }),
   });
 
   const setFastMode = useMutation({
     mutationFn: (enabled: boolean) => invoke("agent_set_fast_mode", { enabled }).catch(() => {}),
-    onMutate: (enabled) => {
-      queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, (prev) => ({
-        ...(prev ?? DEFAULT_CONFIG),
-        fastMode: enabled,
-      }));
-    },
+    onMutate: (enabled) => updateConfig({ fastMode: enabled }),
   });
 
   return {

@@ -74,7 +74,7 @@ fn tickets_dir(project_dir: &str) -> Result<PathBuf, String> {
     let dir = PathBuf::from(project_dir).join(".meldui").join("tickets");
     if !dir.exists() {
         std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create tickets directory: {}", e))?;
+            .map_err(|e| format!("Failed to create tickets directory: {e}"))?;
     }
     Ok(dir)
 }
@@ -82,18 +82,18 @@ fn tickets_dir(project_dir: &str) -> Result<PathBuf, String> {
 /// Path to a specific ticket file.
 fn ticket_path(project_dir: &str, id: &str) -> Result<PathBuf, String> {
     let dir = tickets_dir(project_dir)?;
-    Ok(dir.join(format!("{}.json", id)))
+    Ok(dir.join(format!("{id}.json")))
 }
 
 /// Read a single ticket from disk.
 fn read_ticket(project_dir: &str, id: &str) -> Result<Ticket, String> {
     let path = ticket_path(project_dir, id)?;
     if !path.exists() {
-        return Err(format!("Ticket '{}' not found", id));
+        return Err(format!("Ticket '{id}' not found"));
     }
     let content =
-        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read ticket: {}", e))?;
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse ticket: {}", e))
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read ticket: {e}"))?;
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse ticket: {e}"))
 }
 
 /// Write a ticket to disk (public for sync module).
@@ -105,8 +105,8 @@ pub fn write_ticket_raw(project_dir: &str, ticket: &Ticket) -> Result<(), String
 fn write_ticket(project_dir: &str, ticket: &Ticket) -> Result<(), String> {
     let path = ticket_path(project_dir, &ticket.id)?;
     let content = serde_json::to_string_pretty(ticket)
-        .map_err(|e| format!("Failed to serialize ticket: {}", e))?;
-    std::fs::write(&path, content).map_err(|e| format!("Failed to write ticket: {}", e))
+        .map_err(|e| format!("Failed to serialize ticket: {e}"))?;
+    std::fs::write(&path, content).map_err(|e| format!("Failed to write ticket: {e}"))
 }
 
 /// Generate a new ticket ID.
@@ -125,7 +125,7 @@ pub fn list_tickets(
     let dir = tickets_dir(project_dir)?;
     let mut tickets = Vec::new();
 
-    let entries = std::fs::read_dir(&dir).map_err(|e| format!("Failed to read tickets: {}", e))?;
+    let entries = std::fs::read_dir(&dir).map_err(|e| format!("Failed to read tickets: {e}"))?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -133,9 +133,8 @@ pub fn list_tickets(
             continue;
         }
 
-        let content = match std::fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(_) => continue,
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
         };
 
         let ticket: Ticket = match serde_json::from_str(&content) {
@@ -212,6 +211,7 @@ pub fn create_ticket(
 }
 
 /// Update a ticket's fields.
+#[allow(clippy::too_many_arguments)]
 pub fn update_ticket(
     project_dir: &str,
     id: &str,
@@ -249,7 +249,7 @@ pub fn update_ticket(
     }
     if let Some(m) = metadata {
         let meta: serde_json::Value =
-            serde_json::from_str(m).map_err(|e| format!("Invalid metadata JSON: {}", e))?;
+            serde_json::from_str(m).map_err(|e| format!("Invalid metadata JSON: {e}"))?;
         ticket.metadata = meta;
     }
 
@@ -283,9 +283,9 @@ pub fn show_ticket(project_dir: &str, id: &str) -> Result<Ticket, String> {
 pub fn delete_ticket(project_dir: &str, id: &str) -> Result<(), String> {
     let path = ticket_path(project_dir, id)?;
     if !path.exists() {
-        return Err(format!("Ticket '{}' not found", id));
+        return Err(format!("Ticket '{id}' not found"));
     }
-    std::fs::remove_file(&path).map_err(|e| format!("Failed to delete ticket: {}", e))
+    std::fs::remove_file(&path).map_err(|e| format!("Failed to delete ticket: {e}"))
 }
 
 /// Add a comment to a ticket.
@@ -335,12 +335,7 @@ pub fn update_section(
         .sections
         .iter_mut()
         .find(|s| s.id == section_id)
-        .ok_or_else(|| {
-            format!(
-                "Section '{}' not found on ticket '{}'",
-                section_id, ticket_id
-            )
-        })?;
+        .ok_or_else(|| format!("Section '{section_id}' not found on ticket '{ticket_id}'"))?;
 
     section.content = content;
     section.updated_at = now.clone();
@@ -367,8 +362,7 @@ pub fn initialize_ticket_sections(
 
         let empty_content = match def.section_type.as_str() {
             "markdown" => serde_json::json!({ "text": "" }),
-            "acceptance_criteria" => serde_json::json!({ "items": [] }),
-            "checklist" => serde_json::json!({ "items": [] }),
+            "acceptance_criteria" | "checklist" => serde_json::json!({ "items": [] }),
             "key_value" => serde_json::json!({ "entries": [] }),
             _ => serde_json::json!({}),
         };

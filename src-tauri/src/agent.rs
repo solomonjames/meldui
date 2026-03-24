@@ -190,13 +190,13 @@ impl AgentHandle {
     async fn send_raw(&self, json: &str) -> Result<(), String> {
         let mut writer = self.socket_writer.lock().await;
         writer
-            .write_all(format!("{}\n", json).as_bytes())
+            .write_all(format!("{json}\n").as_bytes())
             .await
-            .map_err(|e| format!("Failed to write to socket: {}", e))?;
+            .map_err(|e| format!("Failed to write to socket: {e}"))?;
         writer
             .flush()
             .await
-            .map_err(|e| format!("Failed to flush socket: {}", e))?;
+            .map_err(|e| format!("Failed to flush socket: {e}"))?;
         Ok(())
     }
 
@@ -212,8 +212,7 @@ impl AgentHandle {
             result: Some(result),
             error: None,
         };
-        let json =
-            serde_json::to_string(&response).map_err(|e| format!("Serialize error: {}", e))?;
+        let json = serde_json::to_string(&response).map_err(|e| format!("Serialize error: {e}"))?;
         self.send_raw(&json).await
     }
 
@@ -264,8 +263,7 @@ impl AgentHandle {
             method: "cancel".to_string(),
             params: Some(serde_json::json!({})),
         };
-        let json =
-            serde_json::to_string(&request).map_err(|e| format!("Serialize error: {}", e))?;
+        let json = serde_json::to_string(&request).map_err(|e| format!("Serialize error: {e}"))?;
         self.send_raw(&json).await
     }
 }
@@ -291,9 +289,7 @@ pub async fn agent_set_model(
 ) -> Result<(), String> {
     let handle_guard = state.handle.lock().await;
     if let Some(handle) = handle_guard.as_ref() {
-        let id = handle
-            .next_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "method": "agent/set_model",
@@ -317,9 +313,7 @@ pub async fn agent_set_thinking(
 ) -> Result<(), String> {
     let handle_guard = state.handle.lock().await;
     if let Some(handle) = handle_guard.as_ref() {
-        let id = handle
-            .next_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
         let mut params = serde_json::json!({ "type": thinking_type });
         if let Some(tokens) = budget_tokens {
             params["budgetTokens"] = serde_json::json!(tokens);
@@ -346,9 +340,7 @@ pub async fn agent_set_effort(
 ) -> Result<(), String> {
     let handle_guard = state.handle.lock().await;
     if let Some(handle) = handle_guard.as_ref() {
-        let id = handle
-            .next_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "method": "agent/set_effort",
@@ -371,9 +363,7 @@ pub async fn agent_set_fast_mode(
 ) -> Result<(), String> {
     let handle_guard = state.handle.lock().await;
     if let Some(handle) = handle_guard.as_ref() {
-        let id = handle
-            .next_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "method": "agent/set_fast_mode",
@@ -400,16 +390,10 @@ fn find_agent_binary() -> Option<PathBuf> {
     if let Ok(override_path) = env::var("MELDUI_AGENT_BINARY") {
         let path = PathBuf::from(&override_path);
         if path.exists() {
-            log::info!(
-                "agent: using override binary from MELDUI_AGENT_BINARY: {}",
-                override_path
-            );
+            log::info!("agent: using override binary from MELDUI_AGENT_BINARY: {override_path}");
             return Some(path);
         }
-        log::warn!(
-            "agent: MELDUI_AGENT_BINARY set but path does not exist: {}",
-            override_path
-        );
+        log::warn!("agent: MELDUI_AGENT_BINARY set but path does not exist: {override_path}");
     }
 
     // 1. Check next to the app executable (Tauri externalBin placement)
@@ -420,7 +404,7 @@ fn find_agent_binary() -> Option<PathBuf> {
             } else {
                 "x86_64"
             };
-            let sidecar_name = format!("agent-{}-apple-darwin", arch);
+            let sidecar_name = format!("agent-{arch}-apple-darwin");
             let sidecar = exe_dir.join(&sidecar_name);
             if sidecar.exists() {
                 return Some(sidecar);
@@ -441,7 +425,7 @@ fn find_agent_binary() -> Option<PathBuf> {
     };
     let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("binaries")
-        .join(format!("agent-{}-apple-darwin", arch));
+        .join(format!("agent-{arch}-apple-darwin"));
     if dev_path.exists() {
         return Some(dev_path);
     }
@@ -455,11 +439,11 @@ fn augmented_path() -> String {
     let existing = env::var("PATH").unwrap_or_default();
 
     let extra_dirs = [
-        format!("{}/.local/bin", home),
-        format!("{}/.bun/bin", home),
-        format!("{}/.npm-global/bin", home),
-        format!("{}/.claude/bin", home),
-        format!("{}/go/bin", home),
+        format!("{home}/.local/bin"),
+        format!("{home}/.bun/bin"),
+        format!("{home}/.npm-global/bin"),
+        format!("{home}/.claude/bin"),
+        format!("{home}/go/bin"),
         "/opt/homebrew/bin".to_string(),
         "/usr/local/bin".to_string(),
     ];
@@ -478,17 +462,16 @@ fn augmented_path() -> String {
 }
 
 /// Clean up stale socket files from dead sidecar processes.
+#[allow(unsafe_code)] // Required for process signal delivery
 fn cleanup_stale_sockets() {
     let tmpdir = env::temp_dir();
-    let entries = match std::fs::read_dir(&tmpdir) {
-        Ok(e) => e,
-        Err(_) => return,
+    let Ok(entries) = std::fs::read_dir(&tmpdir) else {
+        return;
     };
 
     for entry in entries.flatten() {
-        let filename = match entry.file_name().into_string() {
-            Ok(f) => f,
-            Err(_) => continue,
+        let Ok(filename) = entry.file_name().into_string() else {
+            continue;
         };
         if !filename.starts_with("meldui-sidecar-") || !filename.ends_with(".sock") {
             continue;
@@ -514,15 +497,6 @@ fn cleanup_stale_sockets() {
 /// Determine allowed tools based on step view type.
 pub fn tools_for_view(view: &str) -> Vec<String> {
     match view {
-        "progress" => vec![
-            "mcp__meldui".into(),
-            "Read".into(),
-            "Write".into(),
-            "Edit".into(),
-            "Bash".into(),
-            "Glob".into(),
-            "Grep".into(),
-        ],
         "chat" => vec![
             "mcp__meldui".into(),
             "Read".into(),
@@ -537,6 +511,7 @@ pub fn tools_for_view(view: &str) -> Vec<String> {
             "Glob".into(),
             "Grep".into(),
         ],
+        // "progress" and all other views get the full tool set
         _ => vec![
             "mcp__meldui".into(),
             "Read".into(),
@@ -552,24 +527,25 @@ pub fn tools_for_view(view: &str) -> Vec<String> {
 /// Execute a workflow step via the agent sidecar.
 ///
 /// Returns (response_text, session_id).
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_step(
     project_dir: &str,
     issue_id: &str,
     prompt: &str,
     session_id: Option<&str>,
     allowed_tools: Option<Vec<String>>,
-    on_chunk: &tauri::ipc::Channel<crate::claude::StreamChunk>,
+    on_chunk: &tauri::ipc::Channel<StreamChunk>,
     app_handle: &tauri::AppHandle,
     tickets_dir_override: Option<&str>,
-    canonical_project_dir: Option<&str>,
-    conversation_writer: Option<&tokio::sync::Mutex<crate::conversation::ConversationWriter>>,
+    _canonical_project_dir: Option<&str>,
+    conversation_writer: Option<&Mutex<crate::conversation::ConversationWriter>>,
     current_step_id: Option<&str>,
 ) -> Result<(String, String), String> {
     let agent_bin = find_agent_binary().ok_or_else(|| {
         "Agent sidecar binary not found. Run 'bun run agent:build' first.".to_string()
     })?;
 
-    log::info!("agent: using binary at {:?}", agent_bin);
+    log::info!("agent: using binary at {agent_bin:?}");
 
     // Clean up stale sockets from dead processes
     cleanup_stale_sockets();
@@ -577,7 +553,7 @@ pub async fn execute_step(
     // NDJSON capture file for recording sessions (set MELDUI_CAPTURE_NDJSON=path)
     let capture_file = env::var("MELDUI_CAPTURE_NDJSON").ok();
     if let Some(ref path) = capture_file {
-        log::info!("agent: capturing messages to {}", path);
+        log::info!("agent: capturing messages to {path}");
     }
 
     let config = SidecarConfig {
@@ -591,7 +567,7 @@ pub async fn execute_step(
         tickets_dir: Some(
             tickets_dir_override
                 .map(|d| d.to_string())
-                .unwrap_or_else(|| format!("{}/.meldui/tickets", project_dir)),
+                .unwrap_or_else(|| format!("{project_dir}/.meldui/tickets")),
         ),
     };
 
@@ -637,7 +613,7 @@ pub async fn execute_step(
 
     let mut child = cmd
         .spawn()
-        .map_err(|e| format!("Failed to spawn agent sidecar: {}", e))?;
+        .map_err(|e| format!("Failed to spawn agent sidecar: {e}"))?;
 
     // ── Read SOCKET_PATH from stdout ──
 
@@ -663,7 +639,7 @@ pub async fn execute_step(
             }
             Ok(Err(e)) => {
                 let _ = child.kill().await;
-                return Err(format!("Failed to read sidecar stdout: {}", e));
+                return Err(format!("Failed to read sidecar stdout: {e}"));
             }
             Ok(Ok(0)) => {
                 let _ = child.kill().await;
@@ -684,13 +660,13 @@ pub async fn execute_step(
         }
     };
 
-    log::info!("agent: connecting to socket at {:?}", socket_path);
+    log::info!("agent: connecting to socket at {socket_path:?}");
 
     // ── Connect to Unix socket ──
 
     let stream = UnixStream::connect(&socket_path)
         .await
-        .map_err(|e| format!("Failed to connect to sidecar socket: {}", e))?;
+        .map_err(|e| format!("Failed to connect to sidecar socket: {e}"))?;
 
     let (read_half, write_half) = tokio::io::split(stream);
     let write_half = Arc::new(Mutex::new(write_half));
@@ -727,18 +703,18 @@ pub async fn execute_step(
         })),
     };
     let query_json = serde_json::to_string(&query_request)
-        .map_err(|e| format!("Failed to serialize query request: {}", e))?;
+        .map_err(|e| format!("Failed to serialize query request: {e}"))?;
 
     {
         let mut writer = write_half.lock().await;
         writer
-            .write_all(format!("{}\n", query_json).as_bytes())
+            .write_all(format!("{query_json}\n").as_bytes())
             .await
-            .map_err(|e| format!("Failed to write query to socket: {}", e))?;
+            .map_err(|e| format!("Failed to write query to socket: {e}"))?;
         writer
             .flush()
             .await
-            .map_err(|e| format!("Failed to flush socket: {}", e))?;
+            .map_err(|e| format!("Failed to flush socket: {e}"))?;
     }
 
     // Capture to file if enabled
@@ -749,7 +725,7 @@ pub async fn execute_step(
             .open(path)
         {
             use std::io::Write;
-            let _ = writeln!(f, "> {}", query_json);
+            let _ = writeln!(f, "> {query_json}");
         }
     }
 
@@ -804,7 +780,7 @@ pub async fn execute_step(
                 timed_out = true;
                 break 'outer Ok(());
             }
-            Ok(Err(e)) => break 'outer Err(format!("Failed to read from socket: {}", e)),
+            Ok(Err(e)) => break 'outer Err(format!("Failed to read from socket: {e}")),
             Ok(Ok(None)) => break 'outer Ok(()),
             Ok(Ok(Some(line))) => line,
         };
@@ -854,9 +830,8 @@ pub async fn execute_step(
 
         // ── Handle JSON-RPC notification or request from sidecar ──
 
-        let method = match msg.method.as_deref() {
-            Some(m) => m,
-            None => continue,
+        let Some(method) = msg.method.as_deref() else {
+            continue;
         };
         let params = msg.params.unwrap_or(serde_json::Value::Null);
 
@@ -876,11 +851,7 @@ pub async fn execute_step(
                             .and_then(|c| c.as_str())
                             .map(|s| s.len())
                             .unwrap_or(0);
-                        log::debug!(
-                            "agent: message type={} content_len={}",
-                            msg_type,
-                            content_len
-                        );
+                        log::debug!("agent: message type={msg_type} content_len={content_len}");
                     }
                     "error" => {
                         log::error!(
@@ -891,7 +862,11 @@ pub async fn execute_step(
                     _ => {
                         let s = serde_json::to_string(&params).unwrap_or_default();
                         let max = s.len().min(1000);
-                        let end = s.floor_char_boundary(max);
+                        // Find a valid char boundary at or before `max`
+                        let end = (0..=max)
+                            .rev()
+                            .find(|&i| s.is_char_boundary(i))
+                            .unwrap_or(0);
                         log::info!("agent: message {}", &s[..end]);
                     }
                 }
@@ -903,14 +878,14 @@ pub async fn execute_step(
                     issue_id,
                     on_chunk,
                     app_handle,
-                    canonical_project_dir.unwrap_or(project_dir),
+                    project_dir,
                 );
 
                 // Persist to conversation NDJSON
                 if let Some(writer) = conversation_writer {
                     let step = current_step_id.unwrap_or(issue_id);
                     if let Err(e) = writer.lock().await.append_raw(msg_type, &params, step) {
-                        log::error!("conversation: failed to append: {}", e);
+                        log::error!("conversation: failed to append: {e}");
                     }
                 }
             }
@@ -1016,7 +991,7 @@ pub async fn execute_step(
             }
 
             _ => {
-                log::debug!("agent: unknown JSON-RPC method: {}", method);
+                log::debug!("agent: unknown JSON-RPC method: {method}");
             }
         }
     };
@@ -1077,7 +1052,7 @@ pub async fn execute_step(
     let status = child
         .wait()
         .await
-        .map_err(|e| format!("Failed to wait for agent sidecar: {}", e))?;
+        .map_err(|e| format!("Failed to wait for agent sidecar: {e}"))?;
 
     let elapsed = start_time.elapsed();
     log::info!(
@@ -1111,9 +1086,9 @@ fn dispatch_message_to_tauri(
     msg_type: &str,
     params: &serde_json::Value,
     issue_id: &str,
-    on_chunk: &tauri::ipc::Channel<crate::claude::StreamChunk>,
+    on_chunk: &tauri::ipc::Channel<StreamChunk>,
     app_handle: &tauri::AppHandle,
-    canonical_project_dir: &str,
+    _canonical_project_dir: &str,
 ) {
     match msg_type {
         "session" => {

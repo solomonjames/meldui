@@ -94,8 +94,8 @@ fn find_bd_binary() -> Option<PathBuf> {
     let candidates = [
         "/opt/homebrew/bin/bd".to_string(),
         "/usr/local/bin/bd".to_string(),
-        format!("{}/.local/bin/bd", home),
-        format!("{}/go/bin/bd", home),
+        format!("{home}/.local/bin/bd"),
+        format!("{home}/go/bin/bd"),
     ];
 
     for path in &candidates {
@@ -141,16 +141,16 @@ async fn run_bd_json<T: for<'de> Deserialize<'de>>(
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to run bd: {}", e))?;
+        .map_err(|e| format!("Failed to run bd: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("bd command failed: {}", stderr));
+        return Err(format!("bd command failed: {stderr}"));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse bd output: {} — raw: {}", e, stdout))
+        .map_err(|e| format!("Failed to parse bd output: {e} — raw: {stdout}"))
 }
 
 /// Check if beads is available and initialized in a directory
@@ -199,14 +199,14 @@ pub async fn list_issues(
     // We need to own the strings for status and type
     let status_flag;
     if let Some(s) = status {
-        status_flag = format!("{}", s);
+        status_flag = s.to_string();
         args.push("-s");
         args.push(&status_flag);
     }
 
     let type_flag;
     if let Some(t) = issue_type {
-        type_flag = format!("{}", t);
+        type_flag = t.to_string();
         args.push("-t");
         args.push(&type_flag);
     }
@@ -252,6 +252,7 @@ pub async fn create_issue(
 }
 
 /// Update an issue
+#[allow(clippy::too_many_arguments)]
 pub async fn update_issue(
     project_dir: &str,
     id: &str,
@@ -346,14 +347,14 @@ pub async fn init(project_dir: &str) -> Result<String, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to init beads: {}", e))?;
+        .map_err(|e| format!("Failed to init beads: {e}"))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     if output.status.success() {
-        Ok(format!("{}{}", stdout, stderr))
+        Ok(format!("{stdout}{stderr}"))
     } else {
-        Err(format!("Failed to init beads: {}{}", stdout, stderr))
+        Err(format!("Failed to init beads: {stdout}{stderr}"))
     }
 }

@@ -17,7 +17,7 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
     use std::process::Stdio;
     use tokio::process::Command;
 
-    let branch_name = format!("meld/{}", ticket_id);
+    let branch_name = format!("meld/{ticket_id}");
     let worktree_path = PathBuf::from(project_dir)
         .join(".meldui")
         .join("worktrees")
@@ -31,7 +31,7 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
     if let Some(parent) = worktree_path.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create worktrees directory: {}", e))?;
+                .map_err(|e| format!("Failed to create worktrees directory: {e}"))?;
         }
     }
 
@@ -43,7 +43,7 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to get base commit: {}", e))?;
+        .map_err(|e| format!("Failed to get base commit: {e}"))?;
     let base_commit = String::from_utf8_lossy(&base_commit_output.stdout)
         .trim()
         .to_string();
@@ -56,7 +56,7 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to create worktree: {}", e))?;
+        .map_err(|e| format!("Failed to create worktree: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -69,29 +69,25 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
                 .stderr(Stdio::piped())
                 .output()
                 .await
-                .map_err(|e| format!("Failed to create worktree: {}", e))?;
+                .map_err(|e| format!("Failed to create worktree: {e}"))?;
 
             if !output2.status.success() {
                 let stderr2 = String::from_utf8_lossy(&output2.stderr);
-                return Err(format!("Failed to create worktree: {}", stderr2));
+                return Err(format!("Failed to create worktree: {stderr2}"));
             }
         } else {
-            return Err(format!("Failed to create worktree: {}", stderr));
+            return Err(format!("Failed to create worktree: {stderr}"));
         }
     }
 
-    log::info!(
-        "worktree: created at {} on branch {}",
-        worktree_str,
-        branch_name
-    );
+    log::info!("worktree: created at {worktree_str} on branch {branch_name}");
 
     // Run setup command if configured
     let settings = crate::settings::get_settings(project_dir).unwrap_or_default();
     if let Some(ref wt_settings) = settings.worktree {
         if let Some(ref setup_cmd) = wt_settings.setup_command {
             if !setup_cmd.trim().is_empty() {
-                log::info!("worktree: running setup command: {}", setup_cmd);
+                log::info!("worktree: running setup command: {setup_cmd}");
                 let setup_output = Command::new("sh")
                     .args(["-c", setup_cmd])
                     .current_dir(&worktree_str)
@@ -99,7 +95,7 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
                     .stderr(Stdio::piped())
                     .output()
                     .await
-                    .map_err(|e| format!("Failed to run worktree setup command: {}", e))?;
+                    .map_err(|e| format!("Failed to run worktree setup command: {e}"))?;
 
                 if !setup_output.status.success() {
                     let stderr = String::from_utf8_lossy(&setup_output.stderr);
@@ -112,14 +108,14 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
 
     // Store worktree info in ticket metadata
     let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
-    let mut meta = ticket.metadata.clone();
+    let mut meta = ticket.metadata;
     meta["worktree_path"] = serde_json::Value::String(worktree_str.clone());
     meta["worktree_branch"] = serde_json::Value::String(branch_name.clone());
     if !base_commit.is_empty() {
         meta["worktree_base_commit"] = serde_json::Value::String(base_commit.clone());
     }
     let meta_str = serde_json::to_string(&meta)
-        .map_err(|e| format!("Failed to serialize worktree metadata: {}", e))?;
+        .map_err(|e| format!("Failed to serialize worktree metadata: {e}"))?;
     crate::tickets::update_ticket(
         project_dir,
         ticket_id,
@@ -167,15 +163,15 @@ pub async fn remove_worktree(project_dir: &str, ticket_id: &str) -> Result<(), S
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to remove worktree: {}", e))?;
+        .map_err(|e| format!("Failed to remove worktree: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        log::warn!("worktree: git worktree remove failed: {}", stderr);
+        log::warn!("worktree: git worktree remove failed: {stderr}");
         // Fall back to manual removal
         if worktree_path.exists() {
             std::fs::remove_dir_all(&worktree_path)
-                .map_err(|e| format!("Failed to remove worktree directory: {}", e))?;
+                .map_err(|e| format!("Failed to remove worktree directory: {e}"))?;
         }
         // Prune stale worktree references
         let _ = Command::new("git")
@@ -185,10 +181,10 @@ pub async fn remove_worktree(project_dir: &str, ticket_id: &str) -> Result<(), S
             .await;
     }
 
-    log::info!("worktree: removed {}", worktree_str);
+    log::info!("worktree: removed {worktree_str}");
 
     // Delete the branch
-    let branch_name = format!("meld/{}", ticket_id);
+    let branch_name = format!("meld/{ticket_id}");
     let _ = Command::new("git")
         .args(["branch", "-D", &branch_name])
         .current_dir(project_dir)
@@ -203,13 +199,13 @@ pub async fn remove_worktree(project_dir: &str, ticket_id: &str) -> Result<(), S
 
 fn clear_worktree_metadata(project_dir: &str, ticket_id: &str) -> Result<(), String> {
     let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
-    let mut meta = ticket.metadata.clone();
+    let mut meta = ticket.metadata;
     if let Some(obj) = meta.as_object_mut() {
         obj.remove("worktree_path");
         obj.remove("worktree_branch");
     }
     let meta_str =
-        serde_json::to_string(&meta).map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+        serde_json::to_string(&meta).map_err(|e| format!("Failed to serialize metadata: {e}"))?;
     crate::tickets::update_ticket(
         project_dir,
         ticket_id,
@@ -333,7 +329,7 @@ pub fn load_bundled_workflows() -> Vec<WorkflowDefinition> {
     for yaml_str in bundled_yamls {
         match serde_yaml::from_str::<WorkflowDefinition>(yaml_str) {
             Ok(wf) => workflows.push(wf),
-            Err(e) => eprintln!("Failed to parse bundled workflow: {}", e),
+            Err(e) => eprintln!("Failed to parse bundled workflow: {e}"),
         }
     }
 
@@ -349,9 +345,8 @@ pub fn load_project_workflows(project_dir: &str) -> Vec<WorkflowDefinition> {
         return workflows;
     }
 
-    let entries = match std::fs::read_dir(&workflows_dir) {
-        Ok(entries) => entries,
-        Err(_) => return workflows,
+    let Ok(entries) = std::fs::read_dir(&workflows_dir) else {
+        return workflows;
     };
 
     for entry in entries.flatten() {
@@ -435,7 +430,7 @@ pub fn assign_workflow(
     workflow_id: &str,
 ) -> Result<WorkflowState, String> {
     let wf = get_workflow(project_dir, workflow_id)
-        .ok_or_else(|| format!("Workflow '{}' not found", workflow_id))?;
+        .ok_or_else(|| format!("Workflow '{workflow_id}' not found"))?;
 
     let first_step_id = wf
         .steps
@@ -454,8 +449,8 @@ pub fn assign_workflow(
     let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
 
     let merged = merge_workflow_state(&ticket.metadata, &state);
-    let meta_str = serde_json::to_string(&merged)
-        .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+    let meta_str =
+        serde_json::to_string(&merged).map_err(|e| format!("Failed to serialize metadata: {e}"))?;
 
     crate::tickets::update_ticket(
         project_dir,
@@ -493,7 +488,7 @@ pub fn advance_step(project_dir: &str, ticket_id: &str) -> Result<WorkflowState,
         .steps
         .iter()
         .position(|s| &s.id == current_step_id)
-        .ok_or_else(|| format!("Step '{}' not found in workflow", current_step_id))?;
+        .ok_or_else(|| format!("Step '{current_step_id}' not found in workflow"))?;
 
     // Record completed step in history
     state.step_history.push(StepRecord {
@@ -514,8 +509,8 @@ pub fn advance_step(project_dir: &str, ticket_id: &str) -> Result<WorkflowState,
     }
 
     let merged = merge_workflow_state(&ticket.metadata, &state);
-    let meta_str = serde_json::to_string(&merged)
-        .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+    let meta_str =
+        serde_json::to_string(&merged).map_err(|e| format!("Failed to serialize metadata: {e}"))?;
 
     crate::tickets::update_ticket(
         project_dir,
@@ -556,8 +551,8 @@ pub fn update_step_status(
     state.step_status = status;
 
     let merged = merge_workflow_state(&ticket.metadata, &state);
-    let meta_str = serde_json::to_string(&merged)
-        .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+    let meta_str =
+        serde_json::to_string(&merged).map_err(|e| format!("Failed to serialize metadata: {e}"))?;
 
     crate::tickets::update_ticket(
         project_dir,
@@ -586,7 +581,7 @@ fn build_step_prompt(
     let instructions = match &step.instructions {
         StepInstructions::Prompt { prompt } => prompt.clone(),
         StepInstructions::File { file } => std::fs::read_to_string(file)
-            .map_err(|e| format!("Failed to read instruction file '{}': {}", file, e))?,
+            .map_err(|e| format!("Failed to read instruction file '{file}': {e}"))?,
     };
 
     let mut prompt = instructions;
@@ -599,22 +594,22 @@ fn build_step_prompt(
 
     if let Some(desc) = &ticket.description {
         if !desc.is_empty() {
-            prompt.push_str(&format!("\n**Description:**\n{}\n", desc));
+            prompt.push_str(&format!("\n**Description:**\n{desc}\n"));
         }
     }
     if let Some(notes) = &ticket.notes {
         if !notes.is_empty() {
-            prompt.push_str(&format!("\n**Notes:**\n{}\n", notes));
+            prompt.push_str(&format!("\n**Notes:**\n{notes}\n"));
         }
     }
     if let Some(design) = &ticket.design {
         if !design.is_empty() {
-            prompt.push_str(&format!("\n**Design:**\n{}\n", design));
+            prompt.push_str(&format!("\n**Design:**\n{design}\n"));
         }
     }
     if let Some(acceptance) = &ticket.acceptance_criteria {
         if !acceptance.is_empty() {
-            prompt.push_str(&format!("\n**Acceptance Criteria:**\n{}\n", acceptance));
+            prompt.push_str(&format!("\n**Acceptance Criteria:**\n{acceptance}\n"));
         }
     }
 
@@ -670,7 +665,7 @@ pub async fn execute_step(
         .steps
         .iter()
         .find(|s| &s.id == current_step_id)
-        .ok_or_else(|| format!("Step '{}' not found in workflow", current_step_id))?;
+        .ok_or_else(|| format!("Step '{current_step_id}' not found in workflow"))?;
 
     // 3. Create worktree if this is the first step (no worktree_path in metadata yet)
     let has_worktree = ticket
@@ -690,9 +685,9 @@ pub async fn execute_step(
                 );
             }
             Err(e) => {
-                log::error!("worktree: failed to create for ticket {}: {}", ticket_id, e);
+                log::error!("worktree: failed to create for ticket {ticket_id}: {e}");
                 let _ = update_step_status(project_dir, ticket_id, StepStatus::Failed(e.clone()));
-                return Err(format!("Failed to create worktree: {}", e));
+                return Err(format!("Failed to create worktree: {e}"));
             }
         }
     }
@@ -727,7 +722,6 @@ pub async fn execute_step(
 
     // 6. Determine allowed tools based on step view type
     let view_str = match &step.view {
-        StepViewType::Progress => "progress",
         StepViewType::Chat => "chat",
         StepViewType::Review => "review",
         _ => "progress",
@@ -747,24 +741,24 @@ pub async fn execute_step(
             Ok(mut w) => {
                 // Write step_start marker
                 if let Err(e) = w.write_step_marker(
-                    &current_step_id,
-                    crate::conversation::StepMarker::Start {
+                    current_step_id,
+                    &crate::conversation::StepMarker::Start {
                         label: step.name.clone(),
                     },
                 ) {
-                    log::error!("conversation: failed to write step_start: {}", e);
+                    log::error!("conversation: failed to write step_start: {e}");
                 }
                 Some(tokio::sync::Mutex::new(w))
             }
             Err(e) => {
-                log::error!("conversation: failed to open writer: {}", e);
+                log::error!("conversation: failed to open writer: {e}");
                 None
             }
         };
 
     // 8. Call agent sidecar with the worktree path as project_dir
     //    but keep original project_dir for tickets_dir so ticket reads/writes work
-    let tickets_dir = format!("{}/.meldui/tickets", project_dir);
+    let tickets_dir = format!("{project_dir}/.meldui/tickets");
     let (response_text, new_session_id) = match crate::agent::execute_step(
         &agent_project_dir,
         ticket_id,
@@ -785,8 +779,8 @@ pub async fn execute_step(
             if let Some(ref writer) = conversation_writer {
                 let mut w = writer.lock().await;
                 let _ = w.write_step_marker(
-                    &current_step_id,
-                    crate::conversation::StepMarker::End {
+                    current_step_id,
+                    &crate::conversation::StepMarker::End {
                         status: "failed".to_string(),
                     },
                 );
@@ -802,12 +796,12 @@ pub async fn execute_step(
     if let Some(ref writer) = conversation_writer {
         let mut w = writer.lock().await;
         if let Err(e) = w.write_step_marker(
-            &current_step_id,
-            crate::conversation::StepMarker::End {
+            current_step_id,
+            &crate::conversation::StepMarker::End {
                 status: "completed".to_string(),
             },
         ) {
-            log::error!("conversation: failed to write step_end: {}", e);
+            log::error!("conversation: failed to write step_end: {e}");
         }
         let _ = w.flush();
     }
@@ -817,16 +811,16 @@ pub async fn execute_step(
         ticket_id,
         Some(new_session_id.as_str()).filter(|s| !s.is_empty()),
     ) {
-        log::error!("conversation: failed to snapshot: {}", e);
+        log::error!("conversation: failed to snapshot: {e}");
     }
 
     // 8. Store session_id back into metadata for next step
     if !new_session_id.is_empty() {
         let fresh_ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
-        let mut meta = fresh_ticket.metadata.clone();
+        let mut meta = fresh_ticket.metadata;
         meta["agent_session_id"] = serde_json::Value::String(new_session_id);
         let meta_str = serde_json::to_string(&meta)
-            .map_err(|e| format!("Failed to serialize session metadata: {}", e))?;
+            .map_err(|e| format!("Failed to serialize session metadata: {e}"))?;
         crate::tickets::update_ticket(
             project_dir,
             ticket_id,
@@ -943,12 +937,8 @@ pub async fn suggest_workflow(
         trimmed
     };
 
-    serde_json::from_str::<WorkflowSuggestion>(json_str).map_err(|e| {
-        format!(
-            "Failed to parse workflow suggestion: {} — raw: {}",
-            e, response
-        )
-    })
+    serde_json::from_str::<WorkflowSuggestion>(json_str)
+        .map_err(|e| format!("Failed to parse workflow suggestion: {e} — raw: {response}"))
 }
 
 // ── Diff for Review ──
@@ -1010,7 +1000,7 @@ pub async fn get_branch_info(project_dir: &str) -> Result<BranchInfo, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to get branch: {}", e))?;
+        .map_err(|e| format!("Failed to get branch: {e}"))?;
 
     let branch = String::from_utf8_lossy(&branch_output.stdout)
         .trim()
@@ -1028,7 +1018,7 @@ pub async fn get_branch_info(project_dir: &str) -> Result<BranchInfo, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to check upstream: {}", e))?;
+        .map_err(|e| format!("Failed to check upstream: {e}"))?;
 
     let remote_tracking = if upstream_output.status.success() {
         let upstream = String::from_utf8_lossy(&upstream_output.stdout)
@@ -1074,21 +1064,19 @@ pub async fn execute_commit_action(
             "You must commit the current changes and create a pull request. Follow these exact steps:\n\
             1. Run `git add -A` to stage all changes\n\
             2. Run `git commit` with the EXACT commit message below — do NOT modify it, do NOT add co-author lines or any other text:\n\
-            ```\n{}\n```\n\
+            ```\n{commit_message}\n```\n\
             3. Push the current branch to origin\n\
             4. Create a pull request using `gh pr create` with an appropriate title and body based on the commit message\n\
             5. After the PR is created, call `meldui_report_pr_url` with the ticket ID and the PR URL so the app can display it\n\n\
-            After completing, report the commit hash and PR URL.",
-            commit_message
+            After completing, report the commit hash and PR URL."
         )
     } else {
         format!(
             "You must commit the current changes. Follow these exact steps:\n\
             1. Run `git add -A` to stage all changes\n\
             2. Run `git commit` with the EXACT commit message below — do NOT modify it, do NOT add co-author lines or any other text:\n\
-            ```\n{}\n```\n\n\
-            After completing, report the commit hash.",
-            commit_message
+            ```\n{commit_message}\n```\n\n\
+            After completing, report the commit hash."
         )
     };
 
@@ -1097,7 +1085,7 @@ pub async fn execute_commit_action(
     // Use the worktree path if available — that's where the changes live
     let agent_project_dir = effective_project_dir(project_dir, issue_id);
 
-    let tickets_dir = format!("{}/.meldui/tickets", project_dir);
+    let tickets_dir = format!("{project_dir}/.meldui/tickets");
     let (response_text, _session_id) = crate::agent::execute_step(
         &agent_project_dir,
         issue_id,
@@ -1180,7 +1168,7 @@ pub async fn get_diff(
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to run git diff: {}", e))?;
+        .map_err(|e| format!("Failed to run git diff: {e}"))?;
 
     let diff_text = if !output.status.success() {
         // Might be a fresh repo with no commits — try just `git diff`
@@ -1191,7 +1179,7 @@ pub async fn get_diff(
             .stderr(Stdio::piped())
             .output()
             .await
-            .map_err(|e| format!("Failed to run git diff: {}", e))?;
+            .map_err(|e| format!("Failed to run git diff: {e}"))?;
         String::from_utf8_lossy(&output2.stdout).to_string()
     } else {
         String::from_utf8_lossy(&output.stdout).to_string()

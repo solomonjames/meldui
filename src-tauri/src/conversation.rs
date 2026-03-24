@@ -71,7 +71,7 @@ pub struct ConversationSummary {
 // ── Writer ──
 
 pub struct ConversationWriter {
-    file: std::fs::File,
+    file: fs::File,
     sequence: u32,
 }
 
@@ -82,31 +82,28 @@ fn conversations_dir(project_dir: &str) -> PathBuf {
 }
 
 fn ndjson_path(project_dir: &str, ticket_id: &str) -> PathBuf {
-    conversations_dir(project_dir).join(format!("{}.ndjson", ticket_id))
+    conversations_dir(project_dir).join(format!("{ticket_id}.ndjson"))
 }
 
 fn snapshot_path(project_dir: &str, ticket_id: &str) -> PathBuf {
-    conversations_dir(project_dir).join(format!("{}.snapshot.json", ticket_id))
+    conversations_dir(project_dir).join(format!("{ticket_id}.snapshot.json"))
 }
 
 impl ConversationWriter {
     pub fn open(project_dir: &str, ticket_id: &str) -> Result<Self, String> {
         let dir = conversations_dir(project_dir);
-        fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create conversations dir: {}", e))?;
+        fs::create_dir_all(&dir).map_err(|e| format!("Failed to create conversations dir: {e}"))?;
 
         let path = ndjson_path(project_dir, ticket_id);
 
         let last_seq = if path.exists() {
             let file = fs::File::open(&path)
-                .map_err(|e| format!("Failed to read conversation file: {}", e))?;
+                .map_err(|e| format!("Failed to read conversation file: {e}"))?;
             let reader = BufReader::new(file);
             let mut max_seq: u32 = 0;
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    if let Ok(event) = serde_json::from_str::<ConversationEvent>(&line) {
-                        max_seq = max_seq.max(event.sequence);
-                    }
+            for line in reader.lines().map_while(Result::ok) {
+                if let Ok(event) = serde_json::from_str::<ConversationEvent>(&line) {
+                    max_seq = max_seq.max(event.sequence);
                 }
             }
             max_seq
@@ -118,7 +115,7 @@ impl ConversationWriter {
             .create(true)
             .append(true)
             .open(&path)
-            .map_err(|e| format!("Failed to open conversation file: {}", e))?;
+            .map_err(|e| format!("Failed to open conversation file: {e}"))?;
 
         Ok(Self {
             file,
@@ -140,18 +137,18 @@ impl ConversationWriter {
             event_type: msg_type.to_string(),
             content: serde_json::to_string(params).unwrap_or_default(),
         };
-        let mut line = serde_json::to_string(&event)
-            .map_err(|e| format!("Failed to serialize event: {}", e))?;
+        let mut line =
+            serde_json::to_string(&event).map_err(|e| format!("Failed to serialize event: {e}"))?;
         line.push('\n');
         self.file
             .write_all(line.as_bytes())
-            .map_err(|e| format!("Failed to write event: {}", e))?;
+            .map_err(|e| format!("Failed to write event: {e}"))?;
         Ok(())
     }
 
-    pub fn write_step_marker(&mut self, step_id: &str, marker: StepMarker) -> Result<(), String> {
+    pub fn write_step_marker(&mut self, step_id: &str, marker: &StepMarker) -> Result<(), String> {
         self.sequence += 1;
-        let (event_type, content) = match &marker {
+        let (event_type, content) = match marker {
             StepMarker::Start { label } => (
                 "step_start".to_string(),
                 serde_json::json!({ "step_label": label }).to_string(),
@@ -169,18 +166,18 @@ impl ConversationWriter {
             content,
         };
         let mut line = serde_json::to_string(&event)
-            .map_err(|e| format!("Failed to serialize marker: {}", e))?;
+            .map_err(|e| format!("Failed to serialize marker: {e}"))?;
         line.push('\n');
         self.file
             .write_all(line.as_bytes())
-            .map_err(|e| format!("Failed to write marker: {}", e))?;
+            .map_err(|e| format!("Failed to write marker: {e}"))?;
         Ok(())
     }
 
     pub fn flush(&mut self) -> Result<(), String> {
         self.file
             .flush()
-            .map_err(|e| format!("Failed to flush conversation file: {}", e))
+            .map_err(|e| format!("Failed to flush conversation file: {e}"))
     }
 }
 
@@ -195,7 +192,7 @@ fn replay_ndjson(
         return Ok(None);
     }
 
-    let file = fs::File::open(&path).map_err(|e| format!("Failed to open NDJSON: {}", e))?;
+    let file = fs::File::open(&path).map_err(|e| format!("Failed to open NDJSON: {e}"))?;
     let reader = BufReader::new(file);
 
     let mut events: Vec<ConversationEventRecord> = Vec::new();
@@ -285,16 +282,15 @@ pub fn snapshot_conversation(
     ticket_id: &str,
     session_id: Option<&str>,
 ) -> Result<(), String> {
-    let mut snapshot = match replay_ndjson(project_dir, ticket_id)? {
-        Some(s) => s,
-        None => return Ok(()),
+    let Some(mut snapshot) = replay_ndjson(project_dir, ticket_id)? else {
+        return Ok(());
     };
     snapshot.session_id = session_id.map(String::from);
 
     let path = snapshot_path(project_dir, ticket_id);
     let json = serde_json::to_string_pretty(&snapshot)
-        .map_err(|e| format!("Failed to serialize snapshot: {}", e))?;
-    fs::write(&path, json).map_err(|e| format!("Failed to write snapshot: {}", e))?;
+        .map_err(|e| format!("Failed to serialize snapshot: {e}"))?;
+    fs::write(&path, json).map_err(|e| format!("Failed to write snapshot: {e}"))?;
     Ok(())
 }
 
@@ -304,15 +300,15 @@ pub fn restore_conversation(
 ) -> Result<Option<ConversationSnapshot>, String> {
     let snap_path = snapshot_path(project_dir, ticket_id);
     if snap_path.exists() {
-        let content = fs::read_to_string(&snap_path)
-            .map_err(|e| format!("Failed to read snapshot: {}", e))?;
+        let content =
+            fs::read_to_string(&snap_path).map_err(|e| format!("Failed to read snapshot: {e}"))?;
         match serde_json::from_str::<ConversationSnapshot>(&content) {
             Ok(snapshot) if snapshot.schema_version <= SCHEMA_VERSION => return Ok(Some(snapshot)),
             Ok(_) => {
                 log::warn!("conversation: snapshot has newer schema version, replaying NDJSON");
             }
             Err(e) => {
-                log::warn!("conversation: corrupt snapshot ({}), replaying NDJSON", e);
+                log::warn!("conversation: corrupt snapshot ({e}), replaying NDJSON");
                 let _ = fs::remove_file(&snap_path);
             }
         }
@@ -328,7 +324,7 @@ pub fn list_conversations(project_dir: &str) -> Result<Vec<ConversationSummary>,
 
     let mut summaries = Vec::new();
     let entries =
-        fs::read_dir(&dir).map_err(|e| format!("Failed to read conversations dir: {}", e))?;
+        fs::read_dir(&dir).map_err(|e| format!("Failed to read conversations dir: {e}"))?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -361,7 +357,7 @@ pub fn list_conversations(project_dir: &str) -> Result<Vec<ConversationSummary>,
 
         let file = fs::File::open(&path).ok();
         let count = file
-            .map(|f| BufReader::new(f).lines().filter_map(|l| l.ok()).count() as u32)
+            .map(|f| BufReader::new(f).lines().map_while(Result::ok).count() as u32)
             .unwrap_or(0);
 
         let metadata = fs::metadata(&path).ok();

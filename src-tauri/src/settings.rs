@@ -40,8 +40,8 @@ pub fn get_settings(project_dir: &str) -> Result<ProjectSettings, String> {
         return Ok(ProjectSettings::default());
     }
     let content =
-        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read settings: {}", e))?;
-    serde_json::from_str(&content).map_err(|e| format!("Failed to parse settings: {}", e))
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read settings: {e}"))?;
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse settings: {e}"))
 }
 
 pub fn update_settings(project_dir: &str, settings: &ProjectSettings) -> Result<(), String> {
@@ -51,11 +51,11 @@ pub fn update_settings(project_dir: &str, settings: &ProjectSettings) -> Result<
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create settings directory: {}", e))?;
+                .map_err(|e| format!("Failed to create settings directory: {e}"))?;
         }
     }
 
     let content = serde_json::to_string_pretty(settings)
-        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-    std::fs::write(&path, content).map_err(|e| format!("Failed to write settings: {}", e))
+        .map_err(|e| format!("Failed to serialize settings: {e}"))?;
+    std::fs::write(&path, content).map_err(|e| format!("Failed to write settings: {e}"))
 }

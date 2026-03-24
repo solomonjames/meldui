@@ -17,7 +17,7 @@ pub async fn push_ticket(project_dir: &str, ticket: &Ticket) -> Result<String, S
 
     match sync.provider.as_str() {
         "beads" => beads_adapter::push_ticket(project_dir, ticket).await,
-        other => Err(format!("Unknown sync provider: {}", other)),
+        other => Err(format!("Unknown sync provider: {other}")),
     }
 }
 
@@ -35,7 +35,7 @@ pub async fn pull_all(project_dir: &str) -> Result<Vec<Ticket>, String> {
 
     let external_tickets = match sync.provider.as_str() {
         "beads" => beads_adapter::pull_all(project_dir).await?,
-        other => return Err(format!("Unknown sync provider: {}", other)),
+        other => return Err(format!("Unknown sync provider: {other}")),
     };
 
     // Merge external tickets into internal store

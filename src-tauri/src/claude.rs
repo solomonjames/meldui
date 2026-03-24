@@ -11,10 +11,10 @@ fn find_claude_binary() -> Option<PathBuf> {
     let home = env::var("HOME").unwrap_or_default();
 
     let candidates = [
-        format!("{}/.local/bin/claude", home),
-        format!("{}/.claude/bin/claude", home),
-        format!("{}/.bun/bin/claude", home),
-        format!("{}/.npm-global/bin/claude", home),
+        format!("{home}/.local/bin/claude"),
+        format!("{home}/.claude/bin/claude"),
+        format!("{home}/.bun/bin/claude"),
+        format!("{home}/.npm-global/bin/claude"),
         "/usr/local/bin/claude".to_string(),
         "/opt/homebrew/bin/claude".to_string(),
     ];
@@ -78,7 +78,7 @@ pub async fn get_status() -> Result<ClaudeStatus, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to check claude auth: {}", e))?;
+        .map_err(|e| format!("Failed to check claude auth: {e}"))?;
 
     let stderr = String::from_utf8_lossy(&auth_check.stderr);
     let authenticated = auth_check.status.success()
@@ -105,14 +105,14 @@ pub async fn login() -> Result<ClaudeStatus, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to start claude login: {}", e))?;
+        .map_err(|e| format!("Failed to start claude login: {e}"))?;
 
     if output.status.success() {
         // Re-check status after login
         get_status().await
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("Login failed: {}", stderr))
+        Err(format!("Login failed: {stderr}"))
     }
 }
 

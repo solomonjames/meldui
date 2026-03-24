@@ -1,3 +1,5 @@
+// Many items are `pub` so specta/tauri-specta can generate TypeScript bindings.
+#![allow(unreachable_pub)]
 mod agent;
 #[allow(dead_code)]
 mod beads;
@@ -31,7 +33,7 @@ async fn open_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, Str
     // Guard: reject worktree directories — they are not valid project roots
     if let Some(ref path) = selected {
         if path.contains("/.meldui/worktrees/") {
-            log::warn!("open_folder_dialog: rejected worktree path: {}", path);
+            log::warn!("open_folder_dialog: rejected worktree path: {path}");
             return Ok(None); // treat as cancelled
         }
     }
@@ -123,6 +125,7 @@ async fn ticket_create(
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)] // Tauri commands receive owned values from IPC
 async fn ticket_update(
     project_dir: String,
     id: String,
@@ -270,7 +273,7 @@ async fn list_project_files(project_dir: String) -> Result<Vec<String>, String> 
 
     for entry in walker {
         let entry = entry.map_err(|e| e.to_string())?;
-        if entry.file_type().map_or(false, |ft| ft.is_file()) {
+        if entry.file_type().is_some_and(|ft| ft.is_file()) {
             if let Ok(relative) = entry.path().strip_prefix(root) {
                 files.push(relative.to_string_lossy().to_string());
             }
@@ -299,7 +302,7 @@ async fn workflow_get(
     workflow_id: String,
 ) -> Result<WorkflowDefinition, String> {
     workflow::get_workflow(&project_dir, &workflow_id)
-        .ok_or_else(|| format!("Workflow '{}' not found", workflow_id))
+        .ok_or_else(|| format!("Workflow '{workflow_id}' not found"))
 }
 
 #[tauri::command]
@@ -517,13 +520,13 @@ pub fn run() {
                         if event.id().0.as_str() == "preferences" {
                             if let Err(e) = preferences::open_preferences_window(app_handle.clone())
                             {
-                                log::error!("Failed to open preferences window: {}", e);
+                                log::error!("Failed to open preferences window: {e}");
                             }
                         }
                     });
                 }
                 Err(e) => {
-                    log::warn!("Failed to build app menu: {}", e);
+                    log::warn!("Failed to build app menu: {e}");
                 }
             }
 

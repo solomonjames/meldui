@@ -36,10 +36,11 @@ impl Default for AppPreferences {
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::needless_pass_by_value)] // Tauri commands receive owned values from IPC
 pub fn get_app_preferences(app: AppHandle) -> Result<AppPreferences, String> {
     let store = app
         .store(STORE_FILE)
-        .map_err(|e| format!("Failed to open preferences store: {}", e))?;
+        .map_err(|e| format!("Failed to open preferences store: {e}"))?;
 
     let theme = store
         .get(THEME_KEY)
@@ -62,6 +63,7 @@ const VALID_CONTEXT_INDICATORS: &[&str] = &["threshold", "always", "never"];
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::needless_pass_by_value)] // Tauri commands receive owned values from IPC
 pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Result<(), String> {
     if !VALID_THEMES.contains(&preferences.theme.as_str()) {
         return Err(format!("Invalid theme: {}", preferences.theme));
@@ -76,7 +78,7 @@ pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Resul
 
     let store = app
         .store(STORE_FILE)
-        .map_err(|e| format!("Failed to open preferences store: {}", e))?;
+        .map_err(|e| format!("Failed to open preferences store: {e}"))?;
 
     store.set(
         THEME_KEY,
@@ -90,24 +92,25 @@ pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Resul
 
     store
         .save()
-        .map_err(|e| format!("Failed to save preferences: {}", e))?;
+        .map_err(|e| format!("Failed to save preferences: {e}"))?;
 
     // Emit event to all windows for cross-window sync
     preferences
         .emit(&app)
-        .map_err(|e| format!("Failed to emit preferences event: {}", e))?;
+        .map_err(|e| format!("Failed to emit preferences event: {e}"))?;
 
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::needless_pass_by_value)] // Tauri commands receive owned values from IPC
 pub fn open_preferences_window(app: AppHandle) -> Result<(), String> {
     // Singleton: if preferences window already exists, focus it
     if let Some(window) = app.get_webview_window("preferences") {
         window
             .set_focus()
-            .map_err(|e| format!("Failed to focus preferences window: {}", e))?;
+            .map_err(|e| format!("Failed to focus preferences window: {e}"))?;
         return Ok(());
     }
 
@@ -121,7 +124,7 @@ pub fn open_preferences_window(app: AppHandle) -> Result<(), String> {
         .minimizable(false)
         .center()
         .build()
-        .map_err(|e| format!("Failed to create preferences window: {}", e))?;
+        .map_err(|e| format!("Failed to create preferences window: {e}"))?;
 
     Ok(())
 }

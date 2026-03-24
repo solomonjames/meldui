@@ -2,21 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ChatView } from "@/features/workflow/components/views/chat-view";
 import { createQueryWrapper } from "@/shared/test/helpers/query-wrapper";
-import type { Ticket, StepStatus } from "@/shared/types";
-
-const makeTicket = (): Ticket => ({
-  id: "ticket-1",
-  title: "Test ticket",
-  description: "desc",
-  status: "open" as const,
-  type: "task" as const,
-  priority: 2,
-  created_at: "2024-01-01",
-  updated_at: "2024-01-01",
-});
+import type { StepStatus } from "@/shared/types";
 
 const defaultProps = {
-  ticket: makeTicket(),
   stepName: "Understand",
   onExecute: vi.fn(),
   onAdvanceStep: vi.fn(),
@@ -98,8 +86,8 @@ describe("ChatView display states", () => {
   });
 });
 
-describe("ChatView step complete card", () => {
-  it("shows StepCompleteCard when step is complete and not executing", () => {
+describe("ChatView next step button", () => {
+  it("shows Next Step button when step is completed and onAdvanceStep is provided", () => {
     const onAdvanceStep = vi.fn();
     render(
       <ChatView
@@ -107,32 +95,16 @@ describe("ChatView step complete card", () => {
         response="Done analyzing"
         isExecuting={false}
         stepStatus={"completed" as StepStatus}
-        stepOutput={{
-          textContent: "Done",
-          toolActivities: [],
-          stderrLines: [],
-          resultContent: "complete",
-          thinkingContent: "",
-          lastChunkType: "",
-          contentBlocks: [],
-          subagentActivities: [],
-          filesChanged: [],
-          activeToolName: null,
-          activeToolStartTime: null,
-          toolUseSummaries: [],
-          isCompacting: false,
-        }}
         onAdvanceStep={onAdvanceStep}
       />,
       { wrapper: createQueryWrapper() },
     );
 
-    expect(screen.getByText("Step complete")).toBeInTheDocument();
-    expect(screen.getByText(/Next Step/)).toBeInTheDocument();
-    expect(screen.getByText(/Continue Chatting/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Advance to next step" })).toBeInTheDocument();
+    expect(screen.getByText("Next Step")).toBeInTheDocument();
   });
 
-  it("does NOT show StepCompleteCard when still executing", () => {
+  it("does NOT show Next Step button when still executing", () => {
     render(
       <ChatView
         {...defaultProps}
@@ -144,10 +116,10 @@ describe("ChatView step complete card", () => {
       { wrapper: createQueryWrapper() },
     );
 
-    expect(screen.queryByText("Step complete")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Advance to next step" })).not.toBeInTheDocument();
   });
 
-  it("does NOT show StepCompleteCard when step has no resultContent", () => {
+  it("shows Next Step button even when stepOutput has no resultContent", () => {
     render(
       <ChatView
         {...defaultProps}
@@ -174,6 +146,6 @@ describe("ChatView step complete card", () => {
       { wrapper: createQueryWrapper() },
     );
 
-    expect(screen.queryByText("Step complete")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Advance to next step" })).toBeInTheDocument();
   });
 });

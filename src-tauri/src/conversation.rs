@@ -9,8 +9,32 @@ use crate::constants::{CONVERSATIONS_DIR, MELDUI_DIR};
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 const SCHEMA_VERSION: u32 = 1;
+
+/// Structured error type for conversation operations.
+#[derive(Debug, Error)]
+#[allow(clippy::enum_variant_names, dead_code)]
+pub(crate) enum ConversationError {
+    #[error("failed to read conversation")]
+    ReadFailed(#[source] std::io::Error),
+
+    #[error("failed to write conversation")]
+    WriteFailed(#[source] std::io::Error),
+
+    #[error("failed to parse conversation")]
+    ParseFailed(#[source] serde_json::Error),
+
+    #[error("failed to serialize conversation")]
+    SerializeFailed(#[source] serde_json::Error),
+
+    #[error("failed to create conversations directory")]
+    DirCreateFailed(#[source] std::io::Error),
+
+    #[error("conversation not found")]
+    NotFound,
+}
 
 // ── NDJSON line format ──
 
@@ -96,15 +120,14 @@ fn snapshot_path(project_dir: &str, ticket_id: &str) -> PathBuf {
 }
 
 impl ConversationWriter {
-    pub fn open(project_dir: &str, ticket_id: &str) -> Result<Self, String> {
+    fn open_inner(project_dir: &str, ticket_id: &str) -> Result<Self, ConversationError> {
         let dir = conversations_dir(project_dir);
-        fs::create_dir_all(&dir).map_err(|e| format!("Failed to create conversations dir: {e}"))?;
+        fs::create_dir_all(&dir).map_err(ConversationError::DirCreateFailed)?;
 
         let path = ndjson_path(project_dir, ticket_id);
 
         let last_seq = if path.exists() {
-            let file = fs::File::open(&path)
-                .map_err(|e| format!("Failed to read conversation file: {e}"))?;
+            let file = fs::File::open(&path).map_err(ConversationError::ReadFailed)?;
             let reader = BufReader::new(file);
             let mut max_seq: u32 = 0;
             for line in reader.lines().map_while(Result::ok) {
@@ -121,7 +144,7 @@ impl ConversationWriter {
             .create(true)
             .append(true)
             .open(&path)
-            .map_err(|e| format!("Failed to open conversation file: {e}"))?;
+            .map_err(ConversationError::WriteFailed)?;
 
         Ok(Self {
             file,
@@ -129,12 +152,16 @@ impl ConversationWriter {
         })
     }
 
-    pub fn append_raw(
+    pub fn open(project_dir: &str, ticket_id: &str) -> Result<Self, String> {
+        Self::open_inner(project_dir, ticket_id).map_err(|e| e.to_string())
+    }
+
+    fn append_raw_inner(
         &mut self,
         msg_type: &str,
         params: &serde_json::Value,
         step_id: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), ConversationError> {
         self.sequence += 1;
         let event = ConversationEvent {
             timestamp: Utc::now().to_rfc3339(),
@@ -143,16 +170,29 @@ impl ConversationWriter {
             event_type: msg_type.to_string(),
             content: serde_json::to_string(params).unwrap_or_default(),
         };
-        let mut line =
-            serde_json::to_string(&event).map_err(|e| format!("Failed to serialize event: {e}"))?;
+        let mut line = serde_json::to_string(&event).map_err(ConversationError::SerializeFailed)?;
         line.push('\n');
         self.file
             .write_all(line.as_bytes())
-            .map_err(|e| format!("Failed to write event: {e}"))?;
+            .map_err(ConversationError::WriteFailed)?;
         Ok(())
     }
 
-    pub fn write_step_marker(&mut self, step_id: &str, marker: &StepMarker) -> Result<(), String> {
+    pub fn append_raw(
+        &mut self,
+        msg_type: &str,
+        params: &serde_json::Value,
+        step_id: &str,
+    ) -> Result<(), String> {
+        self.append_raw_inner(msg_type, params, step_id)
+            .map_err(|e| e.to_string())
+    }
+
+    fn write_step_marker_inner(
+        &mut self,
+        step_id: &str,
+        marker: &StepMarker,
+    ) -> Result<(), ConversationError> {
         self.sequence += 1;
         let (event_type, content) = match marker {
             StepMarker::Start { label } => (
@@ -171,19 +211,25 @@ impl ConversationWriter {
             event_type,
             content,
         };
-        let mut line = serde_json::to_string(&event)
-            .map_err(|e| format!("Failed to serialize marker: {e}"))?;
+        let mut line = serde_json::to_string(&event).map_err(ConversationError::SerializeFailed)?;
         line.push('\n');
         self.file
             .write_all(line.as_bytes())
-            .map_err(|e| format!("Failed to write marker: {e}"))?;
+            .map_err(ConversationError::WriteFailed)?;
         Ok(())
     }
 
+    pub fn write_step_marker(&mut self, step_id: &str, marker: &StepMarker) -> Result<(), String> {
+        self.write_step_marker_inner(step_id, marker)
+            .map_err(|e| e.to_string())
+    }
+
+    fn flush_inner(&mut self) -> Result<(), ConversationError> {
+        self.file.flush().map_err(ConversationError::WriteFailed)
+    }
+
     pub fn flush(&mut self) -> Result<(), String> {
-        self.file
-            .flush()
-            .map_err(|e| format!("Failed to flush conversation file: {e}"))
+        self.flush_inner().map_err(|e| e.to_string())
     }
 }
 
@@ -192,13 +238,13 @@ impl ConversationWriter {
 fn replay_ndjson(
     project_dir: &str,
     ticket_id: &str,
-) -> Result<Option<ConversationSnapshot>, String> {
+) -> Result<Option<ConversationSnapshot>, ConversationError> {
     let path = ndjson_path(project_dir, ticket_id);
     if !path.exists() {
         return Ok(None);
     }
 
-    let file = fs::File::open(&path).map_err(|e| format!("Failed to open NDJSON: {e}"))?;
+    let file = fs::File::open(&path).map_err(ConversationError::ReadFailed)?;
     let reader = BufReader::new(file);
 
     let mut events: Vec<ConversationEventRecord> = Vec::new();
@@ -283,33 +329,42 @@ fn replay_ndjson(
     }))
 }
 
-pub fn snapshot_conversation(
+fn snapshot_conversation_inner(
     project_dir: &str,
     ticket_id: &str,
     session_id: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), ConversationError> {
     let Some(mut snapshot) = replay_ndjson(project_dir, ticket_id)? else {
         return Ok(());
     };
     snapshot.session_id = session_id.map(String::from);
 
     let path = snapshot_path(project_dir, ticket_id);
-    let json = serde_json::to_string_pretty(&snapshot)
-        .map_err(|e| format!("Failed to serialize snapshot: {e}"))?;
-    fs::write(&path, json).map_err(|e| format!("Failed to write snapshot: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(&snapshot).map_err(ConversationError::SerializeFailed)?;
+    fs::write(&path, json).map_err(ConversationError::WriteFailed)?;
     Ok(())
 }
 
-pub fn restore_conversation(
+pub fn snapshot_conversation(
     project_dir: &str,
     ticket_id: &str,
-) -> Result<Option<ConversationSnapshot>, String> {
+    session_id: Option<&str>,
+) -> Result<(), String> {
+    snapshot_conversation_inner(project_dir, ticket_id, session_id).map_err(|e| e.to_string())
+}
+
+fn restore_conversation_inner(
+    project_dir: &str,
+    ticket_id: &str,
+) -> Result<Option<ConversationSnapshot>, ConversationError> {
     let snap_path = snapshot_path(project_dir, ticket_id);
     if snap_path.exists() {
-        let content =
-            fs::read_to_string(&snap_path).map_err(|e| format!("Failed to read snapshot: {e}"))?;
+        let content = fs::read_to_string(&snap_path).map_err(ConversationError::ReadFailed)?;
         match serde_json::from_str::<ConversationSnapshot>(&content) {
-            Ok(snapshot) if snapshot.schema_version <= SCHEMA_VERSION => return Ok(Some(snapshot)),
+            Ok(snapshot) if snapshot.schema_version <= SCHEMA_VERSION => {
+                return Ok(Some(snapshot));
+            }
             Ok(_) => {
                 log::warn!("conversation: snapshot has newer schema version, replaying NDJSON");
             }
@@ -322,15 +377,23 @@ pub fn restore_conversation(
     replay_ndjson(project_dir, ticket_id)
 }
 
-pub fn list_conversations(project_dir: &str) -> Result<Vec<ConversationSummary>, String> {
+pub fn restore_conversation(
+    project_dir: &str,
+    ticket_id: &str,
+) -> Result<Option<ConversationSnapshot>, String> {
+    restore_conversation_inner(project_dir, ticket_id).map_err(|e| e.to_string())
+}
+
+fn list_conversations_inner(
+    project_dir: &str,
+) -> Result<Vec<ConversationSummary>, ConversationError> {
     let dir = conversations_dir(project_dir);
     if !dir.exists() {
         return Ok(Vec::new());
     }
 
     let mut summaries = Vec::new();
-    let entries =
-        fs::read_dir(&dir).map_err(|e| format!("Failed to read conversations dir: {e}"))?;
+    let entries = fs::read_dir(&dir).map_err(ConversationError::ReadFailed)?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -381,4 +444,8 @@ pub fn list_conversations(project_dir: &str) -> Result<Vec<ConversationSummary>,
     }
 
     Ok(summaries)
+}
+
+pub fn list_conversations(project_dir: &str) -> Result<Vec<ConversationSummary>, String> {
+    list_conversations_inner(project_dir).map_err(|e| e.to_string())
 }

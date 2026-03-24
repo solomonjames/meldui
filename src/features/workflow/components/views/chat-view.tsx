@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Play, User } from "lucide-react";
+import { ArrowRight, Play, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -40,6 +40,7 @@ interface ChatViewProps {
   stepStatus: StepStatus;
   stepOutput?: StepOutputStream;
   statusText?: string | null;
+  onAdvanceStep?: () => void;
   onExecute: (message?: string) => void;
   projectDir?: string;
   ticketId?: string | null;
@@ -55,6 +56,7 @@ export function ChatView({
   stepStatus,
   stepOutput,
   statusText,
+  onAdvanceStep,
   onExecute,
   projectDir,
   ticketId,
@@ -281,6 +283,21 @@ export function ChatView({
           <ActivityBar stepOutput={stepOutput} isExecuting={isExecuting} isWaitingForUser={false} />
           <div ref={chatScrollRef} />
         </div>
+
+        {/* Persistent "Next Step" button — visible when step is completed */}
+        {stepStatus === "completed" && onAdvanceStep && (
+          <div className="flex justify-end px-3 py-1.5">
+            <Button
+              size="sm"
+              onClick={onAdvanceStep}
+              aria-label="Advance to next step"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+            >
+              Next Step
+              <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+            </Button>
+          </div>
+        )}
 
         {/* Chat input — hidden for non-interactive steps while executing */}
         {showInput && (

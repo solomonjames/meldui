@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "MeldUI - Visual Software Development Workflow"
 authors = ["James Solomon"]
 license = "MIT"
-repository = ""
+repository = "https://github.com/solomonjames/meldui"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -16,26 +16,35 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
-serde_json = "1.0"
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
-log = "0.4"
-tauri = { version = "2.10.3", features = [] }
-tauri-plugin-log = "2"
-tauri-plugin-shell = "2.3.5"
-tauri-plugin-dialog = "2"
-tauri-plugin-store = "2"
-tokio = { version = "1", features = ["process", "io-util", "sync", "net"] }
+serde_json = "1.0"
 serde_yaml = "0.9"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["v4"] }
-unidiff = "0.4.0"
-tauri-plugin-updater = "2"
+
+# Async runtime
+tokio = { version = "1", features = ["process", "io-util", "sync", "net"] }
+
+# Tauri framework
+tauri = { version = "2.10.3", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
 tauri-plugin-process = "2"
-libc = "0.2"
+tauri-plugin-shell = "2.3.5"
+tauri-plugin-store = "2"
+tauri-plugin-updater = "2"
+
+# IPC type safety (exact-pinned — RC releases with breaking changes)
 specta = { version = "=2.0.0-rc.22", features = ["chrono", "uuid", "serde_json"] }
 specta-typescript = "=0.0.9"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["typescript", "derive"] }
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
 ignore = "0.4.25"
+libc = "0.2"
+log = "0.4"
+unidiff = "0.4.0"
+uuid = { version = "1", features = ["v4"] }
 
 [lints.rust]
 unsafe_code = "warn"

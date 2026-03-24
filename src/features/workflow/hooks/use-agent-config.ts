@@ -77,8 +77,8 @@ export function useAgentConfig() {
   }, [queryClient]);
 
   const setModel = useMutation({
-    mutationFn: (model: string) => invoke("agent_set_model", { model }),
-    onSuccess: (_, model) => {
+    mutationFn: (model: string) => invoke("agent_set_model", { model }).catch(() => {}),
+    onMutate: (model) => {
       queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, (prev) => ({
         ...(prev ?? DEFAULT_CONFIG),
         model,
@@ -91,8 +91,8 @@ export function useAgentConfig() {
       invoke("agent_set_thinking", {
         thinkingType: params.type,
         budgetTokens: params.budgetTokens ?? null,
-      }),
-    onSuccess: (_, params) => {
+      }).catch(() => {}),
+    onMutate: (params) => {
       queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, (prev) => ({
         ...(prev ?? DEFAULT_CONFIG),
         thinking: params,
@@ -102,8 +102,8 @@ export function useAgentConfig() {
 
   const setEffort = useMutation({
     mutationFn: (effort: "low" | "medium" | "high" | "max") =>
-      invoke("agent_set_effort", { effort }),
-    onSuccess: (_, effort) => {
+      invoke("agent_set_effort", { effort }).catch(() => {}),
+    onMutate: (effort) => {
       queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, (prev) => ({
         ...(prev ?? DEFAULT_CONFIG),
         effort,
@@ -112,8 +112,8 @@ export function useAgentConfig() {
   });
 
   const setFastMode = useMutation({
-    mutationFn: (enabled: boolean) => invoke("agent_set_fast_mode", { enabled }),
-    onSuccess: (_, enabled) => {
+    mutationFn: (enabled: boolean) => invoke("agent_set_fast_mode", { enabled }).catch(() => {}),
+    onMutate: (enabled) => {
       queryClient.setQueryData<AgentConfig>(AGENT_CONFIG_KEY, (prev) => ({
         ...(prev ?? DEFAULT_CONFIG),
         fastMode: enabled,

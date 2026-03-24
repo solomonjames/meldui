@@ -204,8 +204,8 @@ export function ComposeToolbar({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="border-t bg-white dark:bg-zinc-900 p-3">
-        <div className="rounded-lg border bg-background">
+      <div className="border-t p-3">
+        <div className="rounded-lg border border-border bg-muted/30">
           {/* Textarea */}
           <div className="relative">
             {autocompleteOpen && (
@@ -230,7 +230,7 @@ export function ComposeToolbar({
               onSelect={handleSelect}
               onClick={handleSelect}
               placeholder={placeholder}
-              className="min-h-[88px] max-h-[200px] resize-none border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="min-h-[88px] max-h-[200px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
               disabled={disabled}
             />
           </div>

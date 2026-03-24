@@ -114,10 +114,15 @@ export function ChatView({
 
   // Load persisted conversation history
   const { data: snapshot } = useConversation(projectDir ?? "", ticketId ?? null);
-  const historyBlocks = useMemo(
-    () => (snapshot ? snapshotToBlocks(snapshot.events, snapshot.steps) : []),
+  const historyResult = useMemo(
+    () =>
+      snapshot
+        ? snapshotToBlocks(snapshot.events, snapshot.steps)
+        : { blocks: [], filesChanged: [] },
     [snapshot],
   );
+  const historyBlocks = historyResult.blocks;
+  const historyFilesChanged = historyResult.filesChanged;
 
   const contentBlocks = stepOutput?.contentBlocks ?? [];
   const hasContent = contentBlocks.length > 0 || response.length > 0;
@@ -188,6 +193,14 @@ export function ChatView({
                 // biome-ignore lint/suspicious/noArrayIndexKey: history blocks lack stable IDs
                 return <SubagentCard key={`hist-${i}`} activity={block.activity} />;
               }
+              if (block.type === "user_message") {
+                // biome-ignore lint/suspicious/noArrayIndexKey: history blocks lack stable IDs
+                return <UserMessageBubble key={`hist-${i}`} content={block.content} />;
+              }
+              if (block.type === "thinking") {
+                // biome-ignore lint/suspicious/noArrayIndexKey: history blocks lack stable IDs
+                return <ThinkingBlock key={`hist-${i}`} content={block.content} isActive={false} />;
+              }
               return null;
             })}
 
@@ -247,6 +260,9 @@ export function ChatView({
                 case "subagent":
                   // biome-ignore lint/suspicious/noArrayIndexKey: content blocks lack stable IDs
                   return <SubagentCard key={`subagent-${i}`} activity={block.activity} />;
+                case "user_message":
+                  // biome-ignore lint/suspicious/noArrayIndexKey: content blocks lack stable IDs
+                  return <UserMessageBubble key={`user-${i}`} content={block.content} />;
                 default:
                   return null;
               }
@@ -265,6 +281,10 @@ export function ChatView({
                 filesChanged={stepOutput.filesChanged}
                 toolActivities={stepOutput.toolActivities}
               />
+            )}
+
+            {!isExecuting && !stepOutput && historyFilesChanged.length > 0 && (
+              <FilesChanged filesChanged={historyFilesChanged} toolActivities={[]} />
             )}
 
             {/* Step complete card — show when agent finished (resultContent set) and not mid-execution */}

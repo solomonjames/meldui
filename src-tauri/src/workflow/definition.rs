@@ -1,4 +1,7 @@
-//! Workflow definitions parsed from YAML — types, loading, and lookup.
+//! Workflow YAML definitions and loading from bundled/project sources.
+//!
+//! Workflows define multi-step agent execution sequences. They are loaded
+//! from bundled YAML files and optionally from a project's `.meldui/workflows/` directory.
 
 use std::path::PathBuf;
 

@@ -1,5 +1,10 @@
 // Many items are `pub` so specta/tauri-specta can generate TypeScript bindings.
 #![allow(unreachable_pub)]
+//! MeldUI Tauri backend — the IPC command layer.
+//!
+//! Exposes Tauri commands that the React frontend calls via `invoke()`.
+//! Coordinates ticket CRUD, workflow orchestration, agent sidecar communication,
+//! external CLI wrappers (beads, claude, git), and conversation persistence.
 mod agent;
 #[allow(dead_code)]
 mod beads;

@@ -1,4 +1,7 @@
-//! Workflow state machine — status tracking, step history, and metadata persistence.
+//! Workflow state machine — persisted in ticket metadata.
+//!
+//! Tracks which step a ticket is on, step statuses, and state transitions
+//! (assign, advance, update, read).
 
 use serde::{Deserialize, Serialize};
 

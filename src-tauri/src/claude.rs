@@ -1,3 +1,4 @@
+//! Claude CLI detection, authentication status, and login.
 use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;

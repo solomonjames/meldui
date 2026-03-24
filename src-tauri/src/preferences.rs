@@ -1,3 +1,4 @@
+//! App-level preferences (theme, appearance) with persistent storage.
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;

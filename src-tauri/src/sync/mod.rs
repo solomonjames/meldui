@@ -1,3 +1,4 @@
+//! Sync provider dispatcher — coordinates syncing between data sources.
 pub mod beads_adapter;
 
 use crate::settings;

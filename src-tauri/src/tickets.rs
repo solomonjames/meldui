@@ -1,3 +1,6 @@
+//! Ticket CRUD operations with file-based JSON storage.
+//!
+//! Tickets are stored as individual JSON files in `.meldui/tickets/`.
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};

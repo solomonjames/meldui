@@ -1,4 +1,4 @@
-//! Workflow orchestration — definition loading, state machine, step execution.
+//! Workflow orchestration — step execution, prompt building, and suggestions.
 
 mod definition;
 mod diff;

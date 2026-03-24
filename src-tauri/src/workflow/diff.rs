@@ -1,4 +1,4 @@
-//! Diff parsing, branch info, commit actions, and review types.
+//! Diff parsing, branch operations, commit actions, and review types.
 
 use serde::{Deserialize, Serialize};
 

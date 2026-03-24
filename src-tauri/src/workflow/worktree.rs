@@ -1,4 +1,7 @@
-//! Git worktree management for ticket-based development.
+//! Git worktree lifecycle management for ticket-based workflows.
+//!
+//! Creates isolated worktrees at `.meldui/worktrees/{ticket_id}/` so each
+//! ticket gets its own branch and working directory.
 
 use std::path::PathBuf;
 

@@ -1,3 +1,4 @@
+//! Project-level settings management (worktree config, workflow config).
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};

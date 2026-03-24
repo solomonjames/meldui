@@ -1,3 +1,6 @@
+//! Beads CLI wrapper for issue tracking integration.
+//!
+//! Spawns the `bd` CLI tool and parses its JSON output into typed structs.
 use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;

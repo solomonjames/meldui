@@ -1,3 +1,6 @@
+//! Conversation persistence using NDJSON event logs.
+//!
+//! Each conversation is stored as a series of NDJSON events in `.meldui/conversations/`.
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;

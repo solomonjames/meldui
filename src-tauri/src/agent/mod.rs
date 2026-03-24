@@ -1,4 +1,9 @@
 //! Agent sidecar orchestration and JSON-RPC 2.0 communication.
+//!
+//! Manages the lifecycle of the AI agent sidecar binary:
+//! spawns the compiled Bun sidecar, connects via Unix socket,
+//! implements bidirectional JSON-RPC for commands/permissions/reviews,
+//! and emits Tauri events for frontend consumption.
 
 mod events;
 mod protocol;

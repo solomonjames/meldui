@@ -4,7 +4,22 @@ use std::path::PathBuf;
 use std::process::Stdio;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::process::Command;
+
+/// Structured error type for Claude CLI operations.
+#[derive(Debug, Error)]
+#[allow(dead_code)]
+pub(crate) enum ClaudeError {
+    #[error("Claude Code CLI not found. Install it from https://code.claude.com")]
+    CliNotFound,
+
+    #[error("failed to execute claude CLI: {0}")]
+    ExecutionFailed(#[source] std::io::Error),
+
+    #[error("failed to parse claude output")]
+    ParseFailed(#[source] serde_json::Error),
+}
 
 /// Find the claude CLI binary by searching common locations.
 /// Desktop apps launched from Finder don't inherit the shell PATH,
@@ -41,16 +56,14 @@ fn find_claude_binary() -> Option<PathBuf> {
     None
 }
 
-/// Create a Command with the full path to the claude binary
-fn claude_command() -> Result<Command, String> {
-    let bin = find_claude_binary().ok_or_else(|| {
-        "Claude Code CLI not found. Install it from https://code.claude.com".to_string()
-    })?;
+/// Create a Command with the full path to the claude binary.
+fn claude_command() -> Result<Command, ClaudeError> {
+    let bin = find_claude_binary().ok_or(ClaudeError::CliNotFound)?;
     Ok(Command::new(bin))
 }
 
-/// Check if Claude Code CLI is available and authenticated
-pub async fn get_status() -> Result<ClaudeStatus, String> {
+/// Check if Claude Code CLI is available and authenticated.
+async fn get_status_inner() -> Result<ClaudeStatus, ClaudeError> {
     let bin = find_claude_binary();
 
     if bin.is_none() {
@@ -80,7 +93,7 @@ pub async fn get_status() -> Result<ClaudeStatus, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to check claude auth: {e}"))?;
+        .map_err(ClaudeError::ExecutionFailed)?;
 
     let stderr = String::from_utf8_lossy(&auth_check.stderr);
     let authenticated = auth_check.status.success()
@@ -98,8 +111,17 @@ pub async fn get_status() -> Result<ClaudeStatus, String> {
     })
 }
 
+/// Check if Claude Code CLI is available and authenticated
+pub async fn get_status() -> Result<ClaudeStatus, String> {
+    get_status_inner().await.map_err(|e| e.to_string())
+}
+
 /// Trigger Claude Code login flow
 pub async fn login() -> Result<ClaudeStatus, String> {
+    login_inner().await.map_err(|e| e.to_string())
+}
+
+async fn login_inner() -> Result<ClaudeStatus, ClaudeError> {
     let mut cmd = claude_command()?;
     let output = cmd
         .arg("login")
@@ -107,14 +129,16 @@ pub async fn login() -> Result<ClaudeStatus, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to start claude login: {e}"))?;
+        .map_err(ClaudeError::ExecutionFailed)?;
 
     if output.status.success() {
         // Re-check status after login
-        get_status().await
+        get_status_inner().await
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!("Login failed: {stderr}"))
+        Err(ClaudeError::ExecutionFailed(std::io::Error::other(
+            stderr.into_owned(),
+        )))
     }
 }
 

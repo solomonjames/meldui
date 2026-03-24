@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Structured error type for settings operations.
 #[derive(Debug, Error)]
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum SettingsError {
     #[error("failed to read settings")]
     ReadFailed(#[source] std::io::Error),

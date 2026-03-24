@@ -105,8 +105,23 @@ export interface StreamChunk {
     | "subagent_complete"
     | "files_changed"
     | "tool_use_summary"
-    | "compacting";
+    | "compacting"
+    | "init_metadata"
+    | "compact_boundary"
+    | "rate_limit";
   content: string;
+}
+
+export interface AgentConfig {
+  model: string;
+  availableModels: string[];
+  tools: string[];
+  slashCommands: string[];
+  skills: string[];
+  mcpServers: Array<{ name: string; status: string }>;
+  thinking: { type: "adaptive" | "enabled" | "disabled"; budgetTokens?: number };
+  effort: "low" | "medium" | "high" | "max";
+  fastMode: boolean;
 }
 
 export interface ToolActivity {
@@ -116,6 +131,7 @@ export interface ToolActivity {
   result?: string;
   is_error?: boolean;
   status: "running" | "complete";
+  elapsed_seconds?: number; // from tool_progress events
 }
 
 export interface SubagentActivity {
@@ -135,7 +151,20 @@ export interface FileChange {
 export type ContentBlock =
   | { type: "text"; content: string }
   | { type: "tool_group"; activities: ToolActivity[]; summaryText?: string }
-  | { type: "subagent"; activity: SubagentActivity };
+  | { type: "subagent"; activity: SubagentActivity }
+  | { type: "thinking"; content: string };
+
+export interface ContextUsage {
+  tokensUsed: number;
+  contextLimit: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReads: number;
+  cacheCreations: number;
+  costUsd: number;
+  rateLimitUtilization: number;
+  rateLimitStatus: string;
+}
 
 export interface StepOutputStream {
   textContent: string;
@@ -151,6 +180,7 @@ export interface StepOutputStream {
   activeToolStartTime: number | null;
   toolUseSummaries: Array<{ summary: string; toolIds: string[] }>;
   isCompacting: boolean;
+  contextUsage?: ContextUsage;
 }
 
 export interface PermissionRequest {

@@ -62,7 +62,8 @@ export function useTheme() {
 
   const setThemeMutation = useMutation({
     mutationFn: async (mode: ThemeMode) => {
-      await commands.setAppPreferences({ theme: mode });
+      const current = await commands.getAppPreferences();
+      await commands.setAppPreferences({ ...current, theme: mode });
       return mode;
     },
     onSuccess: (mode) => {

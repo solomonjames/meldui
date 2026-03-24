@@ -1,18 +1,22 @@
-import { ArrowRight, Check, Play, Send } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, Check, Play, User } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { commands } from "@/bindings";
 import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
 import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
+import { ComposeToolbar } from "@/features/workflow/components/shared/compose-toolbar";
 import { FilesChanged } from "@/features/workflow/components/shared/files-changed";
 import { PermissionDialog } from "@/features/workflow/components/shared/permission-dialog";
 import { StepDividerBar } from "@/features/workflow/components/shared/step-divider";
 import { SubagentCard } from "@/features/workflow/components/shared/subagent-card";
+import { ThinkingBlock } from "@/features/workflow/components/shared/thinking-block";
+import { useAgentConfig } from "@/features/workflow/hooks/use-agent-config";
 import { useConversation } from "@/shared/hooks/use-conversation";
 import { snapshotToBlocks } from "@/shared/lib/conversations";
 import type { PermissionRequest, StepOutputStream, StepStatus } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
-import { Textarea } from "@/shared/ui/textarea";
 
 function StepCompleteCard({
   onAdvance,
@@ -44,6 +48,21 @@ function StepCompleteCard({
   );
 }
 
+function UserMessageBubble({ content }: { content: string }) {
+  return (
+    <div className="flex justify-end my-2">
+      <div className="flex items-start gap-2 max-w-[80%]">
+        <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2">
+          <p className="text-sm whitespace-pre-wrap">{content}</p>
+        </div>
+        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 shrink-0 mt-0.5">
+          <User className="w-3.5 h-3.5 text-primary" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface ChatViewProps {
   stepName: string;
   response: string;
@@ -52,7 +71,7 @@ interface ChatViewProps {
   stepOutput?: StepOutputStream;
   statusText?: string | null;
   onAdvanceStep?: () => void;
-  onExecute: () => void;
+  onExecute: (message?: string) => void;
   projectDir?: string;
   ticketId?: string | null;
   isInteractive?: boolean;
@@ -64,7 +83,7 @@ export function ChatView({
   stepName,
   response,
   isExecuting,
-  stepStatus,
+  stepStatus: _stepStatus,
   stepOutput,
   statusText,
   onAdvanceStep,
@@ -75,8 +94,23 @@ export function ChatView({
   pendingPermission,
   onRespondToPermission,
 }: ChatViewProps) {
-  const [input, setInput] = useState("");
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [userMessages, setUserMessages] = useState<Array<{ id: string; content: string }>>([]);
+  const { config, setModel, setThinking, setEffort, setFastMode } = useAgentConfig();
+  const { data: appPreferences } = useQuery({
+    queryKey: ["app", "preferences"],
+    queryFn: () => commands.getAppPreferences(),
+  });
+
+  const handleSend = useCallback(
+    (message?: string) => {
+      if (message) {
+        setUserMessages((prev) => [...prev, { id: `user-${Date.now()}`, content: message }]);
+      }
+      onExecute(message);
+    },
+    [onExecute],
+  );
 
   // Load persisted conversation history
   const { data: snapshot } = useConversation(projectDir ?? "", ticketId ?? null);
@@ -87,7 +121,6 @@ export function ChatView({
 
   const contentBlocks = stepOutput?.contentBlocks ?? [];
   const hasContent = contentBlocks.length > 0 || response.length > 0;
-  const isThinking = isExecuting && (stepOutput?.thinkingContent?.length ?? 0) > 0 && !hasContent;
   const isStepComplete = stepOutput?.resultContent != null;
   const showInput = isInteractive || !isExecuting;
 
@@ -95,20 +128,7 @@ export function ChatView({
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll should fire on content/response changes
   useEffect(() => {
     chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [contentBlocks.length, response, isStepComplete]);
-
-  const handleSend = () => {
-    if (!input.trim() || isExecuting) return;
-    onExecute();
-    setInput("");
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+  }, [contentBlocks.length, response, isStepComplete, userMessages.length]);
 
   return (
     <div data-testid="chat-view" className="flex flex-col h-full">
@@ -179,34 +199,23 @@ export function ChatView({
               <PermissionDialog permission={pendingPermission} onRespond={onRespondToPermission} />
             )}
 
-            {/* Thinking indicator */}
-            {isThinking && (
-              <div className="flex items-center gap-2.5 text-sm text-muted-foreground py-1">
-                <div className="flex gap-1">
-                  <span
-                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
-                    style={{ animationDelay: "0ms" }}
-                  />
-                  <span
-                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
-                    style={{ animationDelay: "150ms" }}
-                  />
-                  <span
-                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
-                    style={{ animationDelay: "300ms" }}
-                  />
-                </div>
-                <span className="truncate max-w-[250px]">
-                  {stepOutput?.thinkingContent && stepOutput.thinkingContent.length > 0
-                    ? stepOutput.thinkingContent.slice(-60).trim()
-                    : "Thinking..."}
-                </span>
-              </div>
-            )}
+            {/* User messages */}
+            {userMessages.map((msg) => (
+              <UserMessageBubble key={msg.id} content={msg.content} />
+            ))}
 
             {/* Content blocks — text-first with activity groups */}
             {contentBlocks.map((block, i) => {
               switch (block.type) {
+                case "thinking":
+                  return (
+                    <ThinkingBlock
+                      // biome-ignore lint/suspicious/noArrayIndexKey: content blocks lack stable IDs
+                      key={`thinking-${i}`}
+                      content={block.content}
+                      isActive={isExecuting && i === contentBlocks.length - 1}
+                    />
+                  );
                 case "text":
                   return (
                     <div
@@ -293,26 +302,22 @@ export function ChatView({
 
         {/* Chat input — hidden for non-interactive steps while executing */}
         {showInput && (
-          <div className="p-4 border-t bg-white dark:bg-zinc-900">
-            <div className="flex gap-2">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Add context or ask questions... (Enter to send)"
-                className="min-h-[44px] max-h-[120px] resize-none"
-                disabled={isExecuting}
-              />
-              <Button
-                onClick={handleSend}
-                disabled={!input.trim() || isExecuting}
-                className="self-end"
-                size="sm"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
+          <ComposeToolbar
+            config={config}
+            onSetModel={setModel}
+            onSetThinking={setThinking}
+            onSetEffort={setEffort}
+            onSetFastMode={setFastMode}
+            onSend={(message) => {
+              handleSend(message);
+            }}
+            disabled={isExecuting}
+            contextUsage={stepOutput?.contextUsage}
+            contextIndicatorVisibility={
+              (appPreferences?.context_indicator_visibility as "threshold" | "always" | "never") ??
+              "threshold"
+            }
+          />
         )}
       </div>
     </div>

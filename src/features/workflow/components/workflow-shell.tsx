@@ -63,6 +63,8 @@ export function WorkflowShell({
     stepId: null,
     generation: 0,
   });
+  const autoResumeAttemptRef = useRef<string | null>(null);
+  const [autoResuming, setAutoResuming] = useState(false);
   const debug = useDebugLog();
 
   const currentStep = workflowDef?.steps.find((s) => s.id === workflowState?.current_step_id);
@@ -94,6 +96,7 @@ export function WorkflowShell({
   if (prevStepIdRef.current !== workflowState?.current_step_id) {
     prevStepIdRef.current = workflowState?.current_step_id;
     executingRef.current.stepId = null;
+    autoResumeAttemptRef.current = null;
     setLastResult(null);
   }
   /* eslint-enable react-hooks/refs */
@@ -131,13 +134,16 @@ export function WorkflowShell({
     }
   }, [notifications, onClearNotification]);
 
-  const handleExecute = useCallback(async () => {
-    const result = await onExecuteStep(ticket.id);
-    if (result) {
-      setLastResult(result);
-      await onRefreshTicket();
-    }
-  }, [ticket.id, onExecuteStep, onRefreshTicket]);
+  const handleExecute = useCallback(
+    async (message?: string) => {
+      const result = await onExecuteStep(ticket.id, message);
+      if (result) {
+        setLastResult(result);
+        await onRefreshTicket();
+      }
+    },
+    [ticket.id, onExecuteStep, onRefreshTicket],
+  );
 
   // Auto-execute on pending steps
   useEffect(() => {
@@ -176,6 +182,56 @@ export function WorkflowShell({
         debug.log("error", `auto-execute failed: ${err}`);
         // Reset so retry is possible
         executingRef.current.stepId = null;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    workflowState?.step_status,
+    loading,
+    listenersReady,
+    currentStep,
+    onExecuteStep,
+    onRefreshTicket,
+    ticket.id,
+    debug,
+  ]);
+
+  // Auto-resume interrupted sessions on app reopen
+  useEffect(() => {
+    if (!currentStep || loading || !listenersReady) return;
+    if (typeof workflowState?.step_status !== "object") return;
+    if (!("failed" in workflowState.step_status)) return;
+
+    const failReason = workflowState.step_status.failed;
+    const isResumable = failReason.includes("timed out") || failReason.includes("interrupted");
+    if (!isResumable) return;
+
+    // Only attempt auto-resume once per step
+    const resumeKey = `${currentStep.id}-${failReason}`;
+    if (autoResumeAttemptRef.current === resumeKey) return;
+    autoResumeAttemptRef.current = resumeKey;
+
+    debug.log("lifecycle", `auto-resume fired for step ${currentStep.id}`);
+    setAutoResuming(true);
+
+    let cancelled = false;
+    onExecuteStep(ticket.id)
+      .then(async (result) => {
+        if (!cancelled && result) {
+          debug.log("lifecycle", `auto-resume completed for step ${currentStep.id}`);
+          setLastResult(result);
+          await onRefreshTicket();
+        }
+      })
+      .catch((err) => {
+        debug.log("error", `auto-resume failed: ${err}`);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAutoResuming(false);
+        }
       });
 
     return () => {
@@ -290,6 +346,7 @@ export function WorkflowShell({
         </div>
       )}
       {isFailed &&
+        !autoResuming &&
         (() => {
           const failReason = (workflowState.step_status as { failed: string }).failed;
           const isResumable =

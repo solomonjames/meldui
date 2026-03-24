@@ -649,6 +649,7 @@ pub async fn execute_step(
     ticket_id: &str,
     on_chunk: tauri::ipc::Channel<crate::claude::StreamChunk>,
     app_handle: tauri::AppHandle,
+    user_message: Option<String>,
 ) -> Result<StepExecutionResult, String> {
     // 1. Load workflow state
     let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
@@ -703,7 +704,26 @@ pub async fn execute_step(
     update_step_status(project_dir, ticket_id, StepStatus::InProgress)?;
 
     // 5. Build prompt
-    let prompt = build_step_prompt(step, &ticket, &state)?;
+    // If user sent a follow-up message on a completed step, use that as the prompt.
+    // Otherwise, build the normal step prompt and optionally append the user message.
+    let is_follow_up = state
+        .step_history
+        .iter()
+        .any(|r| r.step_id == *current_step_id);
+    let prompt = if is_follow_up {
+        if let Some(ref msg) = user_message {
+            msg.clone()
+        } else {
+            build_step_prompt(step, &ticket, &state)?
+        }
+    } else {
+        let mut base_prompt = build_step_prompt(step, &ticket, &state)?;
+        if let Some(ref msg) = user_message {
+            base_prompt.push_str("\n\n## User Message\n\n");
+            base_prompt.push_str(msg);
+        }
+        base_prompt
+    };
 
     // 6. Determine allowed tools based on step view type
     let view_str = match &step.view {

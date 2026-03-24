@@ -35,6 +35,12 @@ export const METHOD_NAMES = {
   // Sidecar → Rust (requests — expect response)
   toolApproval: "toolApproval",
   reviewRequest: "reviewRequest",
+
+  // Rust → Sidecar (config setters)
+  setModel: "agent/set_model",
+  setThinking: "agent/set_thinking",
+  setEffort: "agent/set_effort",
+  setFastMode: "agent/set_fast_mode",
 } as const;
 
 // ── Rust → Sidecar: Request Params & Results ──
@@ -54,6 +60,23 @@ export interface CancelParams {
 
 export interface CancelResult {
   status: "cancelled";
+}
+
+export interface SetModelParams {
+  model: string;
+}
+
+export interface SetThinkingParams {
+  type: "adaptive" | "enabled" | "disabled";
+  budgetTokens?: number;
+}
+
+export interface SetEffortParams {
+  effort: "low" | "medium" | "high" | "max";
+}
+
+export interface SetFastModeParams {
+  enabled: boolean;
 }
 
 // ── Sidecar → Rust: Notification Params ──
@@ -88,7 +111,10 @@ export type MessageNotificationParams =
   | CompactingMessage
   | SubtaskCreatedMessage
   | SubtaskUpdatedMessage
-  | SubtaskClosedMessage;
+  | SubtaskClosedMessage
+  | InitMetadataMessage
+  | CompactBoundaryMessage
+  | RateLimitMessage;
 
 export interface QueryCompleteParams {
   sessionId: string;
@@ -267,6 +293,29 @@ export interface ToolUseSummaryMessage {
 export interface CompactingMessage {
   type: "compacting";
   is_compacting: boolean;
+}
+
+export interface InitMetadataMessage {
+  type: "init_metadata";
+  model: string;
+  available_models: string[];
+  tools: string[];
+  slash_commands: string[];
+  skills: string[];
+  mcp_servers: Array<{ name: string; status: string }>;
+}
+
+export interface CompactBoundaryMessage {
+  type: "compact_boundary";
+  pre_tokens: number;
+  trigger: string;
+}
+
+export interface RateLimitMessage {
+  type: "rate_limit";
+  status: string;
+  utilization: number;
+  resets_at?: string;
 }
 
 // ── Review types (used by review flow — unchanged) ──

@@ -153,7 +153,7 @@ export function useWorkflow(projectDir: string) {
   const { clearPending: clearPermissionPending } = permissions;
 
   const executeStep = useCallback(
-    async (issueId: string) => {
+    async (issueId: string, userMessage?: string) => {
       try {
         setLoading(true);
         setError(null);
@@ -172,7 +172,12 @@ export function useWorkflow(projectDir: string) {
         executingStepRef.current = currentStepRef.current;
         setCurrentState((prev) => (prev ? { ...prev, step_status: "in_progress" } : prev));
         const channel = createStreamChannelRef.current();
-        const result = await commands.workflowExecuteStep(projectDir, issueId, channel);
+        const result = await commands.workflowExecuteStep(
+          projectDir,
+          issueId,
+          channel,
+          userMessage ?? null,
+        );
 
         executingStepRef.current = null;
         await getWorkflowState(issueId);

@@ -253,6 +253,37 @@ async fn conversation_list(
     conversation::list_conversations(&project_dir)
 }
 
+// ── Project file commands ──
+
+#[tauri::command]
+#[specta::specta]
+async fn list_project_files(project_dir: String) -> Result<Vec<String>, String> {
+    use std::path::Path;
+
+    let root = Path::new(&project_dir);
+    if !root.is_dir() {
+        return Err("Invalid project directory".to_string());
+    }
+
+    let mut files = Vec::new();
+    let walker = ignore::WalkBuilder::new(root).max_depth(Some(6)).build();
+
+    for entry in walker {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.file_type().map_or(false, |ft| ft.is_file()) {
+            if let Ok(relative) = entry.path().strip_prefix(root) {
+                files.push(relative.to_string_lossy().to_string());
+            }
+        }
+        if files.len() >= 1000 {
+            break;
+        }
+    }
+
+    files.sort();
+    Ok(files)
+}
+
 // ── Workflow commands ──
 
 #[tauri::command]
@@ -325,9 +356,10 @@ async fn workflow_execute_step(
     project_dir: String,
     issue_id: String,
     on_chunk: tauri::ipc::Channel<claude::StreamChunk>,
+    user_message: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<StepExecutionResult, String> {
-    workflow::execute_step(&project_dir, &issue_id, on_chunk, app).await
+    workflow::execute_step(&project_dir, &issue_id, on_chunk, app, user_message).await
 }
 
 #[tauri::command]
@@ -388,8 +420,10 @@ async fn workflow_cleanup_worktree(project_dir: String, issue_id: String) -> Res
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use agent::{
-        AgentPermissionRequest, AgentReviewFindingsRequest, NotificationEvent, PrUrlReportedEvent,
-        SectionUpdateEvent, StatusUpdateEvent, SubtaskClosed, SubtaskCreated, SubtaskUpdated,
+        agent_set_effort, agent_set_fast_mode, agent_set_model, agent_set_thinking,
+        AgentInitMetadata, AgentPermissionRequest, AgentReviewFindingsRequest, NotificationEvent,
+        PrUrlReportedEvent, SectionUpdateEvent, StatusUpdateEvent, SubtaskClosed, SubtaskCreated,
+        SubtaskUpdated,
     };
     let builder = tauri_specta::Builder::<tauri::Wry>::new()
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
@@ -399,6 +433,10 @@ pub fn run() {
             claude_login,
             agent_permission_respond,
             agent_review_respond,
+            agent_set_model,
+            agent_set_thinking,
+            agent_set_effort,
+            agent_set_fast_mode,
             ticket_list,
             ticket_create,
             ticket_update,
@@ -414,6 +452,7 @@ pub fn run() {
             sync_push_ticket,
             conversation_restore,
             conversation_list,
+            list_project_files,
             workflow_list,
             workflow_get,
             workflow_assign,
@@ -432,6 +471,7 @@ pub fn run() {
         .events(tauri_specta::collect_events![
             AgentPermissionRequest,
             AgentReviewFindingsRequest,
+            AgentInitMetadata,
             SubtaskCreated,
             SubtaskUpdated,
             SubtaskClosed,

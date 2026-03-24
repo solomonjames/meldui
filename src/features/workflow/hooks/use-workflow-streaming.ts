@@ -2,11 +2,26 @@ import { Channel } from "@tauri-apps/api/core";
 import { useCallback, useState } from "react";
 import type {
   ContentBlock,
+  ContextUsage,
   StepOutputStream,
   StreamChunk,
   SubagentActivity,
   ToolActivity,
 } from "@/shared/types";
+
+function defaultContextUsage(): ContextUsage {
+  return {
+    tokensUsed: 0,
+    contextLimit: 200000,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReads: 0,
+    cacheCreations: 0,
+    costUsd: 0,
+    rateLimitUtilization: 0,
+    rateLimitStatus: "ok",
+  };
+}
 
 /** Update a ToolActivity inside contentBlocks by tool_id */
 function updateToolInBlocks(
@@ -39,6 +54,7 @@ function emptyStepOutput(): StepOutputStream {
     activeToolStartTime: null,
     toolUseSummaries: [],
     isCompacting: false,
+    contextUsage: undefined,
   };
 }
 
@@ -216,8 +232,18 @@ export function useWorkflowStreaming(
           }
           case "tool_progress": {
             try {
-              const { tool_name } = JSON.parse(chunk.content);
+              const { tool_name, tool_use_id, elapsed_seconds } = JSON.parse(chunk.content);
               updated.activeToolName = tool_name;
+              if (tool_use_id && elapsed_seconds !== undefined) {
+                updated.toolActivities = current.toolActivities.map((a) =>
+                  a.tool_id === tool_use_id ? { ...a, elapsed_seconds } : a,
+                );
+                updated.contentBlocks = updateToolInBlocks(
+                  current.contentBlocks,
+                  tool_use_id,
+                  (a) => ({ ...a, elapsed_seconds }),
+                );
+              }
             } catch {
               // ignore
             }
@@ -308,13 +334,52 @@ export function useWorkflowStreaming(
             }
             break;
           }
+          case "compact_boundary": {
+            try {
+              const { pre_tokens } = JSON.parse(chunk.content);
+              updated.contextUsage = {
+                ...(current.contextUsage ?? defaultContextUsage()),
+                tokensUsed: pre_tokens,
+              };
+            } catch {
+              /* ignore */
+            }
+            break;
+          }
+          case "rate_limit": {
+            try {
+              const { utilization, status } = JSON.parse(chunk.content);
+              updated.contextUsage = {
+                ...(current.contextUsage ?? defaultContextUsage()),
+                rateLimitUtilization: utilization,
+                rateLimitStatus: status,
+              };
+            } catch {
+              /* ignore */
+            }
+            break;
+          }
           case "compacting": {
             updated.isCompacting = chunk.content === "true";
             break;
           }
-          case "thinking":
+          case "thinking": {
             updated.thinkingContent = current.thinkingContent + chunk.content;
+            // Build thinking content blocks
+            const blocks = [...current.contentBlocks];
+            const lastBlock = blocks[blocks.length - 1];
+            if (lastBlock && lastBlock.type === "thinking") {
+              blocks[blocks.length - 1] = {
+                ...lastBlock,
+                content: lastBlock.content + chunk.content,
+              };
+            } else {
+              blocks.push({ type: "thinking", content: chunk.content });
+            }
+            updated.contentBlocks = blocks;
+            updated.lastChunkType = "thinking";
             break;
+          }
           case "stderr":
             updated.stderrLines = [...current.stderrLines, chunk.content];
             break;

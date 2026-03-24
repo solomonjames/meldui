@@ -6,21 +6,30 @@ use tauri_specta::Event;
 const STORE_FILE: &str = "app-preferences.json";
 const THEME_KEY: &str = "theme";
 const DEFAULT_THEME: &str = "system";
+const CONTEXT_INDICATOR_KEY: &str = "context_indicator_visibility";
+const DEFAULT_CONTEXT_INDICATOR: &str = "threshold";
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type, tauri_specta::Event)]
 pub struct AppPreferences {
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default = "default_context_indicator")]
+    pub context_indicator_visibility: String,
 }
 
 fn default_theme() -> String {
     DEFAULT_THEME.to_string()
 }
 
+fn default_context_indicator() -> String {
+    DEFAULT_CONTEXT_INDICATOR.to_string()
+}
+
 impl Default for AppPreferences {
     fn default() -> Self {
         Self {
             theme: default_theme(),
+            context_indicator_visibility: default_context_indicator(),
         }
     }
 }
@@ -37,16 +46,32 @@ pub fn get_app_preferences(app: AppHandle) -> Result<AppPreferences, String> {
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or_else(default_theme);
 
-    Ok(AppPreferences { theme })
+    let context_indicator_visibility = store
+        .get(CONTEXT_INDICATOR_KEY)
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_else(default_context_indicator);
+
+    Ok(AppPreferences {
+        theme,
+        context_indicator_visibility,
+    })
 }
 
 const VALID_THEMES: &[&str] = &["light", "dark", "system"];
+const VALID_CONTEXT_INDICATORS: &[&str] = &["threshold", "always", "never"];
 
 #[tauri::command]
 #[specta::specta]
 pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Result<(), String> {
     if !VALID_THEMES.contains(&preferences.theme.as_str()) {
         return Err(format!("Invalid theme: {}", preferences.theme));
+    }
+
+    if !VALID_CONTEXT_INDICATORS.contains(&preferences.context_indicator_visibility.as_str()) {
+        return Err(format!(
+            "Invalid context indicator visibility: {}",
+            preferences.context_indicator_visibility
+        ));
     }
 
     let store = app
@@ -56,6 +81,11 @@ pub fn set_app_preferences(app: AppHandle, preferences: AppPreferences) -> Resul
     store.set(
         THEME_KEY,
         serde_json::Value::String(preferences.theme.clone()),
+    );
+
+    store.set(
+        CONTEXT_INDICATOR_KEY,
+        serde_json::Value::String(preferences.context_indicator_visibility.clone()),
     );
 
     store

@@ -27,6 +27,9 @@ import type {
   ReviewRequestResult,
   MessageNotificationParams,
   OutboundMessage,
+  SetThinkingParams,
+  SetEffortParams,
+  SetFastModeParams,
 } from "./protocol.js";
 import { METHOD_NAMES } from "./protocol.js";
 import type { PermissionRequestEvent, ReviewRequestEvent, ReviewSubmissionData } from "./types.js";
@@ -70,6 +73,15 @@ const ppidWatchdog = setInterval(() => {
   }
 }, 2000);
 ppidWatchdog.unref();
+
+// ── Sidecar config state ──
+
+const sidecarConfig = {
+  model: undefined as string | undefined,
+  thinking: { type: "adaptive" as "adaptive" | "enabled" | "disabled", budgetTokens: undefined as number | undefined },
+  effort: "high" as "low" | "medium" | "high" | "max",
+  fastMode: false,
+};
 
 // ── Main ──
 
@@ -156,6 +168,15 @@ async function main(): Promise<void> {
 
   rpc.addMethod(METHOD_NAMES.query, async (params: QueryParams): Promise<QueryResult> => {
     const config = parseAgentConfig(params.config);
+
+    // Apply sidecar runtime config overrides
+    if (sidecarConfig.model) {
+      config.model = sidecarConfig.model;
+    }
+    config.thinking = { ...sidecarConfig.thinking };
+    config.effort = sidecarConfig.effort;
+    config.fastMode = sidecarConfig.fastMode;
+
     const agent = new ClaudeAgent(sendMessage);
     activeAgent = agent;
 
@@ -215,6 +236,13 @@ async function main(): Promise<void> {
 
     agent.on("status-change", ({ isCompacting }) => {
       sendMessage({ type: "compacting", is_compacting: isCompacting });
+    });
+
+    agent.on("init-metadata", (metadata) => {
+      sendMessage({
+        type: "init_metadata",
+        ...metadata,
+      });
     });
 
     agent.on("permission-request", (event: PermissionRequestEvent) => {
@@ -302,6 +330,26 @@ async function main(): Promise<void> {
       activeAgent.stop();
     }
     return { status: "cancelled" as const };
+  });
+
+  rpc.addMethod(METHOD_NAMES.setModel, async (params: { model: string }) => {
+    sidecarConfig.model = params.model;
+    return { status: "ok" };
+  });
+
+  rpc.addMethod(METHOD_NAMES.setThinking, async (params: SetThinkingParams) => {
+    sidecarConfig.thinking = { type: params.type, budgetTokens: params.budgetTokens };
+    return { status: "ok" };
+  });
+
+  rpc.addMethod(METHOD_NAMES.setEffort, async (params: SetEffortParams) => {
+    sidecarConfig.effort = params.effort;
+    return { status: "ok" };
+  });
+
+  rpc.addMethod(METHOD_NAMES.setFastMode, async (params: SetFastModeParams) => {
+    sidecarConfig.fastMode = params.enabled;
+    return { status: "ok" };
   });
 
   // Keep process alive while socket is open

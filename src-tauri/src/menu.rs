@@ -1,3 +1,4 @@
+//! macOS application menu builder.
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::App;
 

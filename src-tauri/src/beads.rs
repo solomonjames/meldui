@@ -1,10 +1,14 @@
-use serde::{Deserialize, Serialize};
+//! Beads CLI wrapper for issue tracking integration.
+//!
+//! Spawns the `bd` CLI tool and parses its JSON output into typed structs.
 use std::env;
 use std::path::PathBuf;
 use std::process::Stdio;
+
+use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct BeadsComment {
     #[serde(default)]
     pub id: i32,
@@ -18,7 +22,7 @@ pub struct BeadsComment {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct BeadsDependency {
     #[serde(default)]
     pub depends_on_id: Option<String>,
@@ -26,7 +30,7 @@ pub struct BeadsDependency {
     pub dep_type: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BeadsIssue {
     pub id: String,
     pub title: String,
@@ -94,8 +98,8 @@ fn find_bd_binary() -> Option<PathBuf> {
     let candidates = [
         "/opt/homebrew/bin/bd".to_string(),
         "/usr/local/bin/bd".to_string(),
-        format!("{}/.local/bin/bd", home),
-        format!("{}/go/bin/bd", home),
+        format!("{home}/.local/bin/bd"),
+        format!("{home}/go/bin/bd"),
     ];
 
     for path in &candidates {
@@ -141,19 +145,20 @@ async fn run_bd_json<T: for<'de> Deserialize<'de>>(
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to run bd: {}", e))?;
+        .map_err(|e| format!("Failed to run bd: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("bd command failed: {}", stderr));
+        return Err(format!("bd command failed: {stderr}"));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse bd output: {} — raw: {}", e, stdout))
+        .map_err(|e| format!("Failed to parse bd output: {e} — raw: {stdout}"))
 }
 
 /// Check if beads is available and initialized in a directory
+#[allow(dead_code)] // Planned for beads status Tauri command
 pub async fn get_status(project_dir: &str) -> Result<String, String> {
     let bin = find_bd_binary();
 
@@ -199,14 +204,14 @@ pub async fn list_issues(
     // We need to own the strings for status and type
     let status_flag;
     if let Some(s) = status {
-        status_flag = format!("{}", s);
+        status_flag = s.to_string();
         args.push("-s");
         args.push(&status_flag);
     }
 
     let type_flag;
     if let Some(t) = issue_type {
-        type_flag = format!("{}", t);
+        type_flag = t.to_string();
         args.push("-t");
         args.push(&type_flag);
     }
@@ -252,6 +257,7 @@ pub async fn create_issue(
 }
 
 /// Update an issue
+#[allow(clippy::too_many_arguments)]
 pub async fn update_issue(
     project_dir: &str,
     id: &str,
@@ -303,6 +309,7 @@ pub async fn update_issue(
 }
 
 /// Close an issue
+#[allow(dead_code)] // Planned for direct beads integration
 pub async fn close_issue(
     project_dir: &str,
     id: &str,
@@ -319,16 +326,19 @@ pub async fn close_issue(
 }
 
 /// Show issue details
+#[allow(dead_code)] // Planned for direct beads integration
 pub async fn show_issue(project_dir: &str, id: &str) -> Result<Vec<BeadsIssue>, String> {
     run_bd_json(project_dir, &["show", id]).await
 }
 
 /// Delete an issue
+#[allow(dead_code)] // Planned for direct beads integration
 pub async fn delete_issue(project_dir: &str, id: &str) -> Result<serde_json::Value, String> {
     run_bd_json(project_dir, &["delete", id, "--force"]).await
 }
 
 /// Add a comment to an issue
+#[allow(dead_code)] // Planned for direct beads integration
 pub async fn add_comment(
     project_dir: &str,
     id: &str,
@@ -338,6 +348,7 @@ pub async fn add_comment(
 }
 
 /// Initialize beads in a project directory
+#[allow(dead_code)] // Planned for beads init Tauri command
 pub async fn init(project_dir: &str) -> Result<String, String> {
     let mut cmd = bd_command(project_dir)?;
     let output = cmd
@@ -346,14 +357,14 @@ pub async fn init(project_dir: &str) -> Result<String, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to init beads: {}", e))?;
+        .map_err(|e| format!("Failed to init beads: {e}"))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     if output.status.success() {
-        Ok(format!("{}{}", stdout, stderr))
+        Ok(format!("{stdout}{stderr}"))
     } else {
-        Err(format!("Failed to init beads: {}{}", stdout, stderr))
+        Err(format!("Failed to init beads: {stdout}{stderr}"))
     }
 }

@@ -1,3 +1,4 @@
+//! Beads-to-Ticket field mapping for sync operations.
 use crate::beads;
 use crate::tickets::Ticket;
 

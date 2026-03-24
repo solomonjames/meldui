@@ -1,7 +1,14 @@
+// Many items are `pub` so specta/tauri-specta can generate TypeScript bindings.
+#![allow(unreachable_pub)]
+//! MeldUI Tauri backend — the IPC command layer.
+//!
+//! Exposes Tauri commands that the React frontend calls via `invoke()`.
+//! Coordinates ticket CRUD, workflow orchestration, agent sidecar communication,
+//! external CLI wrappers (beads, claude, git), and conversation persistence.
 mod agent;
-#[allow(dead_code)]
 mod beads;
 mod claude;
+mod constants;
 mod conversation;
 mod menu;
 mod preferences;
@@ -16,6 +23,7 @@ use workflow::{
     BranchInfo, CommitActionResult, DiffFile, StepExecutionResult, WorkflowDefinition,
     WorkflowState, WorkflowSuggestion,
 };
+
 // ── Folder dialog command ──
 
 #[tauri::command]
@@ -31,7 +39,7 @@ async fn open_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, Str
     // Guard: reject worktree directories — they are not valid project roots
     if let Some(ref path) = selected {
         if path.contains("/.meldui/worktrees/") {
-            log::warn!("open_folder_dialog: rejected worktree path: {}", path);
+            log::warn!("open_folder_dialog: rejected worktree path: {path}");
             return Ok(None); // treat as cancelled
         }
     }
@@ -64,7 +72,10 @@ async fn agent_permission_respond(
 ) -> Result<(), String> {
     let handle_guard = state.handle.lock().await;
     if let Some(handle) = handle_guard.as_ref() {
-        handle.respond_to_permission(&request_id, allowed).await
+        handle
+            .respond_to_permission(&request_id, allowed)
+            .await
+            .map_err(|e| e.to_string())
     } else {
         Err("No active agent session".to_string())
     }
@@ -79,7 +90,10 @@ async fn agent_review_respond(
 ) -> Result<(), String> {
     let handle_guard = state.handle.lock().await;
     if let Some(handle) = handle_guard.as_ref() {
-        handle.respond_to_review(&request_id, submission).await
+        handle
+            .respond_to_review(&request_id, submission)
+            .await
+            .map_err(|e| e.to_string())
     } else {
         Err("No active agent session".to_string())
     }
@@ -123,6 +137,7 @@ async fn ticket_create(
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)] // Tauri commands receive owned values from IPC
 async fn ticket_update(
     project_dir: String,
     id: String,
@@ -270,7 +285,7 @@ async fn list_project_files(project_dir: String) -> Result<Vec<String>, String> 
 
     for entry in walker {
         let entry = entry.map_err(|e| e.to_string())?;
-        if entry.file_type().map_or(false, |ft| ft.is_file()) {
+        if entry.file_type().is_some_and(|ft| ft.is_file()) {
             if let Ok(relative) = entry.path().strip_prefix(root) {
                 files.push(relative.to_string_lossy().to_string());
             }
@@ -299,7 +314,7 @@ async fn workflow_get(
     workflow_id: String,
 ) -> Result<WorkflowDefinition, String> {
     workflow::get_workflow(&project_dir, &workflow_id)
-        .ok_or_else(|| format!("Workflow '{}' not found", workflow_id))
+        .ok_or_else(|| format!("Workflow '{workflow_id}' not found"))
 }
 
 #[tauri::command]
@@ -517,13 +532,13 @@ pub fn run() {
                         if event.id().0.as_str() == "preferences" {
                             if let Err(e) = preferences::open_preferences_window(app_handle.clone())
                             {
-                                log::error!("Failed to open preferences window: {}", e);
+                                log::error!("Failed to open preferences window: {e}");
                             }
                         }
                     });
                 }
                 Err(e) => {
-                    log::warn!("Failed to build app menu: {}", e);
+                    log::warn!("Failed to build app menu: {e}");
                 }
             }
 

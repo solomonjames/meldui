@@ -3,9 +3,36 @@
 //! Tracks which step a ticket is on, step statuses, and state transitions
 //! (assign, advance, update, read).
 
+use thiserror::Error;
+
 use serde::{Deserialize, Serialize};
 
 use super::get_workflow;
+
+/// Structured error type for workflow state operations.
+#[derive(Debug, Error)]
+pub(crate) enum StateError {
+    #[error("workflow '{0}' not found")]
+    WorkflowNotFound(String),
+
+    #[error("workflow has no steps")]
+    NoSteps,
+
+    #[error("no workflow assigned to this ticket")]
+    NotAssigned,
+
+    #[error("workflow already completed")]
+    AlreadyCompleted,
+
+    #[error("step '{0}' not found in workflow")]
+    StepNotFound(String),
+
+    #[error("failed to serialize workflow metadata")]
+    SerializeFailed(#[source] serde_json::Error),
+
+    #[error("{0}")]
+    Ticket(String),
+}
 
 // ── Types ──
 
@@ -57,35 +84,15 @@ fn merge_workflow_state(metadata: &serde_json::Value, state: &WorkflowState) -> 
     meta
 }
 
-/// Assign a workflow to a ticket. Returns the initial workflow state.
-pub fn assign_workflow(
+/// Persist workflow state into ticket metadata via tickets module.
+fn persist_state(
     project_dir: &str,
     ticket_id: &str,
-    workflow_id: &str,
-) -> Result<WorkflowState, String> {
-    let wf = get_workflow(project_dir, workflow_id)
-        .ok_or_else(|| format!("Workflow '{workflow_id}' not found"))?;
-
-    let first_step_id = wf
-        .steps
-        .first()
-        .map(|s| s.id.clone())
-        .ok_or_else(|| "Workflow has no steps".to_string())?;
-
-    let state = WorkflowState {
-        workflow_id: workflow_id.to_string(),
-        current_step_id: Some(first_step_id),
-        step_status: StepStatus::Pending,
-        step_history: Vec::new(),
-    };
-
-    // Read current ticket metadata
-    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
-
-    let merged = merge_workflow_state(&ticket.metadata, &state);
-    let meta_str =
-        serde_json::to_string(&merged).map_err(|e| format!("Failed to serialize metadata: {e}"))?;
-
+    metadata: &serde_json::Value,
+    state: &WorkflowState,
+) -> Result<(), StateError> {
+    let merged = merge_workflow_state(metadata, state);
+    let meta_str = serde_json::to_string(&merged).map_err(StateError::SerializeFailed)?;
     crate::tickets::update_ticket(
         project_dir,
         ticket_id,
@@ -97,32 +104,71 @@ pub fn assign_workflow(
         None,
         None,
         Some(&meta_str),
-    )?;
+    )
+    .map_err(StateError::Ticket)?;
+    Ok(())
+}
+
+/// Assign a workflow to a ticket. Returns the initial workflow state.
+pub fn assign_workflow(
+    project_dir: &str,
+    ticket_id: &str,
+    workflow_id: &str,
+) -> Result<WorkflowState, String> {
+    assign_workflow_inner(project_dir, ticket_id, workflow_id).map_err(|e| e.to_string())
+}
+
+fn assign_workflow_inner(
+    project_dir: &str,
+    ticket_id: &str,
+    workflow_id: &str,
+) -> Result<WorkflowState, StateError> {
+    let wf = get_workflow(project_dir, workflow_id)
+        .ok_or_else(|| StateError::WorkflowNotFound(workflow_id.to_string()))?;
+
+    let first_step_id = wf
+        .steps
+        .first()
+        .map(|s| s.id.clone())
+        .ok_or(StateError::NoSteps)?;
+
+    let state = WorkflowState {
+        workflow_id: workflow_id.to_string(),
+        current_step_id: Some(first_step_id),
+        step_status: StepStatus::Pending,
+        step_history: Vec::new(),
+    };
+
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id).map_err(StateError::Ticket)?;
+    persist_state(project_dir, ticket_id, &ticket.metadata, &state)?;
 
     Ok(state)
 }
 
 /// Advance to the next step in the workflow
 pub fn advance_step(project_dir: &str, ticket_id: &str) -> Result<WorkflowState, String> {
-    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
+    advance_step_inner(project_dir, ticket_id).map_err(|e| e.to_string())
+}
 
-    let mut state =
-        read_workflow_state(&ticket.metadata).ok_or("No workflow assigned to this ticket")?;
+fn advance_step_inner(project_dir: &str, ticket_id: &str) -> Result<WorkflowState, StateError> {
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id).map_err(StateError::Ticket)?;
+
+    let mut state = read_workflow_state(&ticket.metadata).ok_or(StateError::NotAssigned)?;
 
     let wf = get_workflow(project_dir, &state.workflow_id)
-        .ok_or_else(|| format!("Workflow '{}' not found", state.workflow_id))?;
+        .ok_or_else(|| StateError::WorkflowNotFound(state.workflow_id.clone()))?;
 
     let current_step_id = state
         .current_step_id
         .as_ref()
-        .ok_or("Workflow already completed")?;
+        .ok_or(StateError::AlreadyCompleted)?;
 
     // Find current step index
     let current_idx = wf
         .steps
         .iter()
         .position(|s| &s.id == current_step_id)
-        .ok_or_else(|| format!("Step '{current_step_id}' not found in workflow"))?;
+        .ok_or_else(|| StateError::StepNotFound(current_step_id.clone()))?;
 
     // Record completed step in history
     state.step_history.push(StepRecord {
@@ -142,22 +188,7 @@ pub fn advance_step(project_dir: &str, ticket_id: &str) -> Result<WorkflowState,
         state.step_status = StepStatus::Completed;
     }
 
-    let merged = merge_workflow_state(&ticket.metadata, &state);
-    let meta_str =
-        serde_json::to_string(&merged).map_err(|e| format!("Failed to serialize metadata: {e}"))?;
-
-    crate::tickets::update_ticket(
-        project_dir,
-        ticket_id,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some(&meta_str),
-    )?;
+    persist_state(project_dir, ticket_id, &ticket.metadata, &state)?;
 
     Ok(state)
 }
@@ -177,29 +208,21 @@ pub fn update_step_status(
     ticket_id: &str,
     status: StepStatus,
 ) -> Result<WorkflowState, String> {
-    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
+    update_step_status_inner(project_dir, ticket_id, status).map_err(|e| e.to_string())
+}
 
-    let mut state =
-        read_workflow_state(&ticket.metadata).ok_or("No workflow assigned to this ticket")?;
+fn update_step_status_inner(
+    project_dir: &str,
+    ticket_id: &str,
+    status: StepStatus,
+) -> Result<WorkflowState, StateError> {
+    let ticket = crate::tickets::show_ticket(project_dir, ticket_id).map_err(StateError::Ticket)?;
+
+    let mut state = read_workflow_state(&ticket.metadata).ok_or(StateError::NotAssigned)?;
 
     state.step_status = status;
 
-    let merged = merge_workflow_state(&ticket.metadata, &state);
-    let meta_str =
-        serde_json::to_string(&merged).map_err(|e| format!("Failed to serialize metadata: {e}"))?;
-
-    crate::tickets::update_ticket(
-        project_dir,
-        ticket_id,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some(&meta_str),
-    )?;
+    persist_state(project_dir, ticket_id, &ticket.metadata, &state)?;
 
     Ok(state)
 }

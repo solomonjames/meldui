@@ -5,9 +5,42 @@
 
 use std::path::PathBuf;
 
+use thiserror::Error;
+
 use crate::constants::{MELDUI_DIR, WORKTREES_DIR};
 
 use serde::Serialize;
+
+/// Structured error type for worktree operations.
+#[derive(Debug, Error)]
+pub(crate) enum WorktreeError {
+    #[error("invalid worktree path")]
+    InvalidPath,
+
+    #[error("failed to create worktrees directory")]
+    DirCreateFailed(#[source] std::io::Error),
+
+    #[error("git command failed to execute")]
+    GitSpawnFailed(#[source] std::io::Error),
+
+    #[error("git command failed: {0}")]
+    GitCommandFailed(String),
+
+    #[error("worktree setup command failed to execute")]
+    SetupSpawnFailed(#[source] std::io::Error),
+
+    #[error("worktree setup command failed: {0}")]
+    SetupCommandFailed(String),
+
+    #[error("failed to remove worktree directory")]
+    RemoveDirFailed(#[source] std::io::Error),
+
+    #[error("failed to serialize worktree metadata")]
+    SerializeFailed(#[source] serde_json::Error),
+
+    #[error("{0}")]
+    Ticket(String),
+}
 
 /// Information about a created git worktree.
 #[derive(Debug, Serialize, Clone, specta::Type)]
@@ -21,6 +54,15 @@ pub struct WorktreeInfo {
 /// Creates the worktree at `.meldui/worktrees/{ticket_id}/` on branch `meld/{ticket_id}`.
 /// If a `worktree.setup_command` is configured in project settings, runs it in the worktree.
 pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<WorktreeInfo, String> {
+    create_worktree_inner(project_dir, ticket_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn create_worktree_inner(
+    project_dir: &str,
+    ticket_id: &str,
+) -> Result<WorktreeInfo, WorktreeError> {
     use std::process::Stdio;
     use tokio::process::Command;
 
@@ -31,14 +73,13 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
         .join(ticket_id);
     let worktree_str = worktree_path
         .to_str()
-        .ok_or("Invalid worktree path")?
+        .ok_or(WorktreeError::InvalidPath)?
         .to_string();
 
     // Ensure parent directory exists
     if let Some(parent) = worktree_path.parent() {
         if !parent.exists() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create worktrees directory: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(WorktreeError::DirCreateFailed)?;
         }
     }
 
@@ -50,7 +91,7 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to get base commit: {e}"))?;
+        .map_err(WorktreeError::GitSpawnFailed)?;
     let base_commit = String::from_utf8_lossy(&base_commit_output.stdout)
         .trim()
         .to_string();
@@ -63,7 +104,7 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to create worktree: {e}"))?;
+        .map_err(WorktreeError::GitSpawnFailed)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -76,14 +117,14 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
                 .stderr(Stdio::piped())
                 .output()
                 .await
-                .map_err(|e| format!("Failed to create worktree: {e}"))?;
+                .map_err(WorktreeError::GitSpawnFailed)?;
 
             if !output2.status.success() {
                 let stderr2 = String::from_utf8_lossy(&output2.stderr);
-                return Err(format!("Failed to create worktree: {stderr2}"));
+                return Err(WorktreeError::GitCommandFailed(stderr2.trim().to_string()));
             }
         } else {
-            return Err(format!("Failed to create worktree: {stderr}"));
+            return Err(WorktreeError::GitCommandFailed(stderr.trim().to_string()));
         }
     }
 
@@ -102,11 +143,11 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
                     .stderr(Stdio::piped())
                     .output()
                     .await
-                    .map_err(|e| format!("Failed to run worktree setup command: {e}"))?;
+                    .map_err(WorktreeError::SetupSpawnFailed)?;
 
                 if !setup_output.status.success() {
                     let stderr = String::from_utf8_lossy(&setup_output.stderr);
-                    return Err(format!("Worktree setup command failed: {}", stderr.trim()));
+                    return Err(WorktreeError::SetupCommandFailed(stderr.trim().to_string()));
                 }
                 log::info!("worktree: setup command completed successfully");
             }
@@ -114,15 +155,15 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
     }
 
     // Store worktree info in ticket metadata
-    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
+    let ticket =
+        crate::tickets::show_ticket(project_dir, ticket_id).map_err(WorktreeError::Ticket)?;
     let mut meta = ticket.metadata;
     meta["worktree_path"] = serde_json::Value::String(worktree_str.clone());
     meta["worktree_branch"] = serde_json::Value::String(branch_name.clone());
     if !base_commit.is_empty() {
         meta["worktree_base_commit"] = serde_json::Value::String(base_commit.clone());
     }
-    let meta_str = serde_json::to_string(&meta)
-        .map_err(|e| format!("Failed to serialize worktree metadata: {e}"))?;
+    let meta_str = serde_json::to_string(&meta).map_err(WorktreeError::SerializeFailed)?;
     crate::tickets::update_ticket(
         project_dir,
         ticket_id,
@@ -134,7 +175,8 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
         None,
         None,
         Some(&meta_str),
-    )?;
+    )
+    .map_err(WorktreeError::Ticket)?;
 
     Ok(WorktreeInfo {
         path: worktree_str,
@@ -144,6 +186,12 @@ pub async fn create_worktree(project_dir: &str, ticket_id: &str) -> Result<Workt
 
 /// Remove a git worktree for a ticket.
 pub async fn remove_worktree(project_dir: &str, ticket_id: &str) -> Result<(), String> {
+    remove_worktree_inner(project_dir, ticket_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn remove_worktree_inner(project_dir: &str, ticket_id: &str) -> Result<(), WorktreeError> {
     use std::process::Stdio;
     use tokio::process::Command;
 
@@ -153,7 +201,7 @@ pub async fn remove_worktree(project_dir: &str, ticket_id: &str) -> Result<(), S
         .join(ticket_id);
     let worktree_str = worktree_path
         .to_str()
-        .ok_or("Invalid worktree path")?
+        .ok_or(WorktreeError::InvalidPath)?
         .to_string();
 
     if !worktree_path.exists() {
@@ -170,15 +218,14 @@ pub async fn remove_worktree(project_dir: &str, ticket_id: &str) -> Result<(), S
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to remove worktree: {e}"))?;
+        .map_err(WorktreeError::GitSpawnFailed)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         log::warn!("worktree: git worktree remove failed: {stderr}");
         // Fall back to manual removal
         if worktree_path.exists() {
-            std::fs::remove_dir_all(&worktree_path)
-                .map_err(|e| format!("Failed to remove worktree directory: {e}"))?;
+            std::fs::remove_dir_all(&worktree_path).map_err(WorktreeError::RemoveDirFailed)?;
         }
         // Prune stale worktree references
         let _ = Command::new("git")
@@ -204,15 +251,15 @@ pub async fn remove_worktree(project_dir: &str, ticket_id: &str) -> Result<(), S
     Ok(())
 }
 
-fn clear_worktree_metadata(project_dir: &str, ticket_id: &str) -> Result<(), String> {
-    let ticket = crate::tickets::show_ticket(project_dir, ticket_id)?;
+fn clear_worktree_metadata(project_dir: &str, ticket_id: &str) -> Result<(), WorktreeError> {
+    let ticket =
+        crate::tickets::show_ticket(project_dir, ticket_id).map_err(WorktreeError::Ticket)?;
     let mut meta = ticket.metadata;
     if let Some(obj) = meta.as_object_mut() {
         obj.remove("worktree_path");
         obj.remove("worktree_branch");
     }
-    let meta_str =
-        serde_json::to_string(&meta).map_err(|e| format!("Failed to serialize metadata: {e}"))?;
+    let meta_str = serde_json::to_string(&meta).map_err(WorktreeError::SerializeFailed)?;
     crate::tickets::update_ticket(
         project_dir,
         ticket_id,
@@ -224,7 +271,8 @@ fn clear_worktree_metadata(project_dir: &str, ticket_id: &str) -> Result<(), Str
         None,
         None,
         Some(&meta_str),
-    )?;
+    )
+    .map_err(WorktreeError::Ticket)?;
     Ok(())
 }
 

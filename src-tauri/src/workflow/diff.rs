@@ -2,10 +2,22 @@
 
 use std::path::PathBuf;
 
+use thiserror::Error;
+
 use serde::{Deserialize, Serialize};
 
 use super::effective_project_dir;
 use crate::constants::{MELDUI_DIR, TICKETS_DIR};
+
+/// Structured error type for diff/branch operations.
+#[derive(Debug, Error)]
+pub(crate) enum DiffError {
+    #[error("git command failed to execute")]
+    GitSpawnFailed(#[source] std::io::Error),
+
+    #[error("not in a git repository or no commits yet")]
+    NotARepo,
+}
 
 // ── Diff Types ──
 
@@ -58,6 +70,12 @@ pub struct BranchInfo {
 
 /// Get the current git branch and its remote tracking branch.
 pub async fn get_branch_info(project_dir: &str) -> Result<BranchInfo, String> {
+    get_branch_info_inner(project_dir)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn get_branch_info_inner(project_dir: &str) -> Result<BranchInfo, DiffError> {
     use std::process::Stdio;
     use tokio::process::Command;
 
@@ -68,14 +86,14 @@ pub async fn get_branch_info(project_dir: &str) -> Result<BranchInfo, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to get branch: {e}"))?;
+        .map_err(DiffError::GitSpawnFailed)?;
 
     let branch = String::from_utf8_lossy(&branch_output.stdout)
         .trim()
         .to_string();
 
     if branch.is_empty() {
-        return Err("Not in a git repository or no commits yet".to_string());
+        return Err(DiffError::NotARepo);
     }
 
     // Try to get the remote tracking branch (may not exist)
@@ -86,7 +104,7 @@ pub async fn get_branch_info(project_dir: &str) -> Result<BranchInfo, String> {
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to check upstream: {e}"))?;
+        .map_err(DiffError::GitSpawnFailed)?;
 
     let remote_tracking = if upstream_output.status.success() {
         let upstream = String::from_utf8_lossy(&upstream_output.stdout)
@@ -229,6 +247,15 @@ pub async fn get_diff(
     project_dir: &str,
     base_commit: Option<&str>,
 ) -> Result<Vec<DiffFile>, String> {
+    get_diff_inner(project_dir, base_commit)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn get_diff_inner(
+    project_dir: &str,
+    base_commit: Option<&str>,
+) -> Result<Vec<DiffFile>, DiffError> {
     use std::process::Stdio;
     use tokio::process::Command;
 
@@ -242,7 +269,7 @@ pub async fn get_diff(
         .stderr(Stdio::piped())
         .output()
         .await
-        .map_err(|e| format!("Failed to run git diff: {e}"))?;
+        .map_err(DiffError::GitSpawnFailed)?;
 
     let diff_text = if !output.status.success() {
         // Might be a fresh repo with no commits — try just `git diff`
@@ -253,7 +280,7 @@ pub async fn get_diff(
             .stderr(Stdio::piped())
             .output()
             .await
-            .map_err(|e| format!("Failed to run git diff: {e}"))?;
+            .map_err(DiffError::GitSpawnFailed)?;
         String::from_utf8_lossy(&output2.stdout).to_string()
     } else {
         String::from_utf8_lossy(&output.stdout).to_string()

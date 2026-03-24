@@ -38,7 +38,7 @@ pub(crate) enum ConversationError {
 
 // ── NDJSON line format ──
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ConversationEvent {
     pub timestamp: String,
     pub sequence: u32,
@@ -47,7 +47,7 @@ pub struct ConversationEvent {
     pub content: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "marker_type")]
 pub enum StepMarker {
     #[serde(rename = "start")]
@@ -58,7 +58,7 @@ pub enum StepMarker {
 
 // ── Snapshot format ──
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct ConversationSnapshot {
     pub schema_version: u32,
     pub ticket_id: String,
@@ -71,7 +71,7 @@ pub struct ConversationSnapshot {
     pub event_count: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct ConversationEventRecord {
     pub timestamp: String,
     pub sequence: u32,
@@ -80,7 +80,7 @@ pub struct ConversationEventRecord {
     pub content: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct ConversationStepRecord {
     pub step_id: String,
     pub label: Option<String>,
@@ -90,7 +90,7 @@ pub struct ConversationStepRecord {
     pub first_sequence: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct ConversationSummary {
     pub ticket_id: String,
     pub status: String,

@@ -36,7 +36,7 @@ pub(crate) enum StateError {
 
 // ── Types ──
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, specta::Type)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum StepStatus {
     Pending,
@@ -45,7 +45,7 @@ pub enum StepStatus {
     Failed(String),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct WorkflowState {
     pub workflow_id: String,
     pub current_step_id: Option<String>,
@@ -53,7 +53,7 @@ pub struct WorkflowState {
     pub step_history: Vec<StepRecord>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct StepRecord {
     pub step_id: String,
     pub status: StepStatus,

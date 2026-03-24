@@ -46,7 +46,7 @@ pub(crate) struct JsonRpcResponse {
 
 // ── Config sent as `query` params ──
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Clone, Debug, Serialize)]
 pub(crate) struct SidecarConfig {
     pub(crate) project_dir: String,
     #[serde(skip_serializing_if = "Option::is_none")]

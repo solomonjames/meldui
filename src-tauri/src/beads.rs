@@ -8,7 +8,7 @@ use std::process::Stdio;
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BeadsComment {
     #[serde(default)]
     pub id: i32,
@@ -22,7 +22,7 @@ pub struct BeadsComment {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BeadsDependency {
     #[serde(default)]
     pub depends_on_id: Option<String>,
@@ -30,7 +30,7 @@ pub struct BeadsDependency {
     pub dep_type: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BeadsIssue {
     pub id: String,
     pub title: String,

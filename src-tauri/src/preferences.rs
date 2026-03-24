@@ -10,7 +10,7 @@ const DEFAULT_THEME: &str = "system";
 const CONTEXT_INDICATOR_KEY: &str = "context_indicator_visibility";
 const DEFAULT_CONTEXT_INDICATOR: &str = "threshold";
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type, tauri_specta::Event)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
 pub struct AppPreferences {
     #[serde(default = "default_theme")]
     pub theme: String,

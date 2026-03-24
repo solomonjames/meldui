@@ -73,7 +73,7 @@ impl From<TicketError> for String {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct TicketComment {
     pub id: String,
     pub author: String,
@@ -81,7 +81,7 @@ pub struct TicketComment {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct TicketSection {
     pub id: String,
     pub label: String,
@@ -98,7 +98,7 @@ pub struct TicketSection {
     pub updated_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct Ticket {
     pub id: String,
     pub title: String,
@@ -473,7 +473,7 @@ fn add_comment_inner(
 }
 
 /// Definition for initializing a ticket section from a workflow.
-#[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
+#[derive(Clone, Debug, Deserialize, Serialize, specta::Type)]
 pub struct TicketSectionDef {
     pub id: String,
     pub label: String,

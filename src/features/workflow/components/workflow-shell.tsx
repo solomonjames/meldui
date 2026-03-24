@@ -339,31 +339,11 @@ export function WorkflowShell({
         </div>
       )}
       {isFailed &&
+        !autoResuming &&
         (() => {
           const failReason = (workflowState.step_status as { failed: string }).failed;
           const isResumable =
             failReason.includes("timed out") || failReason.includes("interrupted");
-          if (autoResuming) {
-            return (
-              <div className="px-6 py-2 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-800 flex items-center gap-2">
-                <div className="flex gap-0.5">
-                  <span
-                    className="w-1 h-1 rounded-full bg-blue-500 animate-bounce"
-                    style={{ animationDelay: "0ms" }}
-                  />
-                  <span
-                    className="w-1 h-1 rounded-full bg-blue-500 animate-bounce"
-                    style={{ animationDelay: "150ms" }}
-                  />
-                  <span
-                    className="w-1 h-1 rounded-full bg-blue-500 animate-bounce"
-                    style={{ animationDelay: "300ms" }}
-                  />
-                </div>
-                <p className="text-sm text-blue-600 dark:text-blue-400">Resuming session...</p>
-              </div>
-            );
-          }
           return (
             <div className="px-6 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800 flex items-center gap-3">
               <div className="flex-1">

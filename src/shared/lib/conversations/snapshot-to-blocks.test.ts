@@ -16,7 +16,6 @@ function makeEvent(
   };
 }
 
-/** Helper: wrap content as the sidecar params JSON (how events are actually stored) */
 function jsonContent(content: string, type?: string): string {
   return JSON.stringify({ content, ...(type ? { type } : {}) });
 }
@@ -31,16 +30,22 @@ const defaultStep: ConversationStepRecord = {
 };
 
 describe("snapshotToBlocks", () => {
-  it("returns empty array for empty events", () => {
-    expect(snapshotToBlocks([], [])).toEqual([]);
+  it("returns empty result for empty events", () => {
+    const result = snapshotToBlocks([], []);
+    expect(result.blocks).toEqual([]);
+    expect(result.filesChanged).toEqual([]);
   });
 
   it("converts text events to text blocks with step divider", () => {
     const events = [makeEvent({ event_type: "text", content: jsonContent("Hello", "text") })];
-    const blocks = snapshotToBlocks(events, [defaultStep]);
-    expect(blocks).toHaveLength(2);
-    expect(blocks[0]).toEqual({ type: "step_divider", stepId: "step-1", label: "Understand" });
-    expect(blocks[1]).toEqual({ type: "text", content: "Hello" });
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[0]).toEqual({
+      type: "step_divider",
+      stepId: "step-1",
+      label: "Understand",
+    });
+    expect(result.blocks[1]).toEqual({ type: "text", content: "Hello" });
   });
 
   it("merges consecutive text chunks into a single block", () => {
@@ -48,29 +53,51 @@ describe("snapshotToBlocks", () => {
       makeEvent({ event_type: "text", content: jsonContent("Hello "), sequence: 1 }),
       makeEvent({ event_type: "text", content: jsonContent("world"), sequence: 2 }),
     ];
-    const blocks = snapshotToBlocks(events, [defaultStep]);
-    expect(blocks).toHaveLength(2); // divider + 1 merged text
-    expect(blocks[1]).toEqual({ type: "text", content: "Hello world" });
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[1]).toEqual({ type: "text", content: "Hello world" });
   });
 
-  it("skips thinking events in restored history", () => {
+  it("restores thinking events as thinking blocks", () => {
     const events = [makeEvent({ event_type: "thinking", content: jsonContent("Let me think...") })];
-    const blocks = snapshotToBlocks(events, [defaultStep]);
-    // Only the step divider, no text block for thinking
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0].type).toBe("step_divider");
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[1]).toEqual({ type: "thinking", content: "Let me think..." });
+  });
+
+  it("merges consecutive thinking chunks into a single block", () => {
+    const events = [
+      makeEvent({ event_type: "thinking", content: jsonContent("Let me "), sequence: 1 }),
+      makeEvent({ event_type: "thinking", content: jsonContent("think about this"), sequence: 2 }),
+    ];
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[1]).toEqual({ type: "thinking", content: "Let me think about this" });
+  });
+
+  it("converts user_message events to user_message blocks", () => {
+    const events = [
+      makeEvent({
+        event_type: "user_message",
+        content: JSON.stringify({ content: "Fix the login bug" }),
+        sequence: 1,
+      }),
+    ];
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[1]).toEqual({ type: "user_message", content: "Fix the login bug" });
   });
 
   it("converts result events to text blocks", () => {
     const events = [makeEvent({ event_type: "result", content: jsonContent("Done!") })];
-    const blocks = snapshotToBlocks(events, [defaultStep]);
-    expect(blocks[1]).toEqual({ type: "text", content: "Done!" });
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks[1]).toEqual({ type: "text", content: "Done!" });
   });
 
   it("converts error events to text blocks with prefix", () => {
     const events = [makeEvent({ event_type: "error", content: jsonContent("Something broke") })];
-    const blocks = snapshotToBlocks(events, [defaultStep]);
-    expect(blocks[1]).toEqual({ type: "text", content: "**Error:** Something broke" });
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks[1]).toEqual({ type: "text", content: "**Error:** Something broke" });
   });
 
   it("groups tool_start/tool_input/tool_result into tool_group", () => {
@@ -91,15 +118,77 @@ describe("snapshotToBlocks", () => {
         sequence: 3,
       }),
     ];
-    const blocks = snapshotToBlocks(events, [defaultStep]);
-    expect(blocks).toHaveLength(2);
-    const toolGroup = blocks[1];
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks).toHaveLength(2);
+    const toolGroup = result.blocks[1];
     expect(toolGroup.type).toBe("tool_group");
     if (toolGroup.type === "tool_group") {
       expect(toolGroup.activities).toHaveLength(1);
       expect(toolGroup.activities[0].tool_name).toBe("Read");
       expect(toolGroup.activities[0].input).toBe("/path");
       expect(toolGroup.activities[0].result).toBe("file contents");
+      expect(toolGroup.activities[0].status).toBe("complete");
+    }
+  });
+
+  it("sets tool status to running until tool_end or tool_result", () => {
+    const events = [
+      makeEvent({
+        event_type: "tool_start",
+        content: JSON.stringify({ tool_id: "t1", tool_name: "Bash" }),
+        sequence: 1,
+      }),
+    ];
+    const result = snapshotToBlocks(events, [defaultStep]);
+    const toolGroup = result.blocks[1];
+    if (toolGroup.type === "tool_group") {
+      expect(toolGroup.activities[0].status).toBe("running");
+    }
+  });
+
+  it("tool_end sets status to complete", () => {
+    const events = [
+      makeEvent({
+        event_type: "tool_start",
+        content: JSON.stringify({ tool_id: "t1", tool_name: "Bash" }),
+        sequence: 1,
+      }),
+      makeEvent({
+        event_type: "tool_end",
+        content: JSON.stringify({ tool_id: "t1" }),
+        sequence: 2,
+      }),
+    ];
+    const result = snapshotToBlocks(events, [defaultStep]);
+    const toolGroup = result.blocks[1];
+    if (toolGroup.type === "tool_group") {
+      expect(toolGroup.activities[0].status).toBe("complete");
+    }
+  });
+
+  it("restores tool_use_summary on matching tool_group", () => {
+    const events = [
+      makeEvent({
+        event_type: "tool_start",
+        content: JSON.stringify({ tool_id: "t1", tool_name: "Read" }),
+        sequence: 1,
+      }),
+      makeEvent({
+        event_type: "tool_result",
+        content: JSON.stringify({ tool_id: "t1", content: "ok", is_error: false }),
+        sequence: 2,
+      }),
+      makeEvent({
+        event_type: "tool_use_summary",
+        content: JSON.stringify({ summary: "Read 1 file", tool_ids: ["t1"] }),
+        sequence: 3,
+      }),
+    ];
+    const result = snapshotToBlocks(events, [defaultStep]);
+    const toolGroup = result.blocks[1];
+    expect(toolGroup.type).toBe("tool_group");
+    if (toolGroup.type === "tool_group") {
+      expect(toolGroup.summaryText).toBe("Read 1 file");
     }
   });
 
@@ -122,53 +211,107 @@ describe("snapshotToBlocks", () => {
       { ...defaultStep, step_id: "step-1", label: "Understand" },
       { ...defaultStep, step_id: "step-2", label: "Implement" },
     ];
-    const blocks = snapshotToBlocks(events, steps);
-    expect(blocks).toHaveLength(4);
-    expect(blocks[0]).toEqual({ type: "step_divider", stepId: "step-1", label: "Understand" });
-    expect(blocks[2]).toEqual({ type: "step_divider", stepId: "step-2", label: "Implement" });
+    const result = snapshotToBlocks(events, steps);
+    expect(result.blocks).toHaveLength(4);
+    expect(result.blocks[0]).toEqual({
+      type: "step_divider",
+      stepId: "step-1",
+      label: "Understand",
+    });
+    expect(result.blocks[2]).toEqual({
+      type: "step_divider",
+      stepId: "step-2",
+      label: "Implement",
+    });
   });
 
   it("handles malformed JSON in tool events gracefully", () => {
     const events = [makeEvent({ event_type: "tool_start", content: "not json" })];
-    const blocks = snapshotToBlocks(events, [defaultStep]);
-    expect(blocks).toHaveLength(2);
-    const toolGroup = blocks[1];
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks).toHaveLength(2);
+    const toolGroup = result.blocks[1];
     expect(toolGroup.type).toBe("tool_group");
   });
 
   it("handles plain string content (not JSON-wrapped)", () => {
     const events = [makeEvent({ event_type: "text", content: "plain text" })];
-    const blocks = snapshotToBlocks(events, [defaultStep]);
-    expect(blocks[1]).toEqual({ type: "text", content: "plain text" });
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks[1]).toEqual({ type: "text", content: "plain text" });
   });
 
-  it("deduplicates subagent events by task_id", () => {
+  it("deduplicates subagent events by task_id and restores all fields", () => {
     const events = [
       makeEvent({
         event_type: "subagent_start",
-        content: JSON.stringify({ task_id: "sub-1", description: "Analyze code" }),
+        content: JSON.stringify({
+          task_id: "sub-1",
+          tool_use_id: "tu-1",
+          description: "Analyze code",
+        }),
         sequence: 1,
       }),
       makeEvent({
         event_type: "subagent_progress",
-        content: JSON.stringify({ task_id: "sub-1", description: "Analyze code" }),
+        content: JSON.stringify({
+          task_id: "sub-1",
+          summary: "Reading files...",
+          last_tool_name: "Read",
+          usage: { total_tokens: 1000, tool_uses: 3, duration_ms: 5000 },
+        }),
         sequence: 2,
       }),
       makeEvent({
         event_type: "subagent_complete",
-        content: JSON.stringify({ task_id: "sub-1", description: "Analyze code", summary: "Done" }),
+        content: JSON.stringify({
+          task_id: "sub-1",
+          status: "completed",
+          summary: "Done analyzing",
+          usage: { total_tokens: 2000, tool_uses: 5, duration_ms: 10000 },
+        }),
         sequence: 3,
       }),
     ];
-    const blocks = snapshotToBlocks(events, [defaultStep]);
-    // step_divider + 1 subagent block (not 3)
-    expect(blocks).toHaveLength(2);
-    const subagent = blocks[1];
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.blocks).toHaveLength(2);
+    const subagent = result.blocks[1];
     expect(subagent.type).toBe("subagent");
     if (subagent.type === "subagent") {
       expect(subagent.activity.task_id).toBe("sub-1");
+      expect(subagent.activity.tool_use_id).toBe("tu-1");
       expect(subagent.activity.status).toBe("completed");
-      expect(subagent.activity.summary).toBe("Done");
+      expect(subagent.activity.summary).toBe("Done analyzing");
+      expect(subagent.activity.last_tool_name).toBe("Read");
+      expect(subagent.activity.usage).toEqual({
+        total_tokens: 2000,
+        tool_uses: 5,
+        duration_ms: 10000,
+      });
     }
+  });
+
+  it("collects files_changed events into filesChanged array", () => {
+    const events = [
+      makeEvent({
+        event_type: "files_changed",
+        content: JSON.stringify({
+          files: [{ filename: "src/main.ts" }, { filename: "src/lib.ts" }],
+        }),
+        sequence: 1,
+      }),
+      makeEvent({
+        event_type: "files_changed",
+        content: JSON.stringify({
+          files: [{ filename: "src/main.ts" }, { filename: "src/new.ts" }],
+        }),
+        sequence: 2,
+      }),
+    ];
+    const result = snapshotToBlocks(events, [defaultStep]);
+    expect(result.filesChanged).toHaveLength(3);
+    expect(result.filesChanged.map((f) => f.filename)).toEqual([
+      "src/main.ts",
+      "src/lib.ts",
+      "src/new.ts",
+    ]);
   });
 });

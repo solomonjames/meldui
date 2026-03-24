@@ -152,7 +152,8 @@ export type ContentBlock =
   | { type: "text"; content: string }
   | { type: "tool_group"; activities: ToolActivity[]; summaryText?: string }
   | { type: "subagent"; activity: SubagentActivity }
-  | { type: "thinking"; content: string };
+  | { type: "thinking"; content: string }
+  | { type: "user_message"; content: string };
 
 export interface ContextUsage {
   tokensUsed: number;

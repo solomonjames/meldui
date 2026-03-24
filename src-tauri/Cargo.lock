@@ -2096,6 +2096,7 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-updater",
  "tauri-specta",
+ "thiserror 2.0.18",
  "tokio",
  "unidiff",
  "uuid",

@@ -207,7 +207,7 @@ pub async fn execute_step(
         if let Some(ref writer) = conversation_writer {
             let mut w = writer.lock().await;
             let params = serde_json::json!({ "content": msg });
-            if let Err(e) = w.append_raw("user_message", &params, &current_step_id) {
+            if let Err(e) = w.append_raw("user_message", &params, current_step_id) {
                 log::error!("conversation: failed to write user_message: {e}");
             }
         }

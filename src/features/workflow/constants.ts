@@ -67,6 +67,7 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
 
 /** Model display names */
 export const MODEL_DISPLAY_NAMES: Record<string, string> = {
+  "claude-opus-4-6[1m]": "Opus 4.6 (1M)",
   "claude-opus-4-6-1m": "Opus 4.6 (1M)",
   "claude-opus-4-6": "Opus 4.6",
   "claude-sonnet-4-6": "Sonnet 4.6",

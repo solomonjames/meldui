@@ -203,8 +203,8 @@ export function ComposeToolbar({
   const effortLabel = EFFORT_OPTIONS.find((o) => o.value === config.effort)?.label ?? "High";
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="border-t p-3">
+    <TooltipProvider delay={500}>
+      <div className="p-3">
         <div className="rounded-lg border border-border bg-muted/30">
           {/* Textarea */}
           <div className="relative">
@@ -230,18 +230,18 @@ export function ComposeToolbar({
               onSelect={handleSelect}
               onClick={handleSelect}
               placeholder={placeholder}
-              className="min-h-[88px] max-h-[200px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="min-h-[88px] max-h-[200px] resize-none border-0 bg-transparent rounded-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
               disabled={disabled}
             />
           </div>
 
           {/* Toolbar row */}
-          <div className="flex items-center gap-1.5 px-3 pb-2 pt-1 border-t border-border/40">
+          <div className="flex items-center gap-1.5 px-3 pb-2 pt-1 dark:bg-input/30 bg-transparent">
             {/* Model selector */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <div>
-                  <PillButton tooltip="Select AI model">
+                  <PillButton tooltip="AI model">
                     <span className="w-2 h-2 rounded-full bg-orange-500" />
                     {modelDisplayName}
                     <ChevronDown className="w-3 h-3" />
@@ -266,7 +266,7 @@ export function ComposeToolbar({
               <DropdownMenuTrigger asChild>
                 <div>
                   <PillButton
-                    tooltip="Extended thinking mode (applies next step)"
+                    tooltip="Extended thinking"
                     active={config.thinking.type === "enabled"}
                     accentClass="bg-purple-500/10 border-purple-500/30 text-purple-400"
                   >
@@ -294,7 +294,7 @@ export function ComposeToolbar({
               <DropdownMenuTrigger asChild>
                 <div>
                   <PillButton
-                    tooltip="Response effort level (applies next step)"
+                    tooltip="Effort level"
                     active={config.effort === "max"}
                     accentClass="bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
                   >
@@ -319,7 +319,7 @@ export function ComposeToolbar({
 
             {/* Fast mode toggle */}
             <PillButton
-              tooltip="Fast mode — same model, faster output"
+              tooltip="Fast mode"
               active={config.fastMode}
               accentClass="bg-amber-500/10 border-amber-500/30 text-amber-400"
               onClick={() => onSetFastMode(!config.fastMode)}

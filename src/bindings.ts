@@ -20,6 +20,18 @@ async agentPermissionRespond(requestId: string, allowed: boolean) : Promise<null
 async agentReviewRespond(requestId: string, submission: JsonValue) : Promise<null> {
     return await TAURI_INVOKE("agent_review_respond", { requestId, submission });
 },
+async agentSetModel(model: string) : Promise<null> {
+    return await TAURI_INVOKE("agent_set_model", { model });
+},
+async agentSetThinking(thinkingType: string, budgetTokens: number | null) : Promise<null> {
+    return await TAURI_INVOKE("agent_set_thinking", { thinkingType, budgetTokens });
+},
+async agentSetEffort(effort: string) : Promise<null> {
+    return await TAURI_INVOKE("agent_set_effort", { effort });
+},
+async agentSetFastMode(enabled: boolean) : Promise<null> {
+    return await TAURI_INVOKE("agent_set_fast_mode", { enabled });
+},
 async ticketList(projectDir: string, status: string | null, ticketType: string | null, showAll: boolean | null) : Promise<Ticket[]> {
     return await TAURI_INVOKE("ticket_list", { projectDir, status, ticketType, showAll });
 },
@@ -64,6 +76,9 @@ async conversationRestore(projectDir: string, ticketId: string) : Promise<Conver
 },
 async conversationList(projectDir: string) : Promise<ConversationSummary[]> {
     return await TAURI_INVOKE("conversation_list", { projectDir });
+},
+async listProjectFiles(projectDir: string) : Promise<string[]> {
+    return await TAURI_INVOKE("list_project_files", { projectDir });
 },
 async workflowList(projectDir: string) : Promise<WorkflowDefinition[]> {
     return await TAURI_INVOKE("workflow_list", { projectDir });
@@ -113,6 +128,7 @@ async openPreferencesWindow() : Promise<null> {
 
 
 export const events = __makeEvents__<{
+agentInitMetadata: AgentInitMetadata,
 agentPermissionRequest: AgentPermissionRequest,
 agentReviewFindingsRequest: AgentReviewFindingsRequest,
 appPreferences: AppPreferences,
@@ -124,6 +140,7 @@ subtaskClosed: SubtaskClosed,
 subtaskCreated: SubtaskCreated,
 subtaskUpdated: SubtaskUpdated
 }>({
+agentInitMetadata: "agent-init-metadata",
 agentPermissionRequest: "agent-permission-request",
 agentReviewFindingsRequest: "agent-review-findings-request",
 appPreferences: "app-preferences",
@@ -142,6 +159,10 @@ subtaskUpdated: "subtask-updated"
 
 /** user-defined types **/
 
+/**
+ * Emitted when the agent sidecar initializes and reports its configuration.
+ */
+export type AgentInitMetadata = { model: string; available_models: string[]; tools: string[]; slash_commands: string[]; skills: string[]; mcp_servers: McpServerInfo[] }
 /**
  * Permission request received from the sidecar.
  */
@@ -172,6 +193,7 @@ export type DiffHunk = { header: string; old_start: number; old_count: number; n
 export type DiffLine = { line_type: DiffLineType; content: string; old_line_no?: number | null; new_line_no?: number | null }
 export type DiffLineType = "added" | "removed" | "context"
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+export type McpServerInfo = { name: string; status: string }
 /**
  * Emitted when the agent sends a notification.
  */

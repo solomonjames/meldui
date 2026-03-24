@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Check, Play, User } from "lucide-react";
+import { Play, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -17,36 +17,6 @@ import { useConversation } from "@/shared/hooks/use-conversation";
 import { snapshotToBlocks } from "@/shared/lib/conversations";
 import type { PermissionRequest, StepOutputStream, StepStatus } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
-
-function StepCompleteCard({
-  onAdvance,
-  onContinue,
-}: {
-  onAdvance: () => void;
-  onContinue: () => void;
-}) {
-  return (
-    <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 my-3">
-      <div className="flex items-center gap-2 mb-3">
-        <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-        <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">Step complete</p>
-      </div>
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={onContinue}>
-          Continue Chatting
-        </Button>
-        <Button
-          size="sm"
-          onClick={onAdvance}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white"
-        >
-          Next Step
-          <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 function UserMessageBubble({ content }: { content: string }) {
   return (
@@ -70,7 +40,6 @@ interface ChatViewProps {
   stepStatus: StepStatus;
   stepOutput?: StepOutputStream;
   statusText?: string | null;
-  onAdvanceStep?: () => void;
   onExecute: (message?: string) => void;
   projectDir?: string;
   ticketId?: string | null;
@@ -83,10 +52,9 @@ export function ChatView({
   stepName,
   response,
   isExecuting,
-  stepStatus: _stepStatus,
+  stepStatus,
   stepOutput,
   statusText,
-  onAdvanceStep,
   onExecute,
   projectDir,
   ticketId,
@@ -126,14 +94,13 @@ export function ChatView({
 
   const contentBlocks = stepOutput?.contentBlocks ?? [];
   const hasContent = contentBlocks.length > 0 || response.length > 0;
-  const isStepComplete = stepOutput?.resultContent != null;
   const showInput = isInteractive || !isExecuting;
 
   // Auto-scroll chat panel when new content arrives
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll should fire on content/response changes
   useEffect(() => {
     chatScrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [contentBlocks.length, response, isStepComplete, userMessages.length]);
+  }, [contentBlocks.length, response, stepStatus, userMessages.length]);
 
   return (
     <div data-testid="chat-view" className="flex flex-col h-full">
@@ -276,7 +243,7 @@ export function ChatView({
             )}
 
             {/* Files changed summary */}
-            {isStepComplete && stepOutput && (
+            {stepStatus === "completed" && stepOutput && (
               <FilesChanged
                 filesChanged={stepOutput.filesChanged}
                 toolActivities={stepOutput.toolActivities}
@@ -285,11 +252,6 @@ export function ChatView({
 
             {!isExecuting && !stepOutput && historyFilesChanged.length > 0 && (
               <FilesChanged filesChanged={historyFilesChanged} toolActivities={[]} />
-            )}
-
-            {/* Step complete card — show when agent finished (resultContent set) and not mid-execution */}
-            {isStepComplete && !isExecuting && onAdvanceStep && (
-              <StepCompleteCard onAdvance={onAdvanceStep} onContinue={onExecute} />
             )}
 
             {/* Empty states */}

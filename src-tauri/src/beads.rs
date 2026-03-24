@@ -158,6 +158,7 @@ async fn run_bd_json<T: for<'de> Deserialize<'de>>(
 }
 
 /// Check if beads is available and initialized in a directory
+#[allow(dead_code)] // Planned for beads status Tauri command
 pub async fn get_status(project_dir: &str) -> Result<String, String> {
     let bin = find_bd_binary();
 
@@ -308,6 +309,7 @@ pub async fn update_issue(
 }
 
 /// Close an issue
+#[allow(dead_code)] // Planned for direct beads integration
 pub async fn close_issue(
     project_dir: &str,
     id: &str,
@@ -324,16 +326,19 @@ pub async fn close_issue(
 }
 
 /// Show issue details
+#[allow(dead_code)] // Planned for direct beads integration
 pub async fn show_issue(project_dir: &str, id: &str) -> Result<Vec<BeadsIssue>, String> {
     run_bd_json(project_dir, &["show", id]).await
 }
 
 /// Delete an issue
+#[allow(dead_code)] // Planned for direct beads integration
 pub async fn delete_issue(project_dir: &str, id: &str) -> Result<serde_json::Value, String> {
     run_bd_json(project_dir, &["delete", id, "--force"]).await
 }
 
 /// Add a comment to an issue
+#[allow(dead_code)] // Planned for direct beads integration
 pub async fn add_comment(
     project_dir: &str,
     id: &str,
@@ -343,6 +348,7 @@ pub async fn add_comment(
 }
 
 /// Initialize beads in a project directory
+#[allow(dead_code)] // Planned for beads init Tauri command
 pub async fn init(project_dir: &str) -> Result<String, String> {
     let mut cmd = bd_command(project_dir)?;
     let output = cmd

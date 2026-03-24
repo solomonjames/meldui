@@ -338,7 +338,7 @@ fn parse_diff(diff_text: &str) -> Vec<DiffFile> {
 // for future use when the review flow needs Rust-side validation or persistence.
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Mirrors TypeScript ReviewFinding; reserved for Rust-side review validation
 pub struct ReviewFinding {
     pub id: String,
     pub file_path: String,
@@ -353,7 +353,7 @@ pub struct ReviewFinding {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Mirrors TypeScript ReviewComment; reserved for Rust-side review validation
 pub struct ReviewComment {
     pub id: String,
     pub file_path: String,
@@ -366,7 +366,7 @@ pub struct ReviewComment {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Mirrors TypeScript ReviewSubmission; reserved for Rust-side review validation
 pub struct ReviewSubmission {
     pub action: String,
     pub summary: String,
@@ -375,7 +375,7 @@ pub struct ReviewSubmission {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, specta::Type)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Mirrors TypeScript FindingAction; reserved for Rust-side review validation
 pub struct FindingAction {
     pub finding_id: String,
     pub action: String,

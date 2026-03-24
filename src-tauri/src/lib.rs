@@ -6,7 +6,6 @@
 //! Coordinates ticket CRUD, workflow orchestration, agent sidecar communication,
 //! external CLI wrappers (beads, claude, git), and conversation persistence.
 mod agent;
-#[allow(dead_code)]
 mod beads;
 mod claude;
 mod constants;

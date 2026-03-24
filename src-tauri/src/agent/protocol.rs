@@ -13,7 +13,7 @@ pub(crate) struct JsonRpcRequest {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcMessage {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Present in JSON-RPC 2.0 spec; deserialized but not read directly
     pub(crate) jsonrpc: Option<String>,
     // Present if this is a request or notification
     pub(crate) method: Option<String>,
@@ -27,10 +27,10 @@ pub(crate) struct JsonRpcMessage {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct JsonRpcError {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Present in JSON-RPC 2.0 spec; deserialized but not read directly
     pub(crate) code: i64,
     pub(crate) message: String,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Present in JSON-RPC 2.0 spec; deserialized but not read directly
     pub(crate) data: Option<serde_json::Value>,
 }
 

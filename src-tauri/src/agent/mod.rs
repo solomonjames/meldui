@@ -108,7 +108,7 @@ impl AgentHandle {
     }
 
     /// Send cancel JSON-RPC request.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Planned for future agent cancellation support
     pub async fn cancel(&self) -> Result<(), String> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let request = JsonRpcRequest {

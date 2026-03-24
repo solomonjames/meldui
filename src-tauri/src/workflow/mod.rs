@@ -202,6 +202,17 @@ pub async fn execute_step(
             }
         };
 
+    // 7c. Persist user message to conversation log (if provided)
+    if let Some(ref msg) = user_message {
+        if let Some(ref writer) = conversation_writer {
+            let mut w = writer.lock().await;
+            let params = serde_json::json!({ "content": msg });
+            if let Err(e) = w.append_raw("user_message", &params, &current_step_id) {
+                log::error!("conversation: failed to write user_message: {e}");
+            }
+        }
+    }
+
     // 8. Call agent sidecar with the worktree path as project_dir
     //    but keep original project_dir for tickets_dir so ticket reads/writes work
     let tickets_dir = PathBuf::from(project_dir)

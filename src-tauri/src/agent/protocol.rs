@@ -73,8 +73,9 @@ pub(crate) struct SidecarConfig {
 pub(crate) struct TicketContext {
     pub title: String,
     pub description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "acceptanceCriteria", skip_serializing_if = "Option::is_none")]
     pub acceptance_criteria: Option<String>,
+    #[serde(rename = "currentStep")]
     pub current_step: StepContext,
 }
 

@@ -7,6 +7,7 @@
 
 mod events;
 mod protocol;
+pub(crate) mod supervisor;
 
 // Re-export public event types (used by lib.rs for specta registration)
 pub use events::*;

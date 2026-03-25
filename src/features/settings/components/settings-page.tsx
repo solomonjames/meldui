@@ -1,7 +1,12 @@
 import { RefreshCw, Save, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSettings } from "@/features/settings/hooks/use-settings";
-import type { ProjectSettings, SyncSettings, WorktreeSettings } from "@/shared/lib/sync";
+import type {
+  ProjectSettings,
+  SupervisorSettings,
+  SyncSettings,
+  WorktreeSettings,
+} from "@/shared/lib/sync";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { ScrollArea } from "@/shared/ui/scroll-area";
@@ -56,6 +61,20 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
         ...prev,
         worktree: {
           ...prev.worktree,
+          ...patch,
+        },
+      };
+    });
+  }, []);
+
+  const updateSupervisor = useCallback((patch: Partial<SupervisorSettings>) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        supervisor: {
+          max_replies_per_step: 5,
+          ...prev.supervisor,
           ...patch,
         },
       };
@@ -185,6 +204,67 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
                 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">composer install</code>)
                 or set up the environment. Runs in the worktree directory.
               </p>
+            </div>
+          </section>
+
+          {/* Supervisor Section */}
+          <section className="space-y-4">
+            <div>
+              <h4 className="text-sm font-semibold">Auto-Advance Supervisor</h4>
+              <p className="text-xs text-muted-foreground mt-1">
+                When auto-advance is enabled, the supervisor evaluates agent output and replies on
+                your behalf instead of blindly advancing
+              </p>
+            </div>
+            <Separator />
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label
+                  className="text-xs font-medium text-muted-foreground"
+                  htmlFor="supervisor-max-replies"
+                >
+                  Max replies per step
+                </label>
+                <Input
+                  id="supervisor-max-replies"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={effectiveDraft.supervisor?.max_replies_per_step ?? 5}
+                  onChange={(e) =>
+                    updateSupervisor({
+                      max_replies_per_step: Math.max(1, Math.min(20, Number(e.target.value) || 5)),
+                    })
+                  }
+                  className="text-sm w-24"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Maximum supervisor replies before falling back to manual input (default: 5)
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label
+                  className="text-xs font-medium text-muted-foreground"
+                  htmlFor="supervisor-prompt"
+                >
+                  Custom supervisor prompt
+                </label>
+                <Textarea
+                  id="supervisor-prompt"
+                  value={effectiveDraft.supervisor?.custom_prompt ?? ""}
+                  onChange={(e) =>
+                    updateSupervisor({
+                      custom_prompt: e.target.value || undefined,
+                    })
+                  }
+                  placeholder="Leave empty for default. Custom prompts replace the guidelines section only — the preamble and JSON format instructions are always included."
+                  className="font-mono text-sm min-h-[120px]"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Customize how the supervisor evaluates agent responses. Empty = use default
+                  guidelines.
+                </p>
+              </div>
             </div>
           </section>
         </div>

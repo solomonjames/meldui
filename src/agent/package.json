@@ -4,6 +4,7 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.76",
+    "@anthropic-ai/sdk": "^0.80.0",
     "eventemitter3": "^5.0.1",
     "json-rpc-2.0": "^1.7.0",
     "zod": "^3.23.0"

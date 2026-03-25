@@ -1,8 +1,11 @@
 /**
- * Supervisor agent — evaluates worker output using Haiku
- * and decides whether to reply or advance.
+ * Supervisor agent — evaluates worker output using Haiku via the Agent SDK.
+ *
+ * Uses the same auth mechanism as the worker agent (claude CLI OAuth),
+ * so no separate ANTHROPIC_API_KEY is needed.
  */
-import Anthropic from "@anthropic-ai/sdk";
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { existsSync } from "fs";
 import type { SupervisorEvaluateParams, SupervisorEvaluateResult } from "./protocol";
 
 const DEFAULT_PREAMBLE = `You are a workflow supervisor for MeldUI. An AI coding agent is working on a ticket, and you are evaluating its latest response to decide what to do next.
@@ -60,28 +63,68 @@ function parseResponse(text: string): SupervisorEvaluateResult {
   };
 }
 
+function findClaudeBinary(): string | undefined {
+  const home = process.env.HOME ?? "";
+  const candidates = [
+    `${home}/.claude/bin/claude`,
+    `${home}/.local/bin/claude`,
+    "/opt/homebrew/bin/claude",
+    "/usr/local/bin/claude",
+  ];
+  for (const p of candidates) {
+    try {
+      if (existsSync(p)) return p;
+    } catch {}
+  }
+  return undefined;
+}
+
 export async function evaluateSupervisor(
   params: SupervisorEvaluateParams,
 ): Promise<SupervisorEvaluateResult> {
-  const client = new Anthropic();
   const systemPrompt = buildSystemPrompt(params.systemPrompt);
   const userMessage = buildUserMessage(params);
+  const claudePath = findClaudeBinary();
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const response = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
+      // Use the Agent SDK query() with maxTurns=1 and no tools —
+      // this gives us a single Haiku response using the same OAuth auth
+      // as the worker agent, without needing ANTHROPIC_API_KEY.
+      const agentQuery = query({
+        prompt: userMessage,
+        options: {
+          model: "claude-haiku-4-5-20251001",
+          maxTurns: 1,
+          systemPrompt: systemPrompt,
+          tools: [],
+          allowedTools: [],
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
+          ...(claudePath ? { pathToClaudeCodeExecutable: claudePath } : {}),
+          stderr: (data: string) => {
+            process.stderr.write(`[supervisor-sdk-stderr] ${data}\n`);
+          },
+          settingSources: ["local", "project", "user"],
+        } as never,
       });
 
-      const text = response.content
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
-        .join("");
+      let resultText = "";
+      for await (const message of agentQuery) {
+        const msg = message as Record<string, unknown>;
+        if (msg.type === "result") {
+          const resultMsg = msg as { subtype?: string; result?: string };
+          if (resultMsg.subtype === "success") {
+            resultText = resultMsg.result ?? "";
+          }
+        }
+      }
 
-      return parseResponse(text);
+      if (!resultText) {
+        throw new Error("No result text from supervisor query");
+      }
+
+      return parseResponse(resultText);
     } catch (err) {
       if (attempt === 0) {
         process.stderr.write(

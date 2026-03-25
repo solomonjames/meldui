@@ -25,7 +25,13 @@ export interface WorktreeSettings {
   setup_command?: string;
 }
 
+export interface SupervisorSettings {
+  custom_prompt?: string;
+  max_replies_per_step?: number;
+}
+
 export interface ProjectSettings {
   sync?: SyncSettings;
   worktree?: WorktreeSettings;
+  supervisor?: SupervisorSettings;
 }

@@ -46,12 +46,38 @@ pub struct WorktreeSettings {
     pub setup_command: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
+pub struct SupervisorSettings {
+    /// Custom supervisor system prompt (replaces guidelines section only).
+    /// None = use default prompt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_prompt: Option<String>,
+    /// Max supervisor replies per step before falling back to user. Default: 5.
+    #[serde(default = "default_max_replies")]
+    pub max_replies_per_step: u32,
+}
+
+fn default_max_replies() -> u32 {
+    5
+}
+
+impl Default for SupervisorSettings {
+    fn default() -> Self {
+        Self {
+            custom_prompt: None,
+            max_replies_per_step: default_max_replies(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct ProjectSettings {
     #[serde(default)]
     pub sync: Option<SyncSettings>,
     #[serde(default)]
     pub worktree: Option<WorktreeSettings>,
+    #[serde(default)]
+    pub supervisor: Option<SupervisorSettings>,
 }
 
 fn settings_path(project_dir: &str) -> PathBuf {

@@ -492,7 +492,7 @@ pub async fn execute_step(
     on_chunk: &tauri::ipc::Channel<StreamChunk>,
     app_handle: &tauri::AppHandle,
     tickets_dir_override: Option<&str>,
-    _canonical_project_dir: Option<&str>,
+    canonical_project_dir: Option<&str>,
     conversation_writer: Option<&Mutex<crate::conversation::ConversationWriter>>,
     current_step_id: Option<&str>,
     // NEW — ticket context for supervisor
@@ -873,16 +873,23 @@ pub async fn execute_step(
                     });
                 }
 
-                // Check if supervisor should evaluate
+                // Check if supervisor should evaluate.
+                // Use canonical_project_dir (the original project root) for the lookup,
+                // because project_dir may be a worktree path while the frontend sets
+                // auto_advance keyed by the original project directory.
+                let lookup_dir = canonical_project_dir.unwrap_or(project_dir);
                 let auto_advance_enabled = {
                     match app_handle.try_state::<AgentState>() {
                         Some(agent_state) => {
                             let map = agent_state.auto_advance.read().await;
-                            map.get(project_dir).copied().unwrap_or(false)
+                            map.get(lookup_dir).copied().unwrap_or(false)
                         }
                         None => false,
                     }
                 };
+                log::info!(
+                    "queryComplete: auto_advance_enabled={auto_advance_enabled} (lookup_dir={lookup_dir})"
+                );
 
                 if auto_advance_enabled {
                     // Build ticket context for supervisor
@@ -909,6 +916,7 @@ pub async fn execute_step(
                         &mut lines,
                         conversation_writer,
                         current_step_id,
+                        canonical_project_dir,
                     )
                     .await
                     {

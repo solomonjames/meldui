@@ -21,7 +21,6 @@ use crate::claude::StreamChunk;
 use crate::settings;
 
 /// Result of a supervisor evaluation loop.
-#[allow(dead_code)]
 pub(crate) enum SupervisorDecision {
     /// Supervisor says advance to next step.
     Advance,
@@ -38,7 +37,7 @@ pub(crate) enum SupervisorDecision {
 /// 1. Sends `supervisorEvaluate` to sidecar
 /// 2. If "reply": emits SupervisorReply event, sends `queryFollowUp`, reads until next `queryComplete`
 /// 3. If "advance": returns SupervisorDecision::Advance
-#[allow(clippy::too_many_arguments, dead_code)]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_supervisor_loop(
     project_dir: &str,
     issue_id: &str,
@@ -51,9 +50,12 @@ pub(crate) async fn run_supervisor_loop(
     lines: &mut tokio::io::Lines<BufReader<tokio::io::ReadHalf<tokio::net::UnixStream>>>,
     conversation_writer: Option<&Mutex<crate::conversation::ConversationWriter>>,
     current_step_id: Option<&str>,
+    // The original project directory (not worktree) — used for auto_advance lookup and settings.
+    canonical_project_dir: Option<&str>,
 ) -> Result<(SupervisorDecision, String, String), String> {
+    let settings_dir = canonical_project_dir.unwrap_or(project_dir);
     // Load supervisor settings
-    let supervisor_settings = settings::get_settings(project_dir)
+    let supervisor_settings = settings::get_settings(settings_dir)
         .unwrap_or_default()
         .supervisor
         .unwrap_or_default();
@@ -71,7 +73,7 @@ pub(crate) async fn run_supervisor_loop(
             let auto_advance_enabled =
                 if let Some(state) = app_handle.try_state::<super::AgentState>() {
                     let map = state.auto_advance.read().await;
-                    map.get(project_dir).copied().unwrap_or(false)
+                    map.get(settings_dir).copied().unwrap_or(false)
                 } else {
                     false
                 };

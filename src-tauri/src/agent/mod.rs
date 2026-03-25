@@ -187,12 +187,16 @@ impl AgentHandle {
 /// Managed state for the active agent handle.
 pub struct AgentState {
     pub handle: Mutex<Option<AgentHandle>>,
+    /// Auto-advance enabled per project (keyed by project_dir).
+    /// Uses RwLock since reads are frequent (every queryComplete) and writes are rare (toggle).
+    pub auto_advance: tokio::sync::RwLock<std::collections::HashMap<String, bool>>,
 }
 
 impl AgentState {
     pub fn new() -> Self {
         Self {
             handle: Mutex::new(None),
+            auto_advance: tokio::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
 }
@@ -304,6 +308,28 @@ async fn agent_set_fast_mode_inner(enabled: bool, state: &AgentState) -> Result<
     });
     let json = serde_json::to_string(&request).map_err(AgentError::SerializeFailed)?;
     handle.send_raw(&json).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_auto_advance(
+    state: tauri::State<'_, AgentState>,
+    project_dir: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut map = state.auto_advance.write().await;
+    map.insert(project_dir, enabled);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_auto_advance(
+    state: tauri::State<'_, AgentState>,
+    project_dir: String,
+) -> Result<bool, String> {
+    let map = state.auto_advance.read().await;
+    Ok(map.get(&project_dir).copied().unwrap_or(false))
 }
 
 /// Find the agent sidecar binary.

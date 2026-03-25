@@ -3,7 +3,7 @@ import { ArrowRight, Play, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { commands } from "@/bindings";
+import { commands, events } from "@/bindings";
 import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
 import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
 import { ComposeToolbar } from "@/features/workflow/components/shared/compose-toolbar";
@@ -33,6 +33,26 @@ function UserMessageBubble({ content }: { content: string }) {
   );
 }
 
+function SupervisorReplyBubble({ content }: { content: string }) {
+  return (
+    <div className="flex justify-end my-2">
+      <div className="flex items-start gap-2 max-w-[80%]">
+        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+              Auto-reply
+            </span>
+          </div>
+          <p className="text-sm whitespace-pre-wrap">{content}</p>
+        </div>
+        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/10 shrink-0 mt-0.5">
+          <Play className="w-3.5 h-3.5 text-amber-500" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface ChatViewProps {
   stepName: string;
   response: string;
@@ -47,6 +67,8 @@ interface ChatViewProps {
   isInteractive?: boolean;
   pendingPermission?: PermissionRequest | null;
   onRespondToPermission?: (requestId: string, allowed: boolean) => void;
+  autoAdvance?: boolean;
+  onSetAutoAdvance?: (enabled: boolean) => void;
 }
 
 export function ChatView({
@@ -63,9 +85,15 @@ export function ChatView({
   isInteractive = true,
   pendingPermission,
   onRespondToPermission,
+  autoAdvance,
+  onSetAutoAdvance,
 }: ChatViewProps) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [userMessages, setUserMessages] = useState<Array<{ id: string; content: string }>>([]);
+  const [supervisorReplies, setSupervisorReplies] = useState<
+    Array<{ id: string; content: string; turnNumber: number }>
+  >([]);
+  const [supervisorActive, setSupervisorActive] = useState(false);
   const { config, setModel, setThinking, setEffort, setFastMode } = useAgentConfig();
   const { data: appPreferences } = useQuery({
     queryKey: ["app", "preferences"],
@@ -81,6 +109,32 @@ export function ChatView({
     },
     [onExecute],
   );
+
+  // Listen for supervisor replies
+  useEffect(() => {
+    const unlisten = events.supervisorReply.listen((event) => {
+      setSupervisorReplies((prev) => [
+        ...prev,
+        {
+          id: `supervisor-${Date.now()}`,
+          content: event.payload.message,
+          turnNumber: event.payload.turn_number,
+        },
+      ]);
+      setSupervisorActive(true);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Reset supervisor state when step completes
+  useEffect(() => {
+    if (stepStatus === "completed" || stepStatus === "pending") {
+      setSupervisorActive(false);
+      setSupervisorReplies([]);
+    }
+  }, [stepStatus]);
 
   // Load persisted conversation history
   const { data: snapshot } = useConversation(projectDir ?? "", ticketId ?? null);
@@ -184,6 +238,11 @@ export function ChatView({
             {/* User messages */}
             {userMessages.map((msg) => (
               <UserMessageBubble key={msg.id} content={msg.content} />
+            ))}
+
+            {/* Supervisor auto-replies */}
+            {supervisorReplies.map((reply) => (
+              <SupervisorReplyBubble key={reply.id} content={reply.content} />
             ))}
 
             {/* Content blocks — text-first with activity groups */}
@@ -299,8 +358,22 @@ export function ChatView({
           )}
         </div>
 
-        {/* Chat input — hidden for non-interactive steps while executing */}
-        {showInput && (
+        {/* Chat input — supervisor banner or compose toolbar */}
+        {supervisorActive && autoAdvance ? (
+          <div className="flex items-center justify-center gap-3 px-4 py-3 border-t bg-amber-50/50 dark:bg-amber-950/20">
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              Supervisor is responding...
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onSetAutoAdvance?.(false)}
+              className="border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+            >
+              Take Over
+            </Button>
+          </div>
+        ) : showInput ? (
           <ComposeToolbar
             config={config}
             onSetModel={setModel}
@@ -316,7 +389,7 @@ export function ChatView({
               "threshold"
             }
           />
-        )}
+        ) : null}
       </div>
     </div>
   );

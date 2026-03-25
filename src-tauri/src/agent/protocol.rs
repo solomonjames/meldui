@@ -64,3 +64,52 @@ pub(crate) struct SidecarConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) tickets_dir: Option<String>,
 }
+
+// ── Supervisor protocol types ──
+
+/// Ticket context sent to the supervisor for evaluation.
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub(crate) struct TicketContext {
+    pub title: String,
+    pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acceptance_criteria: Option<String>,
+    pub current_step: StepContext,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub(crate) struct StepContext {
+    pub index: u32,
+    pub name: String,
+    pub prompt: String,
+}
+
+/// Params for the supervisorEvaluate JSON-RPC request.
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub(crate) struct SupervisorEvaluateParams {
+    #[serde(rename = "workerResponse")]
+    pub worker_response: String,
+    #[serde(rename = "ticketContext")]
+    pub ticket_context: TicketContext,
+    #[serde(rename = "systemPrompt", skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+}
+
+/// Result from supervisorEvaluate.
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct SupervisorEvaluateResult {
+    pub action: String,
+    pub message: Option<String>,
+    pub reasoning: Option<String>,
+}
+
+/// Params for queryFollowUp JSON-RPC request.
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub(crate) struct QueryFollowUpParams {
+    pub message: String,
+}

@@ -31,7 +31,27 @@ export function useWorkflow(projectDir: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
-  const [autoAdvance, setAutoAdvance] = useState(false);
+
+  // Auto-advance state (backed by Rust)
+  const autoAdvanceQuery = useQuery({
+    queryKey: ["autoAdvance", projectDir],
+    queryFn: () => commands.getAutoAdvance(projectDir),
+    staleTime: Infinity, // Only changes via mutation
+  });
+
+  const autoAdvance = autoAdvanceQuery.data ?? false;
+
+  const setAutoAdvanceMutation = useMutation({
+    mutationFn: (enabled: boolean) => commands.setAutoAdvance(projectDir, enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["autoAdvance", projectDir] });
+    },
+  });
+
+  const setAutoAdvance = useCallback(
+    (enabled: boolean) => setAutoAdvanceMutation.mutate(enabled),
+    [setAutoAdvanceMutation],
+  );
 
   const currentStepRef = useRef<string | null>(null);
   const executingStepRef = useRef<string | null>(null);

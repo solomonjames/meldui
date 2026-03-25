@@ -32,6 +32,12 @@ async agentSetEffort(effort: string) : Promise<null> {
 async agentSetFastMode(enabled: boolean) : Promise<null> {
     return await TAURI_INVOKE("agent_set_fast_mode", { enabled });
 },
+async setAutoAdvance(projectDir: string, enabled: boolean) : Promise<null> {
+    return await TAURI_INVOKE("set_auto_advance", { projectDir, enabled });
+},
+async getAutoAdvance(projectDir: string) : Promise<boolean> {
+    return await TAURI_INVOKE("get_auto_advance", { projectDir });
+},
 async ticketList(projectDir: string, status: string | null, ticketType: string | null, showAll: boolean | null) : Promise<Ticket[]> {
     return await TAURI_INVOKE("ticket_list", { projectDir, status, ticketType, showAll });
 },
@@ -138,7 +144,8 @@ sectionUpdateEvent: SectionUpdateEvent,
 statusUpdateEvent: StatusUpdateEvent,
 subtaskClosed: SubtaskClosed,
 subtaskCreated: SubtaskCreated,
-subtaskUpdated: SubtaskUpdated
+subtaskUpdated: SubtaskUpdated,
+supervisorReply: SupervisorReply
 }>({
 agentInitMetadata: "agent-init-metadata",
 agentPermissionRequest: "agent-permission-request",
@@ -150,7 +157,8 @@ sectionUpdateEvent: "section-update-event",
 statusUpdateEvent: "status-update-event",
 subtaskClosed: "subtask-closed",
 subtaskCreated: "subtask-created",
-subtaskUpdated: "subtask-updated"
+subtaskUpdated: "subtask-updated",
+supervisorReply: "supervisor-reply"
 })
 
 /** user-defined constants **/
@@ -202,7 +210,7 @@ export type NotificationEvent = { title: string; message: string; level: string 
  * Emitted when the agent reports a pull request URL.
  */
 export type PrUrlReportedEvent = { ticket_id: string; url: string }
-export type ProjectSettings = { sync?: SyncSettings | null; worktree?: WorktreeSettings | null }
+export type ProjectSettings = { sync?: SyncSettings | null; worktree?: WorktreeSettings | null; supervisor?: SupervisorSettings | null }
 /**
  * Emitted when a ticket section is updated by the agent.
  */
@@ -232,6 +240,11 @@ export type SubtaskCreated = { subtask_id: string; parent_id: string }
  * Emitted when a subtask is updated by the agent.
  */
 export type SubtaskUpdated = { subtask_id: string; parent_id: string }
+/**
+ * Emitted when the supervisor auto-replies on behalf of the user.
+ */
+export type SupervisorReply = { message: string; reasoning?: string | null; turn_number: number }
+export type SupervisorSettings = { custom_prompt?: string | null; max_replies_per_step?: number }
 export type SyncSettings = { enabled?: boolean; provider?: string; auto_push?: boolean; config?: Partial<{ [key in string]: string }> }
 export type Ticket = { id: string; title: string; status: string; priority: number; ticket_type: string; description?: string | null; notes?: string | null; design?: string | null; acceptance_criteria?: string | null; assignee?: string | null; created_by?: string | null; created_at: string; updated_at: string; closed_at?: string | null; close_reason?: string | null; labels?: string[]; parent_id?: string | null; children_ids?: string[]; sections?: TicketSection[]; metadata?: JsonValue; comments?: TicketComment[]; external_id?: string | null; external_source?: string | null }
 export type TicketComment = { id: string; author: string; text: string; created_at: string }

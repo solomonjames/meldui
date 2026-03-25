@@ -495,6 +495,12 @@ pub async fn execute_step(
     _canonical_project_dir: Option<&str>,
     conversation_writer: Option<&Mutex<crate::conversation::ConversationWriter>>,
     current_step_id: Option<&str>,
+    // NEW — ticket context for supervisor
+    ticket_title: String,
+    ticket_description: String,
+    ticket_acceptance_criteria: Option<String>,
+    step_index: u32,
+    step_name: String,
 ) -> Result<(String, String), String> {
     let agent_bin = find_agent_binary().ok_or_else(|| AgentError::BinaryNotFound.to_string())?;
 
@@ -866,6 +872,73 @@ pub async fn execute_step(
                         content: resp.to_string(),
                     });
                 }
+
+                // Check if supervisor should evaluate
+                let auto_advance_enabled = {
+                    match app_handle.try_state::<AgentState>() {
+                        Some(agent_state) => {
+                            let map = agent_state.auto_advance.read().await;
+                            map.get(project_dir).copied().unwrap_or(false)
+                        }
+                        None => false,
+                    }
+                };
+
+                if auto_advance_enabled {
+                    // Build ticket context for supervisor
+                    let ticket_ctx = protocol::TicketContext {
+                        title: ticket_title.clone(),
+                        description: ticket_description.clone(),
+                        acceptance_criteria: ticket_acceptance_criteria.clone(),
+                        current_step: protocol::StepContext {
+                            index: step_index,
+                            name: step_name.clone(),
+                            prompt: prompt.to_string(),
+                        },
+                    };
+
+                    match supervisor::run_supervisor_loop(
+                        project_dir,
+                        issue_id,
+                        &response_text,
+                        ticket_ctx,
+                        &write_half,
+                        &next_id,
+                        on_chunk,
+                        app_handle,
+                        &mut lines,
+                        conversation_writer,
+                        current_step_id,
+                    )
+                    .await
+                    {
+                        Ok((decision, final_resp, final_sid)) => {
+                            response_text = final_resp;
+                            if !final_sid.is_empty() {
+                                final_session_id = final_sid;
+                            }
+                            match decision {
+                                supervisor::SupervisorDecision::Advance => {
+                                    // Normal advance — break out of read loop
+                                }
+                                supervisor::SupervisorDecision::MaxRepliesReached => {
+                                    // Emit notification to frontend
+                                    let _ = on_chunk.send(StreamChunk {
+                                        issue_id: issue_id.to_string(),
+                                        chunk_type: "notification".to_string(),
+                                        content: "Supervisor reached reply limit — your turn"
+                                            .to_string(),
+                                    });
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("supervisor loop error: {e}");
+                            // Fall through to normal break
+                        }
+                    }
+                }
+
                 break 'outer Ok(());
             }
 

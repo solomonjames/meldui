@@ -37,6 +37,8 @@ export class ClaudeAgent
   private sendFn: (msg: OutboundMessage) => void;
   /** Maps content block index → real tool_use_id for stream events */
   private blockIndexToToolId = new Map<number, string>();
+  public lastConfig: AgentConfig | null = null;
+  public lastSessionId: string | undefined = undefined;
 
   constructor(send: (msg: OutboundMessage) => void) {
     super();
@@ -45,6 +47,7 @@ export class ClaudeAgent
 
   async execute(prompt: string, config: AgentConfig): Promise<void> {
     this.abortController = new AbortController();
+    this.lastConfig = config;
 
     const emitReviewRequest = (ticketId: string, findings: ReviewFinding[], summary: string): Promise<ReviewSubmissionResponse> => {
       const requestId = `review-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -163,6 +166,7 @@ export class ClaudeAgent
             });
           }
           sessionId = resultMsg.session_id ?? sessionId;
+          this.lastSessionId = sessionId;
           continue;
         }
 
@@ -172,6 +176,7 @@ export class ClaudeAgent
           case "system": {
             if (msg.subtype === "init") {
               sessionId = msg.session_id as string;
+              this.lastSessionId = sessionId;
               this.emit("chat-session", { sessionId });
               // Emit init metadata for the frontend
               this.emit("init-metadata", {

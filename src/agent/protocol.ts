@@ -85,13 +85,14 @@ export interface SetFastModeParams {
 
 export interface SupervisorEvaluateParams {
   workerResponse: string;
-  ticketContext: {
-    title: string;
-    description: string;
-    acceptanceCriteria?: string;
-    currentStep: { index: number; name: string; prompt: string };
-  };
+  /** Full ticket serialized as JSON string — all fields, sections, comments, etc. */
+  ticketJson: string;
+  stepIndex: number;
+  stepName: string;
+  stepPrompt: string;
   systemPrompt?: string;
+  model?: string;
+  projectDir?: string;
 }
 
 export interface SupervisorEvaluateResult {

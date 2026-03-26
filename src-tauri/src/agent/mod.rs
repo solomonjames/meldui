@@ -496,11 +496,10 @@ pub async fn execute_step(
     conversation_writer: Option<&Mutex<crate::conversation::ConversationWriter>>,
     current_step_id: Option<&str>,
     // NEW — ticket context for supervisor
-    ticket_title: String,
-    ticket_description: String,
-    ticket_acceptance_criteria: Option<String>,
+    ticket_json: String,
     step_index: u32,
     step_name: String,
+    step_prompt_for_supervisor: String,
 ) -> Result<(String, String), String> {
     let agent_bin = find_agent_binary().ok_or_else(|| AgentError::BinaryNotFound.to_string())?;
 
@@ -892,23 +891,14 @@ pub async fn execute_step(
                 );
 
                 if auto_advance_enabled {
-                    // Build ticket context for supervisor
-                    let ticket_ctx = protocol::TicketContext {
-                        title: ticket_title.clone(),
-                        description: ticket_description.clone(),
-                        acceptance_criteria: ticket_acceptance_criteria.clone(),
-                        current_step: protocol::StepContext {
-                            index: step_index,
-                            name: step_name.clone(),
-                            prompt: prompt.to_string(),
-                        },
-                    };
-
                     match supervisor::run_supervisor_loop(
                         project_dir,
                         issue_id,
                         &response_text,
-                        ticket_ctx,
+                        &ticket_json,
+                        step_index,
+                        &step_name,
+                        &step_prompt_for_supervisor,
                         &write_half,
                         &next_id,
                         on_chunk,
@@ -1123,7 +1113,7 @@ pub async fn execute_step(
 
 /// Dispatch a `message` notification's params to the appropriate Tauri event.
 /// This maps directly from the old NDJSON `msg_type` dispatch.
-fn dispatch_message_to_tauri(
+pub(crate) fn dispatch_message_to_tauri(
     msg_type: &str,
     params: &serde_json::Value,
     issue_id: &str,

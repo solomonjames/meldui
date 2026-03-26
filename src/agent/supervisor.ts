@@ -1,56 +1,61 @@
 /**
- * Supervisor agent — evaluates worker output using Haiku via the Agent SDK.
+ * Supervisor agent — evaluates worker output by spawning a separate agent query.
  *
- * Uses the same auth mechanism as the worker agent (claude CLI OAuth),
- * so no separate ANTHROPIC_API_KEY is needed.
+ * Uses the same query() function and auth mechanism as the main worker agent.
+ * The supervisor reads the agent's last response, the ticket context, and
+ * generates an intelligent reply (answering questions, approving actions, etc.)
+ * or decides to advance to the next step.
  */
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { existsSync } from "fs";
 import type { SupervisorEvaluateParams, SupervisorEvaluateResult } from "./protocol";
+import { findClaudeBinary } from "./utils.js";
 
-const DEFAULT_PREAMBLE = `You are a workflow supervisor for MeldUI. An AI coding agent is working on a ticket, and you are evaluating its latest response to decide what to do next.
+const DEFAULT_SYSTEM_PROMPT = `You are a workflow supervisor for MeldUI. An AI coding agent is working on a ticket step-by-step, and you are reviewing its latest output to decide what to do next.
 
-You have two actions available:
-- "reply": The agent is asking a question or needs guidance. Respond on behalf of the user.
-- "advance": The agent has completed the current step's work. Move to the next step.`;
+Your #1 job is to keep the agent unblocked. You act as the human user — answering questions, making decisions, and approving actions so the agent can keep working.
 
-const DEFAULT_GUIDELINES = `Guidelines for your decision:
-- If the agent is asking a clarifying question, answer it using the ticket context provided.
-- If the agent is asking for permission or confirmation to proceed, approve it.
-- If the agent says it's done, or its output clearly fulfills the step's prompt, choose "advance".
-- If the agent is stuck or going in circles, choose "advance" to move on.
-- Keep your replies concise and direct. You are unblocking the agent, not collaborating.`;
+CRITICAL RULE: If the agent asked ANY questions or requested ANY clarification, you MUST reply with answers. Unanswered questions always mean "reply", never "advance". Even if the step looks otherwise complete, answer the questions first.
 
-const JSON_FORMAT_INSTRUCTIONS = `Respond with JSON only:
+You have two actions:
+- "reply": Send a message back to the agent. Use this when:
+  - The agent asked questions — answer ALL of them using the ticket context
+  - The agent asked for confirmation or permission — approve it
+  - The agent needs a decision — make one based on the ticket requirements
+  - The agent is waiting for input before continuing
+- "advance": Move to the next workflow step. Use this ONLY when ALL of these are true:
+  - The agent has NOT asked any unanswered questions
+  - The agent explicitly says the work is done OR the output clearly fulfills the step
+  - There is nothing blocking the agent from moving on
+
+When replying:
+- Answer every question directly and concisely
+- Make reasonable decisions based on the ticket context — don't defer back to the user
+- Approve and confirm requests to proceed
+- Do NOT ask your own questions — just answer and decide
+
+Respond with JSON only:
 { "action": "reply", "message": "your response here", "reasoning": "why you chose this" }
 or
 { "action": "advance", "reasoning": "why the step is complete" }`;
 
-function buildSystemPrompt(customPrompt?: string): string {
-  const guidelines = customPrompt ?? DEFAULT_GUIDELINES;
-  return `${DEFAULT_PREAMBLE}\n\n${guidelines}\n\n${JSON_FORMAT_INSTRUCTIONS}`;
-}
-
 function buildUserMessage(params: SupervisorEvaluateParams): string {
-  const { workerResponse, ticketContext } = params;
-  const step = ticketContext.currentStep;
-  return `## Ticket
-Title: ${ticketContext.title}
-Description: ${ticketContext.description}
-${ticketContext.acceptanceCriteria ? `Acceptance Criteria: ${ticketContext.acceptanceCriteria}` : ""}
+  return `## Full Ticket Data
+\`\`\`json
+${params.ticketJson}
+\`\`\`
 
-## Current Step [${step.index + 1}]: ${step.name}
-Prompt: ${step.prompt}
+## Current Step [${params.stepIndex + 1}]: ${params.stepName}
+Prompt: ${params.stepPrompt}
 
-## Agent's Response
-${workerResponse}`;
+## Agent's Latest Response
+${params.workerResponse}`;
 }
 
 function parseResponse(text: string): SupervisorEvaluateResult {
-  // Try to extract JSON from the response (Haiku may wrap in markdown)
+  // Try to extract JSON from the response (model may wrap in markdown)
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error("No JSON found in response");
+    throw new Error(`No JSON found in response: ${text.slice(0, 200)}`);
   }
   const parsed = JSON.parse(jsonMatch[0]);
   if (parsed.action !== "reply" && parsed.action !== "advance") {
@@ -63,44 +68,32 @@ function parseResponse(text: string): SupervisorEvaluateResult {
   };
 }
 
-function findClaudeBinary(): string | undefined {
-  const home = process.env.HOME ?? "";
-  const candidates = [
-    `${home}/.claude/bin/claude`,
-    `${home}/.local/bin/claude`,
-    "/opt/homebrew/bin/claude",
-    "/usr/local/bin/claude",
-  ];
-  for (const p of candidates) {
-    try {
-      if (existsSync(p)) return p;
-    } catch {}
-  }
-  return undefined;
-}
-
 export async function evaluateSupervisor(
   params: SupervisorEvaluateParams,
 ): Promise<SupervisorEvaluateResult> {
-  const systemPrompt = buildSystemPrompt(params.systemPrompt);
+  const systemPrompt = params.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
   const userMessage = buildUserMessage(params);
   const claudePath = findClaudeBinary();
 
+  if (claudePath) {
+    process.stderr.write(`[supervisor] Using claude binary: ${claudePath}\n`);
+  } else {
+    process.stderr.write(`[supervisor] No claude binary found, falling back to SDK auto-detect\n`);
+  }
+
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      // Use the Agent SDK query() with maxTurns=1 and no tools —
-      // this gives us a single Haiku response using the same OAuth auth
-      // as the worker agent, without needing ANTHROPIC_API_KEY.
       const agentQuery = query({
         prompt: userMessage,
         options: {
-          model: "claude-haiku-4-5-20251001",
+          model: params.model ?? "claude-haiku-4-5-20251001",
           maxTurns: 1,
           systemPrompt: systemPrompt,
           tools: [],
           allowedTools: [],
           permissionMode: "bypassPermissions",
           allowDangerouslySkipPermissions: true,
+          cwd: params.projectDir ?? process.cwd(),
           ...(claudePath ? { pathToClaudeCodeExecutable: claudePath } : {}),
           stderr: (data: string) => {
             process.stderr.write(`[supervisor-sdk-stderr] ${data}\n`);
@@ -124,19 +117,21 @@ export async function evaluateSupervisor(
         throw new Error("No result text from supervisor query");
       }
 
+      process.stderr.write(`[supervisor] Raw response: ${resultText.slice(0, 500)}\n`);
       return parseResponse(resultText);
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(
+        `[supervisor] attempt ${attempt + 1} failed: ${errMsg}\n`,
+      );
       if (attempt === 0) {
-        process.stderr.write(
-          `[sidecar] supervisor: attempt ${attempt + 1} failed: ${err}, retrying\n`,
-        );
         continue;
       }
-      // Second attempt failed — fall back to advance
-      process.stderr.write(
-        `[sidecar] supervisor: all attempts failed: ${err}, falling back to advance\n`,
-      );
-      return { action: "advance", reasoning: "Supervisor evaluation failed, advancing by default" };
+      // Second attempt failed — return the error so Rust can see it
+      return {
+        action: "advance",
+        reasoning: `Supervisor evaluation failed: ${errMsg}`,
+      };
     }
   }
 

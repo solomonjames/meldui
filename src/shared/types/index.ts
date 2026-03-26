@@ -153,7 +153,8 @@ export type ContentBlock =
   | { type: "tool_group"; activities: ToolActivity[]; summaryText?: string }
   | { type: "subagent"; activity: SubagentActivity }
   | { type: "thinking"; content: string }
-  | { type: "user_message"; content: string };
+  | { type: "user_message"; content: string }
+  | { type: "supervisor_reply"; content: string };
 
 export interface ContextUsage {
   tokensUsed: number;
@@ -182,6 +183,7 @@ export interface StepOutputStream {
   toolUseSummaries: Array<{ summary: string; toolIds: string[] }>;
   isCompacting: boolean;
   contextUsage?: ContextUsage;
+  supervisorEvaluating: boolean;
 }
 
 export interface PermissionRequest {

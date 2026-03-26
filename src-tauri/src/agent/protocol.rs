@@ -67,41 +67,31 @@ pub(crate) struct SidecarConfig {
 
 // ── Supervisor protocol types ──
 
-/// Ticket context sent to the supervisor for evaluation.
-#[derive(Debug, Serialize)]
-#[allow(dead_code)]
-pub(crate) struct TicketContext {
-    pub title: String,
-    pub description: String,
-    #[serde(rename = "acceptanceCriteria", skip_serializing_if = "Option::is_none")]
-    pub acceptance_criteria: Option<String>,
-    #[serde(rename = "currentStep")]
-    pub current_step: StepContext,
-}
-
-#[derive(Debug, Serialize)]
-#[allow(dead_code)]
-pub(crate) struct StepContext {
-    pub index: u32,
-    pub name: String,
-    pub prompt: String,
-}
-
 /// Params for the supervisorEvaluate JSON-RPC request.
 #[derive(Debug, Serialize)]
-#[allow(dead_code)]
 pub(crate) struct SupervisorEvaluateParams {
     #[serde(rename = "workerResponse")]
     pub worker_response: String,
-    #[serde(rename = "ticketContext")]
-    pub ticket_context: TicketContext,
+    /// Full ticket serialized as JSON string — gives the supervisor all fields/sections.
+    #[serde(rename = "ticketJson")]
+    pub ticket_json: String,
+    /// Current step info.
+    #[serde(rename = "stepIndex")]
+    pub step_index: u32,
+    #[serde(rename = "stepName")]
+    pub step_name: String,
+    #[serde(rename = "stepPrompt")]
+    pub step_prompt: String,
     #[serde(rename = "systemPrompt", skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
+    #[serde(rename = "projectDir", skip_serializing_if = "Option::is_none")]
+    pub project_dir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 /// Result from supervisorEvaluate.
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub(crate) struct SupervisorEvaluateResult {
     pub action: String,
     pub message: Option<String>,

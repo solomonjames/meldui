@@ -1,8 +1,8 @@
 //! Supervisor evaluation loop — intercepts queryComplete when auto-advance is on.
 //!
-//! Sends worker response to the sidecar's supervisorEvaluate method,
-//! then either emits SupervisorReply + sends queryFollowUp, or returns
-//! to let the normal auto-advance flow proceed.
+//! Sends worker response to the sidecar's supervisorEvaluate method (which spawns
+//! a separate agent query for intelligent evaluation), then either emits
+//! SupervisorReply + sends queryFollowUp, or returns to advance.
 
 use std::sync::Arc;
 
@@ -12,10 +12,10 @@ use tauri_specta::Event;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
-use super::events::SupervisorReply;
+use super::events::{SupervisorEvaluating, SupervisorReply};
 use super::protocol::{
-    JsonRpcMessage, JsonRpcRequest, QueryFollowUpParams, StepContext, SupervisorEvaluateParams,
-    SupervisorEvaluateResult, TicketContext,
+    JsonRpcMessage, JsonRpcRequest, QueryFollowUpParams, SupervisorEvaluateParams,
+    SupervisorEvaluateResult,
 };
 use crate::claude::StreamChunk;
 use crate::settings;
@@ -34,7 +34,7 @@ pub(crate) enum SupervisorDecision {
 /// Returns when the supervisor decides to advance or hits the reply limit.
 ///
 /// During the loop, this function:
-/// 1. Sends `supervisorEvaluate` to sidecar
+/// 1. Sends `supervisorEvaluate` to sidecar (spawns a separate agent for intelligent evaluation)
 /// 2. If "reply": emits SupervisorReply event, sends `queryFollowUp`, reads until next `queryComplete`
 /// 3. If "advance": returns SupervisorDecision::Advance
 #[allow(clippy::too_many_arguments)]
@@ -42,7 +42,10 @@ pub(crate) async fn run_supervisor_loop(
     project_dir: &str,
     issue_id: &str,
     worker_response: &str,
-    ticket_context: TicketContext,
+    ticket_json: &str,
+    step_index: u32,
+    step_name: &str,
+    step_prompt: &str,
     socket_writer: &Arc<Mutex<tokio::io::WriteHalf<tokio::net::UnixStream>>>,
     next_id: &std::sync::atomic::AtomicU64,
     on_chunk: &tauri::ipc::Channel<StreamChunk>,
@@ -50,7 +53,6 @@ pub(crate) async fn run_supervisor_loop(
     lines: &mut tokio::io::Lines<BufReader<tokio::io::ReadHalf<tokio::net::UnixStream>>>,
     conversation_writer: Option<&Mutex<crate::conversation::ConversationWriter>>,
     current_step_id: Option<&str>,
-    // The original project directory (not worktree) — used for auto_advance lookup and settings.
     canonical_project_dir: Option<&str>,
 ) -> Result<(SupervisorDecision, String, String), String> {
     let settings_dir = canonical_project_dir.unwrap_or(project_dir);
@@ -83,20 +85,37 @@ pub(crate) async fn run_supervisor_loop(
             }
         }
 
+        // Re-read ticket from disk to get latest state (agent may have updated sections)
+        let current_ticket_json = {
+            match crate::tickets::show_ticket(settings_dir, issue_id) {
+                Ok(ticket) => {
+                    serde_json::to_string(&ticket).unwrap_or_else(|_| ticket_json.to_string())
+                }
+                Err(e) => {
+                    log::warn!("supervisor: failed to re-read ticket, using stale data: {e}");
+                    ticket_json.to_string()
+                }
+            }
+        };
+
+        // Notify frontend that supervisor is evaluating
+        let _ = SupervisorEvaluating {}.emit(app_handle);
+        let _ = on_chunk.send(StreamChunk {
+            issue_id: issue_id.to_string(),
+            chunk_type: "supervisor_evaluating".to_string(),
+            content: String::new(),
+        });
+
         // 1. Send supervisorEvaluate request
         let eval_params = SupervisorEvaluateParams {
             worker_response: current_response.clone(),
-            ticket_context: TicketContext {
-                title: ticket_context.title.clone(),
-                description: ticket_context.description.clone(),
-                acceptance_criteria: ticket_context.acceptance_criteria.clone(),
-                current_step: StepContext {
-                    index: ticket_context.current_step.index,
-                    name: ticket_context.current_step.name.clone(),
-                    prompt: ticket_context.current_step.prompt.clone(),
-                },
-            },
+            ticket_json: current_ticket_json,
+            step_index,
+            step_name: step_name.to_string(),
+            step_prompt: step_prompt.to_string(),
             system_prompt: custom_prompt.clone(),
+            project_dir: Some(project_dir.to_string()),
+            model: None,
         };
 
         let id = next_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -118,6 +137,8 @@ pub(crate) async fn run_supervisor_loop(
                 .map_err(|e| e.to_string())?;
             writer.flush().await.map_err(|e| e.to_string())?;
         }
+
+        log::info!("supervisor: sent supervisorEvaluate (turn {turn}), waiting for response...");
 
         // 2. Read response (skip notifications, find our response by id)
         let eval_result = read_rpc_response(id, lines).await?;
@@ -142,6 +163,13 @@ pub(crate) async fn run_supervisor_loop(
                 }
                 .emit(app_handle);
 
+                // Send as stream chunk so it appears in contentBlocks timeline
+                let _ = on_chunk.send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "supervisor_reply".to_string(),
+                    content: message.clone(),
+                });
+
                 // Persist supervisor reply to conversation log
                 if let Some(writer) = conversation_writer {
                     let step = current_step_id.unwrap_or(issue_id);
@@ -160,7 +188,7 @@ pub(crate) async fn run_supervisor_loop(
                     }
                 }
 
-                // 3. Send queryFollowUp
+                // 3. Send queryFollowUp with the supervisor's intelligent reply
                 let follow_up_params = QueryFollowUpParams {
                     message: message.clone(),
                 };
@@ -223,16 +251,16 @@ pub(crate) async fn run_supervisor_loop(
 
 /// Read JSON-RPC lines until we find a response matching the given request id.
 /// Discards notifications while waiting.
-#[allow(dead_code)]
 async fn read_rpc_response(
     expected_id: u64,
     lines: &mut tokio::io::Lines<BufReader<tokio::io::ReadHalf<tokio::net::UnixStream>>>,
 ) -> Result<serde_json::Value, String> {
-    let timeout = std::time::Duration::from_secs(30);
+    // Supervisor evaluation can take a while (spawns a separate agent query)
+    let timeout = std::time::Duration::from_secs(120);
     loop {
         let line = tokio::time::timeout(timeout, lines.next_line())
             .await
-            .map_err(|_| "supervisor: timeout waiting for response".to_string())?
+            .map_err(|_| "supervisor: timeout waiting for evaluation response (120s)".to_string())?
             .map_err(|e| format!("supervisor: read error: {e}"))?
             .ok_or_else(|| "supervisor: socket closed while waiting for response".to_string())?;
 
@@ -249,18 +277,18 @@ async fn read_rpc_response(
             }
         }
 
-        // Otherwise it's a notification — discard (supervisor doesn't generate streaming messages)
+        // Otherwise it's a notification — discard (supervisor eval doesn't generate streaming)
     }
 }
 
 /// Read from the socket until a queryComplete notification arrives.
 /// Processes streaming messages (forwarding to frontend via on_chunk) along the way.
 /// Returns (response_text, session_id).
-#[allow(clippy::too_many_arguments, dead_code)]
+#[allow(clippy::too_many_arguments)]
 async fn read_until_query_complete(
     issue_id: &str,
     on_chunk: &tauri::ipc::Channel<StreamChunk>,
-    _app_handle: &tauri::AppHandle,
+    app_handle: &tauri::AppHandle,
     lines: &mut tokio::io::Lines<BufReader<tokio::io::ReadHalf<tokio::net::UnixStream>>>,
     conversation_writer: Option<&Mutex<crate::conversation::ConversationWriter>>,
     current_step_id: Option<&str>,
@@ -292,25 +320,12 @@ async fn read_until_query_complete(
 
         match method {
             "message" => {
-                // Forward streaming messages to frontend
                 let msg_type = params.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                let content = params.get("content").and_then(|c| c.as_str()).unwrap_or("");
 
-                let chunk_type = match msg_type {
-                    "text" => "text",
-                    "thinking" => "thinking",
-                    "tool_start" | "tool_end" | "tool_input" | "tool_result" | "tool_progress" => {
-                        "tool"
-                    }
-                    "error" => "error",
-                    _ => "other",
-                };
-
-                let _ = on_chunk.send(StreamChunk {
-                    issue_id: issue_id.to_string(),
-                    chunk_type: chunk_type.to_string(),
-                    content: content.to_string(),
-                });
+                // Reuse the same dispatch logic as the main read loop
+                super::dispatch_message_to_tauri(
+                    msg_type, &params, issue_id, on_chunk, app_handle, "",
+                );
 
                 // Persist to conversation log
                 if let Some(writer) = conversation_writer {
@@ -344,11 +359,7 @@ async fn read_until_query_complete(
                 return Err(format!("supervisor: worker error: {message}"));
             }
             _ => {
-                // toolApproval, reviewRequest, etc. — these need the same handling as
-                // the main read loop. For now, log and skip. The existing permission/review
-                // handlers on AgentHandle will NOT work here because we're in a different
-                // read context. This is a known limitation for v1 — permission requests
-                // during supervisor follow-up turns won't be handled.
+                // toolApproval, reviewRequest, etc. — known limitation for v1.
                 log::warn!("supervisor: unhandled method during follow-up: {method}");
             }
         }

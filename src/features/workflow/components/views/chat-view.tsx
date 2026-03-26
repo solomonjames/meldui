@@ -33,6 +33,39 @@ function UserMessageBubble({ content }: { content: string }) {
   );
 }
 
+function SupervisorTypingIndicator() {
+  return (
+    <div className="flex justify-end my-2">
+      <div className="flex items-start gap-2">
+        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+              Supervisor
+            </span>
+            <span className="flex gap-0.5">
+              <span
+                className="w-1 h-1 rounded-full bg-amber-500 animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              />
+              <span
+                className="w-1 h-1 rounded-full bg-amber-500 animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              />
+              <span
+                className="w-1 h-1 rounded-full bg-amber-500 animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              />
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/10 shrink-0 mt-0.5">
+          <Play className="w-3.5 h-3.5 text-amber-500" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SupervisorReplyBubble({ content }: { content: string }) {
   return (
     <div className="flex justify-end my-2">
@@ -89,9 +122,8 @@ export function ChatView({
   onSetAutoAdvance,
 }: ChatViewProps) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const [userMessages, setUserMessages] = useState<Array<{ id: string; content: string }>>([]);
-  const [supervisorReplies, setSupervisorReplies] = useState<
-    Array<{ id: string; content: string; turnNumber: number }>
+  const [userMessages, setUserMessages] = useState<
+    Array<{ id: string; content: string; insertAt: number }>
   >([]);
   const [supervisorActive, setSupervisorActive] = useState(false);
   const { config, setModel, setThinking, setEffort, setFastMode } = useAgentConfig();
@@ -100,31 +132,38 @@ export function ChatView({
     queryFn: () => commands.getAppPreferences(),
   });
 
+  // Track current raw block count so injected items record their timeline position
+  const rawBlockCountRef = useRef(0);
+  rawBlockCountRef.current = (stepOutput?.contentBlocks ?? []).length;
+
   const handleSend = useCallback(
     (message?: string) => {
       if (message) {
-        setUserMessages((prev) => [...prev, { id: `user-${Date.now()}`, content: message }]);
+        setUserMessages((prev) => [
+          ...prev,
+          { id: `user-${Date.now()}`, content: message, insertAt: rawBlockCountRef.current },
+        ]);
       }
       onExecute(message);
     },
     [onExecute],
   );
 
-  // Listen for supervisor replies
+  // Track supervisor evaluation state for typing indicator
+  const [supervisorEvaluating, setSupervisorEvaluating] = useState(false);
+
+  // Listen for supervisor events via Tauri events (reliable, not dependent on stream chunks)
   useEffect(() => {
-    const unlisten = events.supervisorReply.listen((event) => {
-      setSupervisorReplies((prev) => [
-        ...prev,
-        {
-          id: `supervisor-${Date.now()}`,
-          content: event.payload.message,
-          turnNumber: event.payload.turn_number,
-        },
-      ]);
+    const unlistenEvaluating = events.supervisorEvaluating.listen(() => {
+      setSupervisorEvaluating(true);
+    });
+    const unlistenReply = events.supervisorReply.listen(() => {
       setSupervisorActive(true);
+      setSupervisorEvaluating(false);
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlistenEvaluating.then((fn) => fn());
+      unlistenReply.then((fn) => fn());
     };
   }, []);
 
@@ -132,7 +171,7 @@ export function ChatView({
   useEffect(() => {
     if (stepStatus === "completed" || stepStatus === "pending") {
       setSupervisorActive(false);
-      setSupervisorReplies([]);
+      setSupervisorEvaluating(false);
     }
   }, [stepStatus]);
 
@@ -148,7 +187,42 @@ export function ChatView({
   const historyBlocks = historyResult.blocks;
   const historyFilesChanged = historyResult.filesChanged;
 
-  const contentBlocks = stepOutput?.contentBlocks ?? [];
+  // Supervisor replies flow through StreamChunk into contentBlocks directly.
+  // Only user messages need injection into the timeline.
+  const rawBlocks = stepOutput?.contentBlocks ?? [];
+  const contentBlocks = useMemo(() => {
+    if (userMessages.length === 0) return rawBlocks;
+
+    type InjectedItem = { type: "user_message"; content: string; id: string; insertAt: number };
+    const injected: InjectedItem[] = userMessages
+      .map((m) => ({
+        type: "user_message" as const,
+        content: m.content,
+        id: m.id,
+        insertAt: m.insertAt,
+      }))
+      .sort((a, b) => a.insertAt - b.insertAt);
+
+    type MergedBlock = (typeof rawBlocks)[number] | InjectedItem;
+    const merged: MergedBlock[] = [];
+    let injectIdx = 0;
+
+    for (let i = 0; i <= rawBlocks.length; i++) {
+      while (injectIdx < injected.length && injected[injectIdx].insertAt <= i) {
+        merged.push(injected[injectIdx]);
+        injectIdx++;
+      }
+      if (i < rawBlocks.length) {
+        merged.push(rawBlocks[i]);
+      }
+    }
+    while (injectIdx < injected.length) {
+      merged.push(injected[injectIdx]);
+      injectIdx++;
+    }
+    return merged;
+  }, [rawBlocks, userMessages]);
+
   const hasContent = contentBlocks.length > 0 || response.length > 0;
   const showInput = isInteractive || !isExecuting;
 
@@ -224,6 +298,10 @@ export function ChatView({
                 // biome-ignore lint/suspicious/noArrayIndexKey: history blocks lack stable IDs
                 return <ThinkingBlock key={`hist-${i}`} content={block.content} isActive={false} />;
               }
+              if (block.type === "supervisor_reply") {
+                // biome-ignore lint/suspicious/noArrayIndexKey: history blocks lack stable IDs
+                return <SupervisorReplyBubble key={`hist-${i}`} content={block.content} />;
+              }
               return null;
             })}
 
@@ -234,16 +312,6 @@ export function ChatView({
             {pendingPermission && onRespondToPermission && (
               <PermissionDialog permission={pendingPermission} onRespond={onRespondToPermission} />
             )}
-
-            {/* User messages */}
-            {userMessages.map((msg) => (
-              <UserMessageBubble key={msg.id} content={msg.content} />
-            ))}
-
-            {/* Supervisor auto-replies */}
-            {supervisorReplies.map((reply) => (
-              <SupervisorReplyBubble key={reply.id} content={reply.content} />
-            ))}
 
             {/* Content blocks — text-first with activity groups */}
             {contentBlocks.map((block, i) => {
@@ -291,10 +359,16 @@ export function ChatView({
                 case "user_message":
                   // biome-ignore lint/suspicious/noArrayIndexKey: content blocks lack stable IDs
                   return <UserMessageBubble key={`user-${i}`} content={block.content} />;
+                case "supervisor_reply":
+                  // biome-ignore lint/suspicious/noArrayIndexKey: content blocks lack stable IDs
+                  return <SupervisorReplyBubble key={`supervisor-${i}`} content={block.content} />;
                 default:
                   return null;
               }
             })}
+
+            {/* Supervisor typing indicator */}
+            {supervisorEvaluating && <SupervisorTypingIndicator />}
 
             {/* Fallback: render response text if no contentBlocks */}
             {contentBlocks.length === 0 && response.length > 0 && (

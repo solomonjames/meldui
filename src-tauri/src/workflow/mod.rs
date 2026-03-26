@@ -238,12 +238,11 @@ pub async fn execute_step(
         Some(project_dir),
         conversation_writer.as_ref(),
         Some(current_step_id.as_str()),
-        // NEW: ticket context for supervisor
-        ticket.title.clone(),
-        ticket.description.clone().unwrap_or_default(),
-        ticket.acceptance_criteria.clone(),
+        // Supervisor context: full ticket JSON + step info
+        serde_json::to_string(&ticket).unwrap_or_default(),
         step_index,
         step.name.clone(),
+        prompt.clone(),
     )
     .await
     {
@@ -394,11 +393,10 @@ pub async fn suggest_workflow(
         None,
         None,
         None,
-        // NEW: no supervisor needed for suggest
+        // No supervisor needed for suggest
         String::new(),
-        String::new(),
-        None,
         0,
+        String::new(),
         String::new(),
     )
     .await?;

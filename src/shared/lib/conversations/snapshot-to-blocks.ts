@@ -82,6 +82,14 @@ export function snapshotToBlocks(
         }
         break;
       }
+      case "supervisor_reply": {
+        flushToolGroup();
+        const text = extractContent(event.content);
+        if (text) {
+          blocks.push({ type: "supervisor_reply", content: text });
+        }
+        break;
+      }
       case "tool_start": {
         const parsed = safeParse(event.content);
         const tool: ToolActivity = {

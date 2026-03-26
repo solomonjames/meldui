@@ -12,21 +12,7 @@ import { buildSystemPromptAppend } from "./config.js";
 import type { AgentConfig, MeldAgentEvents, MeldAgent } from "./types.js";
 import type { OutboundMessage } from "./protocol.js";
 import { resolve, isAbsolute } from "path";
-import { existsSync } from "fs";
-
-function findClaudeBinary(): string | undefined {
-  const home = process.env.HOME ?? "";
-  const candidates = [
-    `${home}/.claude/bin/claude`,
-    `${home}/.local/bin/claude`,
-    "/opt/homebrew/bin/claude",
-    "/usr/local/bin/claude",
-  ];
-  for (const p of candidates) {
-    try { if (existsSync(p)) return p; } catch {}
-  }
-  return undefined;
-}
+import { findClaudeBinary } from "./utils.js";
 
 export class ClaudeAgent
   extends EventEmitter<MeldAgentEvents>

@@ -145,6 +145,7 @@ statusUpdateEvent: StatusUpdateEvent,
 subtaskClosed: SubtaskClosed,
 subtaskCreated: SubtaskCreated,
 subtaskUpdated: SubtaskUpdated,
+supervisorEvaluating: SupervisorEvaluating,
 supervisorReply: SupervisorReply
 }>({
 agentInitMetadata: "agent-init-metadata",
@@ -158,6 +159,7 @@ statusUpdateEvent: "status-update-event",
 subtaskClosed: "subtask-closed",
 subtaskCreated: "subtask-created",
 subtaskUpdated: "subtask-updated",
+supervisorEvaluating: "supervisor-evaluating",
 supervisorReply: "supervisor-reply"
 })
 
@@ -241,10 +243,23 @@ export type SubtaskCreated = { subtask_id: string; parent_id: string }
  */
 export type SubtaskUpdated = { subtask_id: string; parent_id: string }
 /**
+ * Emitted when the supervisor starts evaluating.
+ */
+export type SupervisorEvaluating = Record<string, never>
+/**
  * Emitted when the supervisor auto-replies on behalf of the user.
  */
-export type SupervisorReply = { message: string; reasoning?: string | null; turn_number: number }
-export type SupervisorSettings = { custom_prompt?: string | null; max_replies_per_step?: number }
+export type SupervisorReply = { message: string; reasoning: string | null; turn_number: number }
+export type SupervisorSettings = { 
+/**
+ * Custom supervisor system prompt (replaces guidelines section only).
+ * None = use default prompt.
+ */
+custom_prompt?: string | null; 
+/**
+ * Max supervisor replies per step before falling back to user. Default: 5.
+ */
+max_replies_per_step?: number }
 export type SyncSettings = { enabled?: boolean; provider?: string; auto_push?: boolean; config?: Partial<{ [key in string]: string }> }
 export type Ticket = { id: string; title: string; status: string; priority: number; ticket_type: string; description?: string | null; notes?: string | null; design?: string | null; acceptance_criteria?: string | null; assignee?: string | null; created_by?: string | null; created_at: string; updated_at: string; closed_at?: string | null; close_reason?: string | null; labels?: string[]; parent_id?: string | null; children_ids?: string[]; sections?: TicketSection[]; metadata?: JsonValue; comments?: TicketComment[]; external_id?: string | null; external_source?: string | null }
 export type TicketComment = { id: string; author: string; text: string; created_at: string }

@@ -7,14 +7,14 @@
  * or decides to advance to the next step.
  */
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { SupervisorEvaluateParams, SupervisorEvaluateResult } from "./protocol";
+import type { SupervisorEvaluateParams, SupervisorEvaluateResult } from "./protocol.js";
 import { findClaudeBinary } from "./utils.js";
 
-const DEFAULT_SYSTEM_PROMPT = `You are a workflow supervisor for MeldUI. An AI coding agent is working on a ticket step-by-step, and you are reviewing its latest output to decide what to do next.
+const PREAMBLE = `You are a workflow supervisor for MeldUI. An AI coding agent is working on a ticket step-by-step, and you are reviewing its latest output to decide what to do next.
 
-Your #1 job is to keep the agent unblocked. You act as the human user — answering questions, making decisions, and approving actions so the agent can keep working.
+Your #1 job is to keep the agent unblocked. You act as the human user — answering questions, making decisions, and approving actions so the agent can keep working.`;
 
-CRITICAL RULE: If the agent asked ANY questions or requested ANY clarification, you MUST reply with answers. Unanswered questions always mean "reply", never "advance". Even if the step looks otherwise complete, answer the questions first.
+const DEFAULT_GUIDELINES = `CRITICAL RULE: If the agent asked ANY questions or requested ANY clarification, you MUST reply with answers. Unanswered questions always mean "reply", never "advance". Even if the step looks otherwise complete, answer the questions first.
 
 You have two actions:
 - "reply": Send a message back to the agent. Use this when:
@@ -31,12 +31,17 @@ When replying:
 - Answer every question directly and concisely
 - Make reasonable decisions based on the ticket context — don't defer back to the user
 - Approve and confirm requests to proceed
-- Do NOT ask your own questions — just answer and decide
+- Do NOT ask your own questions — just answer and decide`;
 
-Respond with JSON only:
+const JSON_FORMAT_INSTRUCTIONS = `Respond with JSON only:
 { "action": "reply", "message": "your response here", "reasoning": "why you chose this" }
 or
 { "action": "advance", "reasoning": "why the step is complete" }`;
+
+function buildSystemPrompt(customGuidelines?: string): string {
+  const guidelines = customGuidelines ?? DEFAULT_GUIDELINES;
+  return `${PREAMBLE}\n\n${guidelines}\n\n${JSON_FORMAT_INSTRUCTIONS}`;
+}
 
 function buildUserMessage(params: SupervisorEvaluateParams): string {
   return `## Full Ticket Data
@@ -71,7 +76,7 @@ function parseResponse(text: string): SupervisorEvaluateResult {
 export async function evaluateSupervisor(
   params: SupervisorEvaluateParams,
 ): Promise<SupervisorEvaluateResult> {
-  const systemPrompt = params.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = buildSystemPrompt(params.systemPrompt ?? undefined);
   const userMessage = buildUserMessage(params);
   const claudePath = findClaudeBinary();
 

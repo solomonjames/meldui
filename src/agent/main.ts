@@ -416,6 +416,88 @@ async function main(): Promise<void> {
         sendMessage({ type: "thinking", content: text });
       });
 
+      agent.on("tool-progress", ({ toolUseId, toolName, elapsedSeconds }) => {
+        sendMessage({ type: "tool_progress", tool_use_id: toolUseId, tool_name: toolName, elapsed_seconds: elapsedSeconds });
+      });
+
+      agent.on("tool-use-summary", ({ summary, toolIds }) => {
+        sendMessage({ type: "tool_use_summary", summary, tool_ids: toolIds });
+      });
+
+      agent.on("subagent-start", ({ taskId, toolUseId, description }) => {
+        sendMessage({ type: "subagent_start", task_id: taskId, tool_use_id: toolUseId, description });
+      });
+
+      agent.on("subagent-progress", ({ taskId, summary, lastToolName, usage }) => {
+        sendMessage({ type: "subagent_progress", task_id: taskId, summary, last_tool_name: lastToolName, usage });
+      });
+
+      agent.on("subagent-complete", ({ taskId, status, summary, usage }) => {
+        sendMessage({ type: "subagent_complete", task_id: taskId, status, summary, usage });
+      });
+
+      agent.on("files-persisted", ({ files }) => {
+        sendMessage({ type: "files_changed", files });
+      });
+
+      agent.on("chat-session", ({ sessionId }) => {
+        sendMessage({ type: "session", session_id: sessionId });
+      });
+
+      agent.on("status-change", ({ isCompacting }) => {
+        sendMessage({ type: "compacting", is_compacting: isCompacting });
+      });
+
+      agent.on("permission-request", (event: PermissionRequestEvent) => {
+        const heartbeat = setInterval(() => {
+          sendMessage({ type: "heartbeat" });
+        }, 30_000);
+
+        rpc.request(METHOD_NAMES.toolApproval, {
+          requestId: event.requestId,
+          toolName: event.toolName,
+          input: event.input,
+        } satisfies Record<string, unknown>)
+          .then((result: ToolApprovalResult) => {
+            event.resolve(result.decision);
+          })
+          .catch((err) => {
+            process.stderr.write(`[sidecar] toolApproval request failed: ${err}\n`);
+            event.resolve("deny");
+          })
+          .finally(() => {
+            clearInterval(heartbeat);
+          });
+      });
+
+      agent.on("review-request", (event: ReviewRequestEvent) => {
+        const heartbeat = setInterval(() => {
+          sendMessage({ type: "heartbeat" });
+        }, 30_000);
+
+        rpc.request(METHOD_NAMES.reviewRequest, {
+          requestId: event.requestId,
+          ticketId: event.ticketId,
+          findings: event.findings,
+          summary: event.summary,
+        } satisfies Record<string, unknown>)
+          .then((result: ReviewRequestResult) => {
+            event.resolve(result.submission);
+          })
+          .catch((err) => {
+            process.stderr.write(`[sidecar] reviewRequest failed: ${err}\n`);
+            event.resolve({
+              action: "approve",
+              summary: "Review failed due to communication error",
+              comments: [],
+              finding_actions: [],
+            });
+          })
+          .finally(() => {
+            clearInterval(heartbeat);
+          });
+      });
+
       // Launch follow-up execution in detached async task
       void (async () => {
         try {

@@ -26,7 +26,7 @@ describe("ChatView display states", () => {
     expect(screen.getByText("Here is the analysis")).toBeInTheDocument();
   });
 
-  it("shows Processing... in activity bar when isExecuting is true and no response", () => {
+  it("shows step name in activity bar when isExecuting is true and no response", () => {
     render(
       <ChatView
         {...defaultProps}
@@ -37,8 +37,8 @@ describe("ChatView display states", () => {
       { wrapper: createQueryWrapper() },
     );
 
-    // Processing state is shown via the ActivityBar component
-    expect(screen.getByText("Processing...")).toBeInTheDocument();
+    // Activity bar shows the step name when executing
+    expect(screen.getByText("Understand")).toBeInTheDocument();
   });
 
   it("does not show manual Run button when pending", () => {

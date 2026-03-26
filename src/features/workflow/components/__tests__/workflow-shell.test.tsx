@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import "@/shared/test/mocks/tauri";
 import { WorkflowShell } from "@/features/workflow/components/workflow-shell";
 import type { WorkflowContextValue } from "@/features/workflow/context";
 import { WorkflowProvider } from "@/features/workflow/context";

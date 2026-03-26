@@ -7,6 +7,7 @@
 
 mod events;
 mod protocol;
+pub(crate) mod supervisor;
 
 // Re-export public event types (used by lib.rs for specta registration)
 pub use events::*;
@@ -187,12 +188,16 @@ impl AgentHandle {
 /// Managed state for the active agent handle.
 pub struct AgentState {
     pub handle: Mutex<Option<AgentHandle>>,
+    /// Auto-advance enabled per project (keyed by project_dir).
+    /// Uses RwLock since reads are frequent (every queryComplete) and writes are rare (toggle).
+    pub auto_advance: tokio::sync::RwLock<std::collections::HashMap<String, bool>>,
 }
 
 impl AgentState {
     pub fn new() -> Self {
         Self {
             handle: Mutex::new(None),
+            auto_advance: tokio::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
 }
@@ -304,6 +309,28 @@ async fn agent_set_fast_mode_inner(enabled: bool, state: &AgentState) -> Result<
     });
     let json = serde_json::to_string(&request).map_err(AgentError::SerializeFailed)?;
     handle.send_raw(&json).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_auto_advance(
+    state: tauri::State<'_, AgentState>,
+    project_dir: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut map = state.auto_advance.write().await;
+    map.insert(project_dir, enabled);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_auto_advance(
+    state: tauri::State<'_, AgentState>,
+    project_dir: String,
+) -> Result<bool, String> {
+    let map = state.auto_advance.read().await;
+    Ok(map.get(&project_dir).copied().unwrap_or(false))
 }
 
 /// Find the agent sidecar binary.
@@ -465,9 +492,14 @@ pub async fn execute_step(
     on_chunk: &tauri::ipc::Channel<StreamChunk>,
     app_handle: &tauri::AppHandle,
     tickets_dir_override: Option<&str>,
-    _canonical_project_dir: Option<&str>,
+    canonical_project_dir: Option<&str>,
     conversation_writer: Option<&Mutex<crate::conversation::ConversationWriter>>,
     current_step_id: Option<&str>,
+    // NEW — ticket context for supervisor
+    ticket_json: String,
+    step_index: u32,
+    step_name: String,
+    step_prompt_for_supervisor: String,
 ) -> Result<(String, String), String> {
     let agent_bin = find_agent_binary().ok_or_else(|| AgentError::BinaryNotFound.to_string())?;
 
@@ -839,6 +871,72 @@ pub async fn execute_step(
                         content: resp.to_string(),
                     });
                 }
+
+                // Check if supervisor should evaluate.
+                // Use canonical_project_dir (the original project root) for the lookup,
+                // because project_dir may be a worktree path while the frontend sets
+                // auto_advance keyed by the original project directory.
+                let lookup_dir = canonical_project_dir.unwrap_or(project_dir);
+                let auto_advance_enabled = {
+                    match app_handle.try_state::<AgentState>() {
+                        Some(agent_state) => {
+                            let map = agent_state.auto_advance.read().await;
+                            map.get(lookup_dir).copied().unwrap_or(false)
+                        }
+                        None => false,
+                    }
+                };
+                log::info!(
+                    "queryComplete: auto_advance_enabled={auto_advance_enabled} (lookup_dir={lookup_dir})"
+                );
+
+                if auto_advance_enabled {
+                    match supervisor::run_supervisor_loop(
+                        project_dir,
+                        issue_id,
+                        &response_text,
+                        &ticket_json,
+                        step_index,
+                        &step_name,
+                        &step_prompt_for_supervisor,
+                        &write_half,
+                        &next_id,
+                        on_chunk,
+                        app_handle,
+                        &mut lines,
+                        conversation_writer,
+                        current_step_id,
+                        canonical_project_dir,
+                    )
+                    .await
+                    {
+                        Ok((decision, final_resp, final_sid)) => {
+                            response_text = final_resp;
+                            if !final_sid.is_empty() {
+                                final_session_id = final_sid;
+                            }
+                            match decision {
+                                supervisor::SupervisorDecision::Advance => {
+                                    // Normal advance — break out of read loop
+                                }
+                                supervisor::SupervisorDecision::MaxRepliesReached => {
+                                    // Emit notification to frontend
+                                    let _ = on_chunk.send(StreamChunk {
+                                        issue_id: issue_id.to_string(),
+                                        chunk_type: "notification".to_string(),
+                                        content: "Supervisor reached reply limit — your turn"
+                                            .to_string(),
+                                    });
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("supervisor loop error: {e}");
+                            // Fall through to normal break
+                        }
+                    }
+                }
+
                 break 'outer Ok(());
             }
 
@@ -1015,7 +1113,7 @@ pub async fn execute_step(
 
 /// Dispatch a `message` notification's params to the appropriate Tauri event.
 /// This maps directly from the old NDJSON `msg_type` dispatch.
-fn dispatch_message_to_tauri(
+pub(crate) fn dispatch_message_to_tauri(
     msg_type: &str,
     params: &serde_json::Value,
     issue_id: &str,

@@ -190,6 +190,11 @@ pub async fn execute_commit_action(
         Some(project_dir),
         None,
         None,
+        // No supervisor needed for commit
+        String::new(),
+        0,
+        String::new(),
+        String::new(),
     )
     .await?;
 

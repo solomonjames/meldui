@@ -55,6 +55,7 @@ function emptyStepOutput(): StepOutputStream {
     toolUseSummaries: [],
     isCompacting: false,
     contextUsage: undefined,
+    supervisorEvaluating: false,
   };
 }
 
@@ -78,6 +79,11 @@ export function useWorkflowStreaming(
       setStepOutputs((prev) => {
         const current = prev[stepId] ?? emptyStepOutput();
         const updated = { ...current };
+
+        // Clear supervisor evaluating flag when agent content arrives (not supervisor chunks)
+        if (current.supervisorEvaluating && !chunk.chunk_type.startsWith("supervisor_")) {
+          updated.supervisorEvaluating = false;
+        }
 
         switch (chunk.chunk_type) {
           case "text": {
@@ -386,6 +392,16 @@ export function useWorkflowStreaming(
           case "result":
             updated.resultContent = chunk.content;
             break;
+          case "supervisor_evaluating":
+            updated.supervisorEvaluating = true;
+            break;
+          case "supervisor_reply": {
+            const blocks = [...current.contentBlocks];
+            blocks.push({ type: "supervisor_reply", content: chunk.content });
+            updated.contentBlocks = blocks;
+            updated.lastChunkType = "supervisor_reply";
+            break;
+          }
           case "error":
             updated.stderrLines = [...current.stderrLines, `[error] ${chunk.content}`];
             break;

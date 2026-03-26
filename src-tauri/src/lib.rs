@@ -436,9 +436,10 @@ async fn workflow_cleanup_worktree(project_dir: String, issue_id: String) -> Res
 pub fn run() {
     use agent::{
         agent_set_effort, agent_set_fast_mode, agent_set_model, agent_set_thinking,
-        AgentInitMetadata, AgentPermissionRequest, AgentReviewFindingsRequest, NotificationEvent,
-        PrUrlReportedEvent, SectionUpdateEvent, StatusUpdateEvent, SubtaskClosed, SubtaskCreated,
-        SubtaskUpdated,
+        get_auto_advance, set_auto_advance, AgentInitMetadata, AgentPermissionRequest,
+        AgentReviewFindingsRequest, NotificationEvent, PrUrlReportedEvent, SectionUpdateEvent,
+        StatusUpdateEvent, SubtaskClosed, SubtaskCreated, SubtaskUpdated, SupervisorEvaluating,
+        SupervisorReply,
     };
     let builder = tauri_specta::Builder::<tauri::Wry>::new()
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
@@ -452,6 +453,8 @@ pub fn run() {
             agent_set_thinking,
             agent_set_effort,
             agent_set_fast_mode,
+            set_auto_advance,
+            get_auto_advance,
             ticket_list,
             ticket_create,
             ticket_update,
@@ -494,6 +497,8 @@ pub fn run() {
             NotificationEvent,
             StatusUpdateEvent,
             PrUrlReportedEvent,
+            SupervisorEvaluating,
+            SupervisorReply,
             preferences::AppPreferences,
         ]);
 

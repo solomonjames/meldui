@@ -220,6 +220,12 @@ pub async fn execute_step(
         .join(TICKETS_DIR)
         .to_string_lossy()
         .to_string();
+    let step_index = wf
+        .steps
+        .iter()
+        .position(|s| &s.id == current_step_id)
+        .unwrap_or(0) as u32;
+
     let (response_text, new_session_id) = match crate::agent::execute_step(
         &agent_project_dir,
         ticket_id,
@@ -232,6 +238,11 @@ pub async fn execute_step(
         Some(project_dir),
         conversation_writer.as_ref(),
         Some(current_step_id.as_str()),
+        // Supervisor context: full ticket JSON + step info
+        serde_json::to_string(&ticket).unwrap_or_default(),
+        step_index,
+        step.name.clone(),
+        prompt.clone(),
     )
     .await
     {
@@ -382,6 +393,11 @@ pub async fn suggest_workflow(
         None,
         None,
         None,
+        // No supervisor needed for suggest
+        String::new(),
+        0,
+        String::new(),
+        String::new(),
     )
     .await?;
 

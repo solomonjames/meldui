@@ -12,21 +12,7 @@ import { buildSystemPromptAppend } from "./config.js";
 import type { AgentConfig, MeldAgentEvents, MeldAgent } from "./types.js";
 import type { OutboundMessage } from "./protocol.js";
 import { resolve, isAbsolute } from "path";
-import { existsSync } from "fs";
-
-function findClaudeBinary(): string | undefined {
-  const home = process.env.HOME ?? "";
-  const candidates = [
-    `${home}/.claude/bin/claude`,
-    `${home}/.local/bin/claude`,
-    "/opt/homebrew/bin/claude",
-    "/usr/local/bin/claude",
-  ];
-  for (const p of candidates) {
-    try { if (existsSync(p)) return p; } catch {}
-  }
-  return undefined;
-}
+import { findClaudeBinary } from "./utils.js";
 
 export class ClaudeAgent
   extends EventEmitter<MeldAgentEvents>
@@ -37,6 +23,8 @@ export class ClaudeAgent
   private sendFn: (msg: OutboundMessage) => void;
   /** Maps content block index → real tool_use_id for stream events */
   private blockIndexToToolId = new Map<number, string>();
+  public lastConfig: AgentConfig | null = null;
+  public lastSessionId: string | undefined = undefined;
 
   constructor(send: (msg: OutboundMessage) => void) {
     super();
@@ -45,6 +33,7 @@ export class ClaudeAgent
 
   async execute(prompt: string, config: AgentConfig): Promise<void> {
     this.abortController = new AbortController();
+    this.lastConfig = config;
 
     const emitReviewRequest = (ticketId: string, findings: ReviewFinding[], summary: string): Promise<ReviewSubmissionResponse> => {
       const requestId = `review-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -163,6 +152,7 @@ export class ClaudeAgent
             });
           }
           sessionId = resultMsg.session_id ?? sessionId;
+          this.lastSessionId = sessionId;
           continue;
         }
 
@@ -172,6 +162,7 @@ export class ClaudeAgent
           case "system": {
             if (msg.subtype === "init") {
               sessionId = msg.session_id as string;
+              this.lastSessionId = sessionId;
               this.emit("chat-session", { sessionId });
               // Emit init metadata for the frontend
               this.emit("init-metadata", {

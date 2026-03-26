@@ -26,6 +26,8 @@ export const METHOD_NAMES = {
   // Rust → Sidecar (requests)
   query: "query",
   cancel: "cancel",
+  supervisorEvaluate: "supervisorEvaluate",
+  queryFollowUp: "queryFollowUp",
 
   // Sidecar → Rust (notifications)
   message: "message",
@@ -77,6 +79,36 @@ export interface SetEffortParams {
 
 export interface SetFastModeParams {
   enabled: boolean;
+}
+
+// ── Supervisor evaluation (Rust → Sidecar) ──
+
+export interface SupervisorEvaluateParams {
+  workerResponse: string;
+  /** Full ticket serialized as JSON string — all fields, sections, comments, etc. */
+  ticketJson: string;
+  stepIndex: number;
+  stepName: string;
+  stepPrompt: string;
+  systemPrompt?: string;
+  model?: string;
+  projectDir?: string;
+}
+
+export interface SupervisorEvaluateResult {
+  action: "reply" | "advance";
+  message?: string;
+  reasoning?: string;
+}
+
+// ── Follow-up query (Rust → Sidecar) ──
+
+export interface QueryFollowUpParams {
+  message: string;
+}
+
+export interface QueryFollowUpResult {
+  status: "started";
 }
 
 // ── Sidecar → Rust: Notification Params ──

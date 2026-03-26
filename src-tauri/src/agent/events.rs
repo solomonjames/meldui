@@ -89,6 +89,18 @@ pub struct PrUrlReportedEvent {
     pub url: String,
 }
 
+/// Emitted when the supervisor starts evaluating.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
+pub struct SupervisorEvaluating {}
+
+/// Emitted when the supervisor auto-replies on behalf of the user.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
+pub struct SupervisorReply {
+    pub message: String,
+    pub reasoning: Option<String>,
+    pub turn_number: u32,
+}
+
 // ── Pending request types for oneshot channels ──
 
 pub(crate) struct PendingPermission {

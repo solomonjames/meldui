@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import "@/shared/test/mocks/tauri";
 import { ChatView } from "@/features/workflow/components/views/chat-view";
 import { createQueryWrapper } from "@/shared/test/helpers/query-wrapper";
 import type { StepStatus } from "@/shared/types";

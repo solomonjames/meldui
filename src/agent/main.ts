@@ -19,6 +19,7 @@ import { unlinkSync, existsSync } from "fs";
 import { JSONRPCServerAndClient, JSONRPCServer, JSONRPCClient } from "json-rpc-2.0";
 import { ClaudeAgent } from "./claude-agent.js";
 import { parseAgentConfig } from "./config.js";
+import { evaluateSupervisor } from "./supervisor.js";
 import type {
   QueryParams,
   QueryResult,
@@ -30,6 +31,10 @@ import type {
   SetThinkingParams,
   SetEffortParams,
   SetFastModeParams,
+  SupervisorEvaluateParams,
+  SupervisorEvaluateResult,
+  QueryFollowUpParams,
+  QueryFollowUpResult,
 } from "./protocol.js";
 import { METHOD_NAMES } from "./protocol.js";
 import type { PermissionRequestEvent, ReviewRequestEvent, ReviewSubmissionData } from "./types.js";
@@ -351,6 +356,165 @@ async function main(): Promise<void> {
     sidecarConfig.fastMode = params.enabled;
     return { status: "ok" };
   });
+
+  rpc.addMethod(
+    METHOD_NAMES.supervisorEvaluate,
+    async (params: SupervisorEvaluateParams): Promise<SupervisorEvaluateResult> => {
+      return evaluateSupervisor(params);
+    },
+  );
+
+  rpc.addMethod(
+    METHOD_NAMES.queryFollowUp,
+    async (params: QueryFollowUpParams): Promise<QueryFollowUpResult> => {
+      if (!activeAgent) {
+        throw new Error("No active agent to follow up with");
+      }
+
+      const agent = activeAgent;
+
+      // IMPORTANT: Remove all existing event listeners from the agent before re-wiring.
+      // The previous `query` call registered listeners (completed, failed, stopped, etc.)
+      // which would cause duplicate queryComplete notifications if left in place.
+      agent.removeAllListeners();
+
+      // Re-wire completion events for this follow-up turn
+      agent.on("completed", ({ response, sessionId }) => {
+        notify(METHOD_NAMES.queryComplete, { sessionId, response });
+      });
+
+      agent.on("failed", ({ message }) => {
+        notify(METHOD_NAMES.queryError, { message });
+      });
+
+      agent.on("stopped", () => {
+        notify(METHOD_NAMES.queryComplete, { sessionId: "", response: "" });
+      });
+
+      // Re-wire streaming events
+      agent.on("chat-agent-message", ({ content }) => {
+        sendMessage({ type: "text", content });
+      });
+
+      agent.on("tool-use-start", ({ name, id }) => {
+        sendMessage({ type: "tool_start", tool_name: name, tool_id: id });
+      });
+
+      agent.on("tool-input-delta", ({ id, partialJson }) => {
+        sendMessage({ type: "tool_input", tool_id: id, content: partialJson });
+      });
+
+      agent.on("tool-use-end", ({ id }) => {
+        sendMessage({ type: "tool_end", tool_id: id });
+      });
+
+      agent.on("chat-tool-result", ({ toolUseId, content, isError }) => {
+        sendMessage({ type: "tool_result", tool_id: toolUseId, content, is_error: isError });
+      });
+
+      agent.on("thinking-update", ({ text }) => {
+        sendMessage({ type: "thinking", content: text });
+      });
+
+      agent.on("tool-progress", ({ toolUseId, toolName, elapsedSeconds }) => {
+        sendMessage({ type: "tool_progress", tool_use_id: toolUseId, tool_name: toolName, elapsed_seconds: elapsedSeconds });
+      });
+
+      agent.on("tool-use-summary", ({ summary, toolIds }) => {
+        sendMessage({ type: "tool_use_summary", summary, tool_ids: toolIds });
+      });
+
+      agent.on("subagent-start", ({ taskId, toolUseId, description }) => {
+        sendMessage({ type: "subagent_start", task_id: taskId, tool_use_id: toolUseId, description });
+      });
+
+      agent.on("subagent-progress", ({ taskId, summary, lastToolName, usage }) => {
+        sendMessage({ type: "subagent_progress", task_id: taskId, summary, last_tool_name: lastToolName, usage });
+      });
+
+      agent.on("subagent-complete", ({ taskId, status, summary, usage }) => {
+        sendMessage({ type: "subagent_complete", task_id: taskId, status, summary, usage });
+      });
+
+      agent.on("files-persisted", ({ files }) => {
+        sendMessage({ type: "files_changed", files });
+      });
+
+      agent.on("chat-session", ({ sessionId }) => {
+        sendMessage({ type: "session", session_id: sessionId });
+      });
+
+      agent.on("status-change", ({ isCompacting }) => {
+        sendMessage({ type: "compacting", is_compacting: isCompacting });
+      });
+
+      agent.on("permission-request", (event: PermissionRequestEvent) => {
+        const heartbeat = setInterval(() => {
+          sendMessage({ type: "heartbeat" });
+        }, 30_000);
+
+        rpc.request(METHOD_NAMES.toolApproval, {
+          requestId: event.requestId,
+          toolName: event.toolName,
+          input: event.input,
+        } satisfies Record<string, unknown>)
+          .then((result: ToolApprovalResult) => {
+            event.resolve(result.decision);
+          })
+          .catch((err) => {
+            process.stderr.write(`[sidecar] toolApproval request failed: ${err}\n`);
+            event.resolve("deny");
+          })
+          .finally(() => {
+            clearInterval(heartbeat);
+          });
+      });
+
+      agent.on("review-request", (event: ReviewRequestEvent) => {
+        const heartbeat = setInterval(() => {
+          sendMessage({ type: "heartbeat" });
+        }, 30_000);
+
+        rpc.request(METHOD_NAMES.reviewRequest, {
+          requestId: event.requestId,
+          ticketId: event.ticketId,
+          findings: event.findings,
+          summary: event.summary,
+        } satisfies Record<string, unknown>)
+          .then((result: ReviewRequestResult) => {
+            event.resolve(result.submission);
+          })
+          .catch((err) => {
+            process.stderr.write(`[sidecar] reviewRequest failed: ${err}\n`);
+            event.resolve({
+              action: "approve",
+              summary: "Review failed due to communication error",
+              comments: [],
+              finding_actions: [],
+            });
+          })
+          .finally(() => {
+            clearInterval(heartbeat);
+          });
+      });
+
+      // Launch follow-up execution in detached async task
+      void (async () => {
+        try {
+          await agent.execute(params.message, {
+            ...agent.lastConfig!,
+            sessionId: agent.lastSessionId,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[sidecar] Unhandled followUp error: ${message}\n`);
+          notify(METHOD_NAMES.queryError, { message });
+        }
+      })();
+
+      return { status: "started" as const };
+    },
+  );
 
   // Keep process alive while socket is open
   await new Promise<void>((resolve) => {

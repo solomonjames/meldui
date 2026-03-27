@@ -89,7 +89,10 @@ Error changes from `"No active agent session"` to `"No active agent for ticket {
 - `SubtaskCreated/Updated/Closed` — has `parent_id`
 - `NotificationEvent` — stateless, no routing needed
 
-**New event:**
+**Add `issue_id` field to (identical metadata across sidecars, last-write-wins is acceptable):**
+- `AgentInitMetadata` — with multiple sidecars emitting init events, the `issue_id` lets the frontend associate metadata with the correct ticket if needed in the future
+
+**New event (derive `specta::Type` + `tauri_specta::Event`, register in `lib.rs`):**
 - `AgentSessionEnded { issue_id: String }` — emitted when a sidecar exits (completion, timeout, or error). Used by the frontend to start the unload timer.
 
 ### 4. Frontend — useWorkflow Becomes Per-Ticket
@@ -117,6 +120,8 @@ getTicketStatus(ticketId: string): "running" | "idle" | null
 
 **`executeStep`** sets `loadingTickets[issueId] = true` instead of a global boolean. Multiple calls with different `issueId`s can be in-flight simultaneously.
 
+**`setError` callback:** Currently passed as a scalar `(msg: string) => void` into sub-hooks. Changes to `(issueId: string, msg: string) => void` so sub-hooks can key errors by ticket. Sub-hooks extract `issueId` from event payloads and pass it through.
+
 ### 5. Frontend — Streaming for Multiple Agents
 
 **Current:** `useWorkflowStreaming` filters chunks by `activeTicketId` and uses a single `executingStepRef`.
@@ -129,6 +134,7 @@ getTicketStatus(ticketId: string): "running" | "idle" | null
   if (!stepId) return;
   ```
 - `createStreamChannel` no longer needs `activeTicketId` — each chunk self-identifies via `chunk.issue_id`. The channel is shared across all concurrent agents; routing happens inside the `onmessage` callback.
+- On step completion or error, clear the entry: `executingStepsRef.current[issueId] = null` (equivalent to the current `executingStepRef.current = null` at lines 202/206 of use-workflow.ts).
 
 **Memory cleanup:** When `AgentSessionEnded` fires, start a 10-minute timer. On expiry, clear that ticket's entries from `stepOutputs`.
 
@@ -139,7 +145,7 @@ These hooks listen to Tauri events and need to key state by `issue_id`:
 **`useWorkflowPermissions`:**
 - `pendingPermission: PermissionRequest | null` → `pendingPermissions: Record<string, PermissionRequest>`
 - Event handler uses `issue_id` from the updated `AgentPermissionRequest` payload
-- `respondToPermission` gains `issueId` param, calls `commands.agentPermissionRespond(issueId, requestId, allowed)`
+- `respondToPermission(requestId, allowed)` internally resolves the `issueId` by scanning `pendingPermissions` for the matching `requestId`, then calls `commands.agentPermissionRespond(issueId, requestId, allowed)`. The UI doesn't need to pass `issueId` explicitly.
 - Convenience: surface `pendingPermissions[activeTicketId]` as `pendingPermission` for the viewed ticket
 
 **`useWorkflowReview`:**

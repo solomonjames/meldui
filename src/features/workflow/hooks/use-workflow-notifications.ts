@@ -8,13 +8,17 @@ export function useWorkflowNotifications(
   onRefreshTicketRef: React.MutableRefObject<(() => Promise<void>) | null>,
 ) {
   const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
-  const [statusText, setStatusText] = useState<string | null>(null);
-  const [lastUpdatedSectionId, setLastUpdatedSectionId] = useState<string | null>(null);
+  const [statusTextMap, setStatusTextMap] = useState<Record<string, string>>({});
+  const [lastUpdatedSectionMap, setLastUpdatedSectionMap] = useState<Record<string, string>>({});
 
   const sectionReady = useTauriEvent(events.sectionUpdateEvent, (payload) => {
-    // Trigger ticket refresh so the ticket context panel updates live
+    // Store for all tickets, not just active
+    setLastUpdatedSectionMap((prev) => ({
+      ...prev,
+      [payload.ticket_id]: payload.section_id ?? payload.section,
+    }));
+    // Trigger refresh if this is the viewed ticket
     if (activeTicketId && payload.ticket_id === activeTicketId) {
-      setLastUpdatedSectionId(payload.section_id ?? payload.section);
       onRefreshTicketRef.current?.();
     }
   });
@@ -24,12 +28,20 @@ export function useWorkflowNotifications(
   });
 
   const statusReady = useTauriEvent(events.statusUpdateEvent, (payload) => {
-    if (activeTicketId && payload.ticket_id === activeTicketId) {
-      setStatusText(payload.status_text);
-    }
+    // Store for all tickets
+    setStatusTextMap((prev) => ({
+      ...prev,
+      [payload.ticket_id]: payload.status_text,
+    }));
   });
 
   const notificationsReady = sectionReady && notificationReady && statusReady;
+
+  // Convenience: viewed ticket's state
+  const statusText = activeTicketId ? (statusTextMap[activeTicketId] ?? null) : null;
+  const lastUpdatedSectionId = activeTicketId
+    ? (lastUpdatedSectionMap[activeTicketId] ?? null)
+    : null;
 
   const clearNotification = useCallback((index: number) => {
     setNotifications((prev) => prev.filter((_, i) => i !== index));

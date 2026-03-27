@@ -14,6 +14,7 @@ interface AppSidebarProps {
   onOpenFolder: () => void;
   onTicketClick?: (ticket: Ticket) => void;
   activeTicketId?: string | null;
+  runningTicketIds?: Set<string>;
 }
 
 const NAV_ITEMS = [
@@ -30,6 +31,7 @@ export function AppSidebar({
   onOpenFolder,
   onTicketClick,
   activeTicketId,
+  runningTicketIds,
 }: AppSidebarProps) {
   const activeTickets = tickets.filter((t) => t.status === "in_progress");
 
@@ -124,9 +126,16 @@ export function AppSidebar({
                     >
                       {ticket.id.slice(0, 12)}
                     </span>
-                    <span className="inline-flex items-center rounded-full bg-emerald-muted text-emerald text-[10px] px-1.5 py-0.5 font-medium">
-                      in progress
-                    </span>
+                    {runningTicketIds?.has(ticket.id) ? (
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald" />
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-emerald-muted text-emerald text-[10px] px-1.5 py-0.5 font-medium">
+                        in progress
+                      </span>
+                    )}
                   </div>
                   <p className={`text-xs mt-0.5 truncate ${isSelected ? "text-foreground" : ""}`}>
                     {ticket.title}

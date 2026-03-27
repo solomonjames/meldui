@@ -218,6 +218,7 @@ function AppContent() {
           onOpenFolder={openFolderDialog}
           onTicketClick={handleTicketClick}
           activeTicketId={activeTicketId}
+          runningTicketIds={workflow.runningTicketIds}
         />
       }
       statusBar={<StatusBar branch="main" version="v0.1.0" />}

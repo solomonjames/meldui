@@ -936,11 +936,6 @@ pub async fn execute_step(
                 }
                 if let Some(resp) = params.get("response").and_then(|r| r.as_str()) {
                     response_text = resp.to_string();
-                    let _ = on_chunk.send(StreamChunk {
-                        issue_id: issue_id.to_string(),
-                        chunk_type: "result".to_string(),
-                        content: resp.to_string(),
-                    });
                 }
 
                 // Check if supervisor should evaluate.
@@ -1007,6 +1002,14 @@ pub async fn execute_step(
                         }
                     }
                 }
+
+                // Send the result chunk AFTER the supervisor loop so the
+                // ActivityBar stays visible while the agent is still running.
+                let _ = on_chunk.send(StreamChunk {
+                    issue_id: issue_id.to_string(),
+                    chunk_type: "result".to_string(),
+                    content: response_text.clone(),
+                });
 
                 break 'outer Ok(());
             }

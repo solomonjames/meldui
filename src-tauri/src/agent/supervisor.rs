@@ -347,11 +347,10 @@ async fn read_until_query_complete(
                 }
                 if let Some(resp) = params.get("response").and_then(|r| r.as_str()) {
                     response_text = resp.to_string();
-                    let _ = on_chunk.send(StreamChunk {
-                        issue_id: issue_id.to_string(),
-                        chunk_type: "result".to_string(),
-                        content: resp.to_string(),
-                    });
+                    // Don't send a "result" chunk here — this is an intermediate
+                    // queryComplete inside the supervisor loop. Sending it would
+                    // set resultContent on the frontend and hide the ActivityBar
+                    // even though the agent may continue running.
                 }
                 return Ok((response_text, session_id));
             }

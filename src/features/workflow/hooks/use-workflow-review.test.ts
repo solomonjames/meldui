@@ -4,7 +4,7 @@ import { mockInvoke, clearTauriMocks, emitTauriEvent } from "@/shared/test/mocks
 import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
 
 describe("useWorkflowReview", () => {
-  const setError = vi.fn();
+  const setError = vi.fn<(issueId: string, msg: string) => void>();
 
   beforeEach(() => {
     clearTauriMocks();
@@ -262,6 +262,7 @@ describe("useWorkflowReview", () => {
 
     expect(result.current.pendingReviewRequestId).toBeNull();
     expect(setError).toHaveBeenCalledWith(
+      "issue-1",
       "Agent session expired. Click Resume to continue where you left off.",
     );
   });

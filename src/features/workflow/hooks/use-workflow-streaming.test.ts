@@ -10,15 +10,15 @@ describe("useWorkflowStreaming", () => {
   });
 
   it("streamingReady is always true", () => {
-    const executingStepRef = { current: null };
-    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepRef));
+    const executingStepsRef = { current: {} as Record<string, string | null> };
+    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepsRef));
 
     expect(result.current.streamingReady).toBe(true);
   });
 
   it("createStreamChannel processes text chunks", () => {
-    const executingStepRef = { current: "step-1" as string | null };
-    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepRef));
+    const executingStepsRef = { current: { "issue-1": "step-1" } as Record<string, string | null> };
+    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepsRef));
 
     const channel = result.current.createStreamChannel();
 
@@ -38,9 +38,9 @@ describe("useWorkflowStreaming", () => {
     expect(result.current.stepOutputs["step-1"]?.textContent).toBe("Hello World");
   });
 
-  it("ignores chunks for a different issue_id", () => {
-    const executingStepRef = { current: "step-1" as string | null };
-    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepRef));
+  it("ignores chunks for a different issue_id (no entry in executingStepsRef)", () => {
+    const executingStepsRef = { current: { "issue-1": "step-1" } as Record<string, string | null> };
+    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepsRef));
 
     const channel = result.current.createStreamChannel();
 
@@ -55,9 +55,9 @@ describe("useWorkflowStreaming", () => {
     expect(result.current.stepOutputs["step-1"]).toBeUndefined();
   });
 
-  it("ignores chunks when executingStepRef is null", () => {
-    const executingStepRef = { current: null as string | null };
-    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepRef));
+  it("ignores chunks when executingStepsRef has null for the issue", () => {
+    const executingStepsRef = { current: { "issue-1": null } as Record<string, string | null> };
+    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepsRef));
 
     const channel = result.current.createStreamChannel();
 
@@ -73,8 +73,8 @@ describe("useWorkflowStreaming", () => {
   });
 
   it("captures error chunks in stderrLines", () => {
-    const executingStepRef = { current: "step-1" as string | null };
-    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepRef));
+    const executingStepsRef = { current: { "issue-1": "step-1" } as Record<string, string | null> };
+    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepsRef));
 
     const channel = result.current.createStreamChannel();
 
@@ -91,8 +91,8 @@ describe("useWorkflowStreaming", () => {
   });
 
   it("sets resultContent on result chunk", () => {
-    const executingStepRef = { current: "step-1" as string | null };
-    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepRef));
+    const executingStepsRef = { current: { "issue-1": "step-1" } as Record<string, string | null> };
+    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepsRef));
 
     const channel = result.current.createStreamChannel();
 
@@ -108,8 +108,8 @@ describe("useWorkflowStreaming", () => {
   });
 
   it("getStepOutput returns the step's output", () => {
-    const executingStepRef = { current: "step-1" as string | null };
-    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepRef));
+    const executingStepsRef = { current: { "issue-1": "step-1" } as Record<string, string | null> };
+    const { result } = renderHook(() => useWorkflowStreaming("issue-1", executingStepsRef));
 
     const channel = result.current.createStreamChannel();
 
@@ -125,39 +125,31 @@ describe("useWorkflowStreaming", () => {
     expect(result.current.getStepOutput("nonexistent")).toBeUndefined();
   });
 
-  it("new channel from re-render with different ticketId filters correctly", () => {
-    const executingStepRef = { current: "step-1" as string | null };
-    const { result, rerender } = renderHook(
-      ({ ticketId }) => useWorkflowStreaming(ticketId, executingStepRef),
-      { initialProps: { ticketId: "issue-1" as string | null } },
-    );
+  it("routes chunks for multiple issues concurrently to their respective steps", () => {
+    const executingStepsRef = {
+      current: {
+        "issue-1": "step-1",
+        "issue-2": "step-2",
+      } as Record<string, string | null>,
+    };
+    const { result } = renderHook(() => useWorkflowStreaming(null, executingStepsRef));
 
-    // Change ticket ID
-    rerender({ ticketId: "issue-2" });
-
-    // Create a new channel with the updated ticketId
     const channel = result.current.createStreamChannel();
 
-    // Events for issue-1 should now be ignored
     act(() => {
       channel.onmessage!({
         issue_id: "issue-1",
         chunk_type: "text",
-        content: "Old ticket event",
+        content: "From issue 1",
       } as StreamChunk);
-    });
-
-    expect(result.current.stepOutputs["step-1"]).toBeUndefined();
-
-    // Events for issue-2 should be captured
-    act(() => {
       channel.onmessage!({
         issue_id: "issue-2",
         chunk_type: "text",
-        content: "New ticket event",
+        content: "From issue 2",
       } as StreamChunk);
     });
 
-    expect(result.current.stepOutputs["step-1"]?.textContent).toBe("New ticket event");
+    expect(result.current.stepOutputs["step-1"]?.textContent).toBe("From issue 1");
+    expect(result.current.stepOutputs["step-2"]?.textContent).toBe("From issue 2");
   });
 });

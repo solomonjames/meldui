@@ -14,23 +14,23 @@ async claudeStatus() : Promise<ClaudeStatus> {
 async claudeLogin() : Promise<ClaudeStatus> {
     return await TAURI_INVOKE("claude_login");
 },
-async agentPermissionRespond(requestId: string, allowed: boolean) : Promise<null> {
-    return await TAURI_INVOKE("agent_permission_respond", { requestId, allowed });
+async agentPermissionRespond(issueId: string, requestId: string, allowed: boolean) : Promise<null> {
+    return await TAURI_INVOKE("agent_permission_respond", { issueId, requestId, allowed });
 },
-async agentReviewRespond(requestId: string, submission: JsonValue) : Promise<null> {
-    return await TAURI_INVOKE("agent_review_respond", { requestId, submission });
+async agentReviewRespond(issueId: string, requestId: string, submission: JsonValue) : Promise<null> {
+    return await TAURI_INVOKE("agent_review_respond", { issueId, requestId, submission });
 },
-async agentSetModel(model: string) : Promise<null> {
-    return await TAURI_INVOKE("agent_set_model", { model });
+async agentSetModel(issueId: string, model: string) : Promise<null> {
+    return await TAURI_INVOKE("agent_set_model", { issueId, model });
 },
-async agentSetThinking(thinkingType: string, budgetTokens: number | null) : Promise<null> {
-    return await TAURI_INVOKE("agent_set_thinking", { thinkingType, budgetTokens });
+async agentSetThinking(issueId: string, thinkingType: string, budgetTokens: number | null) : Promise<null> {
+    return await TAURI_INVOKE("agent_set_thinking", { issueId, thinkingType, budgetTokens });
 },
-async agentSetEffort(effort: string) : Promise<null> {
-    return await TAURI_INVOKE("agent_set_effort", { effort });
+async agentSetEffort(issueId: string, effort: string) : Promise<null> {
+    return await TAURI_INVOKE("agent_set_effort", { issueId, effort });
 },
-async agentSetFastMode(enabled: boolean) : Promise<null> {
-    return await TAURI_INVOKE("agent_set_fast_mode", { enabled });
+async agentSetFastMode(issueId: string, enabled: boolean) : Promise<null> {
+    return await TAURI_INVOKE("agent_set_fast_mode", { issueId, enabled });
 },
 async setAutoAdvance(projectDir: string, enabled: boolean) : Promise<null> {
     return await TAURI_INVOKE("set_auto_advance", { projectDir, enabled });
@@ -137,6 +137,7 @@ export const events = __makeEvents__<{
 agentInitMetadata: AgentInitMetadata,
 agentPermissionRequest: AgentPermissionRequest,
 agentReviewFindingsRequest: AgentReviewFindingsRequest,
+agentSessionEnded: AgentSessionEnded,
 appPreferences: AppPreferences,
 notificationEvent: NotificationEvent,
 prUrlReportedEvent: PrUrlReportedEvent,
@@ -151,6 +152,7 @@ supervisorReply: SupervisorReply
 agentInitMetadata: "agent-init-metadata",
 agentPermissionRequest: "agent-permission-request",
 agentReviewFindingsRequest: "agent-review-findings-request",
+agentSessionEnded: "agent-session-ended",
 appPreferences: "app-preferences",
 notificationEvent: "notification-event",
 prUrlReportedEvent: "pr-url-reported-event",
@@ -172,15 +174,19 @@ supervisorReply: "supervisor-reply"
 /**
  * Emitted when the agent sidecar initializes and reports its configuration.
  */
-export type AgentInitMetadata = { model: string; available_models: string[]; tools: string[]; slash_commands: string[]; skills: string[]; mcp_servers: McpServerInfo[] }
+export type AgentInitMetadata = { issue_id: string; model: string; available_models: string[]; tools: string[]; slash_commands: string[]; skills: string[]; mcp_servers: McpServerInfo[] }
 /**
  * Permission request received from the sidecar.
  */
-export type AgentPermissionRequest = { request_id: string; tool_name: string; input: JsonValue }
+export type AgentPermissionRequest = { issue_id: string; request_id: string; tool_name: string; input: JsonValue }
 /**
  * Review findings request received from the sidecar.
  */
 export type AgentReviewFindingsRequest = { request_id: string; ticket_id: string; findings: JsonValue; summary: string }
+/**
+ * Emitted when an agent session ends (timeout, error, or success).
+ */
+export type AgentSessionEnded = { issue_id: string }
 export type AppPreferences = { theme?: string; context_indicator_visibility?: string }
 /**
  * Branch information for the commit view.
@@ -245,11 +251,11 @@ export type SubtaskUpdated = { subtask_id: string; parent_id: string }
 /**
  * Emitted when the supervisor starts evaluating.
  */
-export type SupervisorEvaluating = Record<string, never>
+export type SupervisorEvaluating = { issue_id: string }
 /**
  * Emitted when the supervisor auto-replies on behalf of the user.
  */
-export type SupervisorReply = { message: string; reasoning: string | null; turn_number: number }
+export type SupervisorReply = { issue_id: string; message: string; reasoning: string | null; turn_number: number }
 export type SupervisorSettings = { 
 /**
  * Custom supervisor system prompt (replaces guidelines section only).

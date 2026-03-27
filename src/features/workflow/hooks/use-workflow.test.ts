@@ -152,7 +152,7 @@ describe("useWorkflow", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.stepOutputs["step-1"]?.textContent).toBe("Hello World");
+      expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("Hello World");
     });
   });
 
@@ -169,7 +169,7 @@ describe("useWorkflow", () => {
     });
 
     await waitFor(() => {
-      const output = result.current.stepOutputs["step-1"];
+      const output = result.current.stepOutputs["issue-1:step-1"];
       expect(output?.stderrLines).toContainEqual("[error] Something went wrong");
     });
   });
@@ -187,7 +187,7 @@ describe("useWorkflow", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.stepOutputs["step-1"]?.resultContent).toBe("Final result text");
+      expect(result.current.stepOutputs["issue-1:step-1"]?.resultContent).toBe("Final result text");
     });
   });
 
@@ -205,7 +205,7 @@ describe("useWorkflow", () => {
 
     // Small delay to ensure chunk would have been processed
     await new Promise((r) => setTimeout(r, 50));
-    expect(result.current.stepOutputs["step-1"]?.textContent).toBeFalsy();
+    expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBeFalsy();
   });
 
   describe("executingStepsRef output routing", () => {
@@ -223,7 +223,7 @@ describe("useWorkflow", () => {
       });
 
       await waitFor(() => {
-        expect(result.current.stepOutputs["step-1"]?.textContent).toBe("During execution");
+        expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("During execution");
       });
 
       // Resolve executeStep
@@ -244,7 +244,7 @@ describe("useWorkflow", () => {
       });
 
       await new Promise((r) => setTimeout(r, 50));
-      expect(result.current.stepOutputs["step-1"]?.textContent).toBe("During execution");
+      expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("During execution");
     });
   });
 

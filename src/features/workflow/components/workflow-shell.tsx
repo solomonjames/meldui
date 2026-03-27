@@ -327,7 +327,8 @@ export function WorkflowShell({
   const isExecuting = workflowState.step_status === "in_progress" || loading;
   const isFailed =
     typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
-  const currentStepOutput = currentStep ? stepOutputs[currentStep.id] : undefined;
+  const currentStepOutput =
+    currentStep && ticket.id ? stepOutputs[`${ticket.id}:${currentStep.id}`] : undefined;
   const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
   const reviewDisabled = !pendingReviewRequestId;
   const agentCommitMessage = lastResult?.response ?? currentStepOutput?.textContent ?? null;

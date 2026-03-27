@@ -35,7 +35,7 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(result.current.stepOutputs["step-1"]?.textContent).toBe("Hello World");
+    expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("Hello World");
   });
 
   it("ignores chunks for a different issue_id (no entry in executingStepsRef)", () => {
@@ -52,7 +52,7 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(result.current.stepOutputs["step-1"]).toBeUndefined();
+    expect(result.current.stepOutputs["issue-1:step-1"]).toBeUndefined();
   });
 
   it("ignores chunks when executingStepsRef has null for the issue", () => {
@@ -86,7 +86,7 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    const output = result.current.stepOutputs["step-1"];
+    const output = result.current.stepOutputs["issue-1:step-1"];
     expect(output?.stderrLines).toContainEqual("[error] Something went wrong");
   });
 
@@ -104,7 +104,7 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(result.current.stepOutputs["step-1"]?.resultContent).toBe("Final result");
+    expect(result.current.stepOutputs["issue-1:step-1"]?.resultContent).toBe("Final result");
   });
 
   it("getStepOutput returns the step's output", () => {
@@ -121,8 +121,8 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(result.current.getStepOutput("step-1")?.textContent).toBe("Hello");
-    expect(result.current.getStepOutput("nonexistent")).toBeUndefined();
+    expect(result.current.getStepOutput("issue-1", "step-1")?.textContent).toBe("Hello");
+    expect(result.current.getStepOutput("issue-1", "nonexistent")).toBeUndefined();
   });
 
   it("routes chunks for multiple issues concurrently to their respective steps", () => {
@@ -149,7 +149,7 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(result.current.stepOutputs["step-1"]?.textContent).toBe("From issue 1");
-    expect(result.current.stepOutputs["step-2"]?.textContent).toBe("From issue 2");
+    expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("From issue 1");
+    expect(result.current.stepOutputs["issue-2:step-2"]?.textContent).toBe("From issue 2");
   });
 });

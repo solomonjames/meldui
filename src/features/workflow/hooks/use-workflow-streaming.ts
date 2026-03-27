@@ -74,11 +74,12 @@ export function useWorkflowStreaming(
     channel.onmessage = (chunk: StreamChunk) => {
       const stepId = executingStepsRef.current[chunk.issue_id];
       if (!stepId) return;
+      const outputKey = `${chunk.issue_id}:${stepId}`;
       // Track this step's ticket ownership for clearTicketOutputs
-      stepToTicketRef.current[stepId] = chunk.issue_id;
+      stepToTicketRef.current[outputKey] = chunk.issue_id;
 
       setStepOutputs((prev) => {
-        const current = prev[stepId] ?? emptyStepOutput();
+        const current = prev[outputKey] ?? emptyStepOutput();
         const updated = { ...current };
 
         // Clear supervisor evaluating flag when agent content arrives (not supervisor chunks)
@@ -410,7 +411,7 @@ export function useWorkflowStreaming(
             return prev;
         }
 
-        return { ...prev, [stepId]: updated };
+        return { ...prev, [outputKey]: updated };
       });
     };
 
@@ -418,24 +419,24 @@ export function useWorkflowStreaming(
   }, []);
 
   const getStepOutput = useCallback(
-    (stepId: string): StepOutputStream | undefined => {
-      return stepOutputs[stepId];
+    (issueId: string, stepId: string): StepOutputStream | undefined => {
+      return stepOutputs[`${issueId}:${stepId}`];
     },
     [stepOutputs],
   );
 
   const clearTicketOutputs = useCallback((issueId: string) => {
-    const stepsToRemove = Object.entries(stepToTicketRef.current)
+    const keysToRemove = Object.entries(stepToTicketRef.current)
       .filter(([, ticketId]) => ticketId === issueId)
-      .map(([stepId]) => stepId);
+      .map(([key]) => key);
 
-    if (stepsToRemove.length === 0) return;
+    if (keysToRemove.length === 0) return;
 
     setStepOutputs((prev) => {
       const next = { ...prev };
-      for (const stepId of stepsToRemove) {
-        delete next[stepId];
-        delete stepToTicketRef.current[stepId];
+      for (const key of keysToRemove) {
+        delete next[key];
+        delete stepToTicketRef.current[key];
       }
       return next;
     });

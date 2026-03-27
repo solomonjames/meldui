@@ -60,20 +60,17 @@ function emptyStepOutput(): StepOutputStream {
 }
 
 export function useWorkflowStreaming(
-  activeTicketId: string | null,
-  executingStepRef: React.MutableRefObject<string | null>,
+  _activeTicketId: string | null,
+  executingStepsRef: React.MutableRefObject<Record<string, string | null>>,
 ) {
   const [stepOutputs, setStepOutputs] = useState<Record<string, StepOutputStream>>({});
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: executingStepRef is read at call time, not memoization time
+  // biome-ignore lint/correctness/useExhaustiveDependencies: executingStepsRef is read at call time, not memoization time
   const createStreamChannel = useCallback((): Channel<StreamChunk> => {
     const channel = new Channel<StreamChunk>();
 
     channel.onmessage = (chunk: StreamChunk) => {
-      // Only process chunks for the active ticket
-      if (activeTicketId && chunk.issue_id !== activeTicketId) return;
-
-      const stepId = executingStepRef.current;
+      const stepId = executingStepsRef.current[chunk.issue_id];
       if (!stepId) return;
 
       setStepOutputs((prev) => {
@@ -414,7 +411,7 @@ export function useWorkflowStreaming(
     };
 
     return channel;
-  }, [activeTicketId]);
+  }, []);
 
   const getStepOutput = useCallback(
     (stepId: string): StepOutputStream | undefined => {

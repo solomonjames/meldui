@@ -192,7 +192,7 @@ export function TicketDetailsPanel({
 
   useEffect(() => {
     if (!flashingSectionId) return;
-    const timer = setTimeout(() => setFlashingSectionId(null), 1500);
+    const timer = setTimeout(() => setFlashingSectionId(null), 5000);
     return () => clearTimeout(timer);
   }, [flashingSectionId]);
 
@@ -382,7 +382,7 @@ export function TicketDetailsPanel({
         </div>
 
         <TabsContent value="ticket" className="flex-1 overflow-hidden mt-0">
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 h-full">
             <div className="p-4 space-y-5">
               {/* Unified accordion for all panel sections */}
               <Accordion
@@ -547,7 +547,6 @@ export function TicketDetailsPanel({
                   sectionDefs.map((def) => {
                     const typedSection = ticket.sections?.find((s) => s.id === def.id) ?? null;
                     const isHighlighted = flashingSectionId === def.id;
-                    const isPersistentHighlight = lastUpdatedSectionId === def.id;
 
                     return (
                       <AccordionItem
@@ -556,9 +555,7 @@ export function TicketDetailsPanel({
                         ref={(el) => {
                           sectionRefs.current[def.id] = el;
                         }}
-                        className={`transition-all duration-300 ${
-                          isHighlighted ? "ring-2 ring-emerald-400 rounded-lg" : ""
-                        } ${isPersistentHighlight ? "border-l-2 border-emerald-500" : ""}`}
+                        className={`rounded-lg ${isHighlighted ? "animate-section-glow" : ""}`}
                       >
                         <AccordionTrigger className="text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground">
                           {def.label}

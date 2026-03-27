@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TOOL_LABELS } from "@/features/workflow/components/shared/tool-labels";
 import type { StepOutputStream } from "@/shared/types";
 
@@ -6,6 +6,7 @@ interface ActivityBarProps {
   stepOutput?: StepOutputStream;
   isExecuting: boolean;
   isWaitingForUser?: boolean;
+  stepName?: string;
 }
 
 function useElapsedTimer(startTime: number | null): number {
@@ -28,7 +29,18 @@ function useElapsedTimer(startTime: number | null): number {
   return elapsed;
 }
 
-export function ActivityBar({ stepOutput, isExecuting, isWaitingForUser }: ActivityBarProps) {
+function formatTimer(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+export function ActivityBar({
+  stepOutput,
+  isExecuting,
+  isWaitingForUser,
+  stepName,
+}: ActivityBarProps) {
   const activeToolName = stepOutput?.activeToolName ?? null;
   const activeToolStartTime = stepOutput?.activeToolStartTime ?? null;
   const isCompacting = stepOutput?.isCompacting ?? false;
@@ -40,21 +52,31 @@ export function ActivityBar({ stepOutput, isExecuting, isWaitingForUser }: Activ
   const hasRunningSubagent = (stepOutput?.subagentActivities ?? []).some(
     (s) => s.status === "running",
   );
-  const elapsed = useElapsedTimer(activeToolStartTime);
+  const toolElapsed = useElapsedTimer(activeToolStartTime);
+
+  // Track total step elapsed time
+  const stepStartRef = useRef<number | null>(null);
+  if (isExecuting && !stepStartRef.current) {
+    stepStartRef.current = Date.now();
+  } else if (!isExecuting) {
+    stepStartRef.current = null;
+  }
+  const stepElapsed = useElapsedTimer(stepStartRef.current);
 
   const hasResult = stepOutput?.resultContent != null;
   if (!isExecuting || isWaitingForUser || hasResult) {
     return <div className="h-0 opacity-0 transition-all duration-300" />;
   }
 
-  let icon: React.ReactNode;
-  let text: string;
+  // Determine current activity detail
+  let activityIcon: React.ReactNode;
+  let activityText: string;
 
   if (isCompacting) {
-    icon = (
+    activityIcon = (
       <svg
         aria-hidden="true"
-        className="w-3.5 h-3.5 text-amber-500 animate-pulse"
+        className="w-3 h-3 text-amber-500 animate-pulse"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -63,55 +85,80 @@ export function ActivityBar({ stepOutput, isExecuting, isWaitingForUser }: Activ
         <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
       </svg>
     );
-    text = "Compacting context...";
+    activityText = "Compacting context";
   } else if (activeToolName) {
-    icon = (
-      <div className="relative w-3.5 h-3.5 shrink-0">
-        <div className="absolute inset-0 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
+    activityIcon = (
+      <div className="relative w-3 h-3 shrink-0">
+        <div className="absolute inset-0 rounded-full border-[1.5px] border-emerald-500 border-t-transparent animate-spin" />
       </div>
     );
     const label = TOOL_LABELS[activeToolName] ?? activeToolName;
-    text = `${label}... ${elapsed}s`;
+    activityText = `${label}… ${toolElapsed}s`;
   } else if (hasRunningSubagent) {
     const running = stepOutput!.subagentActivities.find((s) => s.status === "running");
-    icon = (
-      <div className="relative w-3.5 h-3.5 shrink-0">
-        <div className="absolute inset-0 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+    activityIcon = (
+      <div className="relative w-3 h-3 shrink-0">
+        <div className="absolute inset-0 rounded-full border-[1.5px] border-blue-500 border-t-transparent animate-spin" />
       </div>
     );
-    text = `Running: ${running?.description ?? "subagent"}...`;
+    activityText = `Running: ${running?.description ?? "subagent"}`;
   } else if (isThinking) {
-    icon = (
+    activityIcon = (
       <div className="flex gap-0.5">
         <span
-          className="w-1 h-1 rounded-full bg-violet-400 animate-bounce"
+          className="w-0.5 h-0.5 rounded-full bg-violet-400 animate-bounce"
           style={{ animationDelay: "0ms" }}
         />
         <span
-          className="w-1 h-1 rounded-full bg-violet-400 animate-bounce"
+          className="w-0.5 h-0.5 rounded-full bg-violet-400 animate-bounce"
           style={{ animationDelay: "150ms" }}
         />
         <span
-          className="w-1 h-1 rounded-full bg-violet-400 animate-bounce"
+          className="w-0.5 h-0.5 rounded-full bg-violet-400 animate-bounce"
           style={{ animationDelay: "300ms" }}
         />
       </div>
     );
-    text = "Thinking...";
+    activityText = "Thinking";
   } else {
-    icon = (
-      <div className="relative w-3.5 h-3.5 shrink-0">
-        <div className="absolute inset-0 rounded-full border-2 border-emerald-200 dark:border-emerald-800" />
-        <div className="absolute inset-0 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
-      </div>
-    );
-    text = "Processing...";
+    activityIcon = null;
+    activityText = "";
   }
 
   return (
-    <div className="sticky bottom-0 z-10 flex items-center gap-2 px-4 py-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm border-t text-xs text-muted-foreground transition-all duration-300">
-      {icon}
-      <span>{text}</span>
+    <div className="flex items-center gap-3 px-4 py-1.5 text-[11px] text-muted-foreground transition-all duration-300">
+      {/* Left: step indicator */}
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="flex gap-0.5">
+          <span
+            className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce"
+            style={{ animationDelay: "0ms" }}
+          />
+          <span
+            className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce"
+            style={{ animationDelay: "150ms" }}
+          />
+          <span
+            className="w-1 h-1 rounded-full bg-emerald-500 animate-bounce"
+            style={{ animationDelay: "300ms" }}
+          />
+        </div>
+        {stepName && <span className="font-medium text-foreground truncate">{stepName}</span>}
+      </div>
+
+      {/* Center: current activity */}
+      {activityText && (
+        <div className="flex items-center gap-1.5 text-muted-foreground/70">
+          <span className="text-muted-foreground/30">·</span>
+          {activityIcon}
+          <span>{activityText}</span>
+        </div>
+      )}
+
+      {/* Right: total step timer */}
+      <span className="ml-auto font-mono tabular-nums text-emerald-500/80">
+        {formatTimer(stepElapsed)}
+      </span>
     </div>
   );
 }

@@ -413,7 +413,6 @@ export function useWorkflow(projectDir: string) {
     respondToPermission,
     notifications: notifications.notifications,
     clearNotification: notifications.clearNotification,
-    statusText: notifications.statusText,
     lastUpdatedSectionId: notifications.lastUpdatedSectionId,
     autoAdvance,
     setAutoAdvance,

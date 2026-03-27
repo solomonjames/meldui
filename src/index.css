@@ -132,3 +132,13 @@
     @apply font-sans;
   }
 }
+
+@keyframes section-glow {
+  0% { background-color: rgb(16 185 129 / 0.12); }
+  70% { background-color: rgb(16 185 129 / 0.06); }
+  100% { background-color: transparent; }
+}
+
+.animate-section-glow {
+  animation: section-glow 5s ease-out forwards;
+}

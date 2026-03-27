@@ -38,7 +38,6 @@ function createMockWorkflow(overrides: Partial<WorkflowContextValue> = {}): Work
     respondToPermission: vi.fn(),
     notifications: [],
     clearNotification: vi.fn(),
-    statusText: null,
     lastUpdatedSectionId: null,
     autoAdvance: false,
     setAutoAdvance: vi.fn(),

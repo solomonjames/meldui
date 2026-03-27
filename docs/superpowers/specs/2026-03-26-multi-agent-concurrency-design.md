@@ -25,17 +25,34 @@ pub struct AgentState {
 **New:**
 ```rust
 pub struct AgentState {
-    pub handles: Mutex<HashMap<String, AgentHandle>>,
+    pub handles: Mutex<HashMap<String, Arc<AgentHandle>>>,
     pub auto_advance: tokio::sync::RwLock<HashMap<String, bool>>,
 }
 ```
 
+**Why `Arc<AgentHandle>`:** The current `_inner` functions (e.g., `agent_set_model_inner`) hold the mutex guard across async socket writes. With a HashMap, this would block all agents during any single config change. By storing `Arc<AgentHandle>`, callers clone the Arc out of the map, drop the map lock, then operate on the handle independently. This eliminates contention between concurrent agents.
+
 **Lifecycle:**
-- `workflow_execute_step(issue_id, ...)` spawns a sidecar, inserts `handles[issue_id] = agent_handle`
-- On completion/timeout/error, removes `handles[issue_id]`
-- The mutex is held only during insert/remove, not during execution — no contention between concurrent agents
+- `workflow_execute_step(issue_id, ...)` spawns a sidecar, inserts `handles[issue_id] = Arc::new(agent_handle)`
+- On completion/timeout/error, removes `handles[issue_id]` and emits `AgentSessionEnded { issue_id }`
+- Calling `execute_step` for an `issue_id` that already has a running agent returns an error — no silent replacement
+- The mutex is held only during insert/remove/lookup, not during execution
+
+**Command access pattern:**
+```rust
+// Clone Arc out, drop map lock, then operate
+let handle = {
+    let guard = state.handles.lock().await;
+    guard.get(&issue_id).cloned()
+        .ok_or_else(|| format!("No active agent for ticket {issue_id}"))?
+};
+// Map lock is dropped here — no contention
+handle.send_raw(&json).await
+```
 
 **Idle timeout:** Already exists per-sidecar in `run_agent_sidecar`. After inactivity, the sidecar is killed and the handle removed. No change needed to timeout logic itself.
+
+**`AgentSessionEnded` emission:** Must be added at all three sidecar exit points in `run_agent_sidecar`: normal completion (after query response), idle timeout, and error/crash. Currently these paths only clear the handle — they also need to emit the event.
 
 ### 2. Tauri Command Signatures
 
@@ -49,6 +66,11 @@ Commands that currently assume a single agent get an `issue_id` parameter:
 | `agent_set_thinking` | `(thinking_type, budget_tokens)` | `(issue_id, thinking_type, budget_tokens)` |
 | `agent_set_effort` | `(effort)` | `(issue_id, effort)` |
 | `agent_set_fast_mode` | `(enabled)` | `(issue_id, enabled)` |
+
+**Commands that already have `issue_id` but need internal changes:**
+- `workflow_execute_step` — changes from `*handle_guard = Some(agent_handle)` to `handles.insert(issue_id, Arc::new(agent_handle))`. Must reject if `issue_id` already has a running agent.
+- `workflow_suggest` — also spawns a sidecar; must participate in the HashMap if it uses `AgentState`
+- `workflow_execute_commit_action` — also spawns a sidecar; same concern
 
 Error changes from `"No active agent session"` to `"No active agent for ticket {issue_id}"`.
 
@@ -101,7 +123,12 @@ getTicketStatus(ticketId: string): "running" | "idle" | null
 
 **Changes:**
 - Remove the `activeTicketId` filter (line 74). Chunks from all agents land in `stepOutputs` keyed by `stepId`.
-- Replace `executingStepRef: string | null` with `executingStepsRef: Record<string, string | null>` keyed by `issue_id`. When a chunk arrives, look up the step via `chunk.issue_id`.
+- Replace `executingStepRef: string | null` with `executingStepsRef: Record<string, string | null>` keyed by `issue_id`. When a chunk arrives, look up the step via `chunk.issue_id`:
+  ```ts
+  const stepId = executingStepsRef.current[chunk.issue_id];
+  if (!stepId) return;
+  ```
+- `createStreamChannel` no longer needs `activeTicketId` — each chunk self-identifies via `chunk.issue_id`. The channel is shared across all concurrent agents; routing happens inside the `onmessage` callback.
 
 **Memory cleanup:** When `AgentSessionEnded` fires, start a 10-minute timer. On expiry, clear that ticket's entries from `stepOutputs`.
 
@@ -118,15 +145,17 @@ These hooks listen to Tauri events and need to key state by `issue_id`:
 **`useWorkflowReview`:**
 - Same pattern — key review state by ticket ID
 - `AgentReviewFindingsRequest` already has `ticket_id`
+- **Must remove the `activeTicketId` filter** that currently drops review events for non-viewed tickets
 
 **`useWorkflowNotifications`:**
-- Already uses `ticket_id` from event payloads — minimal change needed
+- **Must remove the `activeTicketId` filter** from `sectionUpdateEvent` and `statusUpdateEvent` handlers — currently drops events for non-viewed tickets
+- Key notification/status state by `ticket_id` from event payloads
 
 ### 7. Sidebar Status Badges
 
 Add a small running indicator (pulsing dot or spinner) per ticket in the sidebar.
 
-**Data flow:** `useWorkflow` exposes `runningTicketIds` or `getTicketStatus()`. Sidebar checks each ticket and renders the indicator.
+**Data flow:** `useWorkflow` exposes `runningTicketIds: Set<string>` derived from `loadingTickets`. Sidebar checks each ticket and renders the indicator.
 
 **Source of truth:** `loadingTickets` record — any ticket with `loadingTickets[id] === true` has an active agent.
 
@@ -154,6 +183,12 @@ Add a small running indicator (pulsing dot or spinner) per ticket in the sidebar
 - **Conversation history** — already per-ticket
 - **Ticket page UI** — single-ticket view, unchanged
 - **Sidecar binary** — no changes needed
+
+## Notes
+
+- **`auto_advance`** is keyed by `project_dir`, not `issue_id`. Toggling it affects all concurrent agents in the same project. This is the desired behavior — it's a project-level preference.
+- **Per-agent cancellation** is not in scope. `AgentHandle` has a `cancel()` method (currently `#[allow(dead_code)]`). A future change can expose `agent_cancel(issue_id)` to let users stop individual agents.
+- **Resource limits / backpressure** are not in scope. API rate limits are the natural throttle. We revisit if users hit practical issues.
 
 ## Acceptance Criteria
 

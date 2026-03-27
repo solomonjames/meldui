@@ -1,5 +1,5 @@
 import { Channel } from "@tauri-apps/api/core";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type {
   ContentBlock,
   ContextUsage,
@@ -64,6 +64,8 @@ export function useWorkflowStreaming(
   executingStepsRef: React.MutableRefObject<Record<string, string | null>>,
 ) {
   const [stepOutputs, setStepOutputs] = useState<Record<string, StepOutputStream>>({});
+  // Tracks which ticket each step belongs to — used for clearTicketOutputs
+  const stepToTicketRef = useRef<Record<string, string>>({});
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: executingStepsRef is read at call time, not memoization time
   const createStreamChannel = useCallback((): Channel<StreamChunk> => {
@@ -72,6 +74,8 @@ export function useWorkflowStreaming(
     channel.onmessage = (chunk: StreamChunk) => {
       const stepId = executingStepsRef.current[chunk.issue_id];
       if (!stepId) return;
+      // Track this step's ticket ownership for clearTicketOutputs
+      stepToTicketRef.current[stepId] = chunk.issue_id;
 
       setStepOutputs((prev) => {
         const current = prev[stepId] ?? emptyStepOutput();
@@ -420,5 +424,28 @@ export function useWorkflowStreaming(
     [stepOutputs],
   );
 
-  return { stepOutputs, getStepOutput, createStreamChannel, streamingReady: true as const };
+  const clearTicketOutputs = useCallback((issueId: string) => {
+    const stepsToRemove = Object.entries(stepToTicketRef.current)
+      .filter(([, ticketId]) => ticketId === issueId)
+      .map(([stepId]) => stepId);
+
+    if (stepsToRemove.length === 0) return;
+
+    setStepOutputs((prev) => {
+      const next = { ...prev };
+      for (const stepId of stepsToRemove) {
+        delete next[stepId];
+        delete stepToTicketRef.current[stepId];
+      }
+      return next;
+    });
+  }, []);
+
+  return {
+    stepOutputs,
+    getStepOutput,
+    createStreamChannel,
+    streamingReady: true as const,
+    clearTicketOutputs,
+  };
 }

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Play, User } from "lucide-react";
+import { ArrowRight, Check, Play, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -101,6 +101,8 @@ interface ChatViewProps {
   onRespondToPermission?: (requestId: string, allowed: boolean) => void;
   autoAdvance?: boolean;
   onSetAutoAdvance?: (enabled: boolean) => void;
+  workflowComplete?: boolean;
+  onMarkComplete?: () => void;
 }
 
 export function ChatView({
@@ -118,6 +120,8 @@ export function ChatView({
   onRespondToPermission,
   autoAdvance,
   onSetAutoAdvance,
+  workflowComplete,
+  onMarkComplete,
 }: ChatViewProps) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [userMessages, setUserMessages] = useState<
@@ -224,7 +228,7 @@ export function ChatView({
   }, [rawBlocks, userMessages]);
 
   const hasContent = contentBlocks.length > 0 || response.length > 0;
-  const showInput = isInteractive || !isExecuting;
+  const showInput = isInteractive || !isExecuting || workflowComplete;
 
   // Auto-scroll chat panel when new content arrives
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll should fire on content/response changes
@@ -366,6 +370,15 @@ export function ChatView({
               <FilesChanged filesChanged={historyFilesChanged} toolActivities={[]} />
             )}
 
+            {/* Workflow completion divider */}
+            {workflowComplete && (
+              <StepDividerBar
+                label="All Workflow Steps Complete"
+                stepId="workflow-complete"
+                variant="complete"
+              />
+            )}
+
             {/* Empty states */}
             {!isExecuting &&
               !hasContent &&
@@ -391,8 +404,21 @@ export function ChatView({
 
           <div ref={chatScrollRef} />
 
-          {/* Floating "Next Step" button — pinned to bottom-right of chat scroll area */}
-          {stepStatus === "completed" && onAdvanceStep && (
+          {/* Floating action button — "Next Step" during workflow, "Mark Complete" after */}
+          {workflowComplete && onMarkComplete && (
+            <div className="sticky bottom-0 flex justify-end pointer-events-none">
+              <Button
+                size="sm"
+                onClick={onMarkComplete}
+                aria-label="Mark workflow complete"
+                className="bg-emerald-500/50 hover:bg-emerald-600/50 border-emerald-500/50 border-1 shadow-sm shadow-emerald-600/20 text-white backdrop-blur-sm cursor-pointer pointer-events-auto"
+              >
+                <Check className="w-3.5 h-3.5 mr-1.5" />
+                Mark Complete
+              </Button>
+            </div>
+          )}
+          {!workflowComplete && stepStatus === "completed" && onAdvanceStep && (
             <div className="sticky bottom-0 flex justify-end pointer-events-none">
               <Button
                 size="sm"
@@ -445,6 +471,7 @@ export function ChatView({
               (appPreferences?.context_indicator_visibility as "threshold" | "always" | "never") ??
               "threshold"
             }
+            placeholder={workflowComplete ? "Ask a follow-up question..." : undefined}
           />
         ) : null}
       </div>

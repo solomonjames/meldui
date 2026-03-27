@@ -265,7 +265,11 @@ export function useWorkflow(projectDir: string) {
           }
         }
 
-        executingStepsRef.current[issueId] = currentStepsRef.current[issueId] ?? null;
+        const lastCompletedStepId = ticketState?.step_history?.length
+          ? ticketState.step_history[ticketState.step_history.length - 1].step_id
+          : null;
+        executingStepsRef.current[issueId] =
+          currentStepsRef.current[issueId] ?? lastCompletedStepId;
         setWorkflowStates((prev) => {
           const s = prev[issueId];
           return s ? { ...prev, [issueId]: { ...s, step_status: "in_progress" } } : prev;

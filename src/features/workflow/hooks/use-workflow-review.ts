@@ -3,22 +3,36 @@ import { commands, events } from "@/bindings";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 import type { ReviewComment, ReviewFinding, ReviewSubmission } from "@/shared/types";
 
-export function useWorkflowReview(activeTicketId: string | null, setError: (msg: string) => void) {
-  const [reviewFindings, setReviewFindings] = useState<ReviewFinding[]>([]);
-  const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
-  const [pendingReviewRequestId, setPendingReviewRequestId] = useState<string | null>(null);
+export function useWorkflowReview(
+  activeTicketId: string | null,
+  setError: (issueId: string, msg: string) => void,
+) {
+  const [reviewFindingsMap, setReviewFindingsMap] = useState<Record<string, ReviewFinding[]>>({});
+  const [reviewCommentsMap, setReviewCommentsMap] = useState<Record<string, ReviewComment[]>>({});
+  const [pendingReviewMap, setPendingReviewMap] = useState<Record<string, string>>({});
   const [reviewRoundKey, setReviewRoundKey] = useState(0);
 
   const reviewReady = useTauriEvent(events.agentReviewFindingsRequest, (payload) => {
-    if (activeTicketId && payload.ticket_id === activeTicketId) {
-      setReviewFindings(payload.findings as ReviewFinding[]);
-      setPendingReviewRequestId(payload.request_id);
-      setReviewRoundKey((prev) => prev + 1);
-    }
+    // No activeTicketId filter — store for all tickets
+    setReviewFindingsMap((prev) => ({
+      ...prev,
+      [payload.ticket_id]: payload.findings as ReviewFinding[],
+    }));
+    setPendingReviewMap((prev) => ({
+      ...prev,
+      [payload.ticket_id]: payload.request_id,
+    }));
+    setReviewRoundKey((prev) => prev + 1);
   });
+
+  // Convenience: viewed ticket's state
+  const reviewFindings = activeTicketId ? (reviewFindingsMap[activeTicketId] ?? []) : [];
+  const reviewComments = activeTicketId ? (reviewCommentsMap[activeTicketId] ?? []) : [];
+  const pendingReviewRequestId = activeTicketId ? (pendingReviewMap[activeTicketId] ?? null) : null;
 
   const addReviewComment = useCallback(
     (filePath: string, lineNumber: number, content: string, suggestion?: string) => {
+      if (!activeTicketId) return;
       const comment: ReviewComment = {
         id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         file_path: filePath,
@@ -27,45 +41,69 @@ export function useWorkflowReview(activeTicketId: string | null, setError: (msg:
         suggestion,
         resolved: false,
       };
-      setReviewComments((prev) => [...prev, comment]);
+      setReviewCommentsMap((prev) => ({
+        ...prev,
+        [activeTicketId]: [...(prev[activeTicketId] ?? []), comment],
+      }));
     },
-    [],
+    [activeTicketId],
   );
 
-  const deleteReviewComment = useCallback((commentId: string) => {
-    setReviewComments((prev) => prev.filter((c) => c.id !== commentId));
-  }, []);
+  const deleteReviewComment = useCallback(
+    (commentId: string) => {
+      if (!activeTicketId) return;
+      setReviewCommentsMap((prev) => ({
+        ...prev,
+        [activeTicketId]: (prev[activeTicketId] ?? []).filter((c) => c.id !== commentId),
+      }));
+    },
+    [activeTicketId],
+  );
 
   const submitReview = useCallback(
     async (submission: ReviewSubmission) => {
-      if (!pendingReviewRequestId) return;
+      if (!activeTicketId || !pendingReviewMap[activeTicketId]) return;
+      const requestId = pendingReviewMap[activeTicketId];
       try {
         await commands.agentReviewRespond(
-          pendingReviewRequestId,
+          activeTicketId,
+          requestId,
           submission as import("@/bindings").JsonValue,
         );
-        setPendingReviewRequestId(null);
+        setPendingReviewMap((prev) => {
+          const next = { ...prev };
+          delete next[activeTicketId];
+          return next;
+        });
 
-        // Mark existing comments as resolved for next round
         if (submission.action === "request_changes") {
-          setReviewComments((prev) => prev.map((c) => ({ ...c, resolved: true })));
-          setReviewFindings([]);
+          setReviewCommentsMap((prev) => ({
+            ...prev,
+            [activeTicketId]: (prev[activeTicketId] ?? []).map((c) => ({ ...c, resolved: true })),
+          }));
+          setReviewFindingsMap((prev) => ({ ...prev, [activeTicketId]: [] }));
         } else {
-          // Approved — clear all review state
-          setReviewComments([]);
-          setReviewFindings([]);
+          setReviewCommentsMap((prev) => ({ ...prev, [activeTicketId]: [] }));
+          setReviewFindingsMap((prev) => ({ ...prev, [activeTicketId]: [] }));
         }
       } catch (err) {
-        setPendingReviewRequestId(null);
+        setPendingReviewMap((prev) => {
+          const next = { ...prev };
+          delete next[activeTicketId];
+          return next;
+        });
         const errStr = String(err);
         if (errStr.includes("Broken pipe") || errStr.includes("not available")) {
-          setError("Agent session expired. Click Resume to continue where you left off.");
+          setError(
+            activeTicketId,
+            "Agent session expired. Click Resume to continue where you left off.",
+          );
         } else {
-          setError(`Failed to submit review: ${err}`);
+          setError(activeTicketId, `Failed to submit review: ${err}`);
         }
       }
     },
-    [pendingReviewRequestId, setError],
+    [activeTicketId, pendingReviewMap, setError],
   );
 
   return {

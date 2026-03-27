@@ -99,7 +99,10 @@ pub(crate) async fn run_supervisor_loop(
         };
 
         // Notify frontend that supervisor is evaluating
-        let _ = SupervisorEvaluating {}.emit(app_handle);
+        let _ = SupervisorEvaluating {
+            issue_id: issue_id.to_string(),
+        }
+        .emit(app_handle);
         let _ = on_chunk.send(StreamChunk {
             issue_id: issue_id.to_string(),
             chunk_type: "supervisor_evaluating".to_string(),
@@ -157,6 +160,7 @@ pub(crate) async fn run_supervisor_loop(
 
                 // Emit SupervisorReply event to frontend
                 let _ = SupervisorReply {
+                    issue_id: issue_id.to_string(),
                     message: message.clone(),
                     reasoning: result.reasoning,
                     turn_number: turn + 1,

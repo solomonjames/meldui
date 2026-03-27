@@ -66,37 +66,43 @@ async fn claude_login() -> Result<claude::ClaudeStatus, String> {
 #[tauri::command]
 #[specta::specta]
 async fn agent_permission_respond(
+    issue_id: String,
     request_id: String,
     allowed: bool,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
-    let handle_guard = state.handle.lock().await;
-    if let Some(handle) = handle_guard.as_ref() {
-        handle
-            .respond_to_permission(&request_id, allowed)
-            .await
-            .map_err(|e| e.to_string())
-    } else {
-        Err("No active agent session".to_string())
-    }
+    let handle = {
+        let guard = state.handles.lock().await;
+        guard
+            .get(&issue_id)
+            .cloned()
+            .ok_or_else(|| format!("No active agent for ticket {issue_id}"))?
+    };
+    handle
+        .respond_to_permission(&request_id, allowed)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 async fn agent_review_respond(
+    issue_id: String,
     request_id: String,
     submission: serde_json::Value,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
-    let handle_guard = state.handle.lock().await;
-    if let Some(handle) = handle_guard.as_ref() {
-        handle
-            .respond_to_review(&request_id, submission)
-            .await
-            .map_err(|e| e.to_string())
-    } else {
-        Err("No active agent session".to_string())
-    }
+    let handle = {
+        let guard = state.handles.lock().await;
+        guard
+            .get(&issue_id)
+            .cloned()
+            .ok_or_else(|| format!("No active agent for ticket {issue_id}"))?
+    };
+    handle
+        .respond_to_review(&request_id, submission)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ── Ticket commands ──
@@ -343,18 +349,19 @@ async fn workflow_state(
     let wf_state = workflow::get_workflow_state(&project_dir, &issue_id)?;
 
     // Detect stale in-progress steps: if step_status is "in_progress" but no
-    // sidecar is running, the app was closed/restarted mid-step. Reset to
-    // failed so the user sees a Resume button instead of a stuck spinner.
+    // sidecar is running for this ticket, the app was closed/restarted mid-step.
+    // Reset to failed so the user sees a Resume button instead of a stuck spinner.
     if let Some(ref ws) = wf_state {
         if ws.step_status == workflow::StepStatus::InProgress {
-            let handle_guard = state.handle.lock().await;
-            if handle_guard.is_none() {
-                // No active sidecar — step is stale
+            let handle_guard = state.handles.lock().await;
+            if !handle_guard.contains_key(&issue_id) {
+                // No active sidecar for this ticket — step is stale
                 let failed_state = workflow::update_step_status(
                     &project_dir,
                     &issue_id,
                     workflow::StepStatus::Failed(
-                        "Session interrupted — click Resume to continue".to_string(),
+                        "Session interrupted — click Resume to continue where you left off"
+                            .to_string(),
                     ),
                 )?;
                 return Ok(Some(failed_state));
@@ -437,9 +444,9 @@ pub fn run() {
     use agent::{
         agent_set_effort, agent_set_fast_mode, agent_set_model, agent_set_thinking,
         get_auto_advance, set_auto_advance, AgentInitMetadata, AgentPermissionRequest,
-        AgentReviewFindingsRequest, NotificationEvent, PrUrlReportedEvent, SectionUpdateEvent,
-        StatusUpdateEvent, SubtaskClosed, SubtaskCreated, SubtaskUpdated, SupervisorEvaluating,
-        SupervisorReply,
+        AgentReviewFindingsRequest, AgentSessionEnded, NotificationEvent, PrUrlReportedEvent,
+        SectionUpdateEvent, StatusUpdateEvent, SubtaskClosed, SubtaskCreated, SubtaskUpdated,
+        SupervisorEvaluating, SupervisorReply,
     };
     let builder = tauri_specta::Builder::<tauri::Wry>::new()
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
@@ -490,6 +497,7 @@ pub fn run() {
             AgentPermissionRequest,
             AgentReviewFindingsRequest,
             AgentInitMetadata,
+            AgentSessionEnded,
             SubtaskCreated,
             SubtaskUpdated,
             SubtaskClosed,

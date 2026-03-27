@@ -4,41 +4,74 @@ import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 import type { PermissionRequest } from "@/shared/types";
 
 export function useWorkflowPermissions(
-  _activeTicketId: string | null,
-  setError: (msg: string) => void,
+  activeTicketId: string | null,
+  setError: (issueId: string, msg: string) => void,
 ) {
-  const [pendingPermission, setPendingPermission] = useState<PermissionRequest | null>(null);
+  const [pendingPermissions, setPendingPermissions] = useState<
+    Record<string, PermissionRequest & { issueId: string }>
+  >({});
 
   const permissionsReady = useTauriEvent(events.agentPermissionRequest, (payload) => {
-    const { request_id, tool_name, input } = payload;
-    setPendingPermission({
-      request_id,
-      tool_name,
-      input: input as Record<string, unknown>,
-    });
+    const { issue_id, request_id, tool_name, input } = payload;
+    setPendingPermissions((prev) => ({
+      ...prev,
+      [issue_id]: {
+        issueId: issue_id,
+        request_id,
+        tool_name,
+        input: input as Record<string, unknown>,
+      },
+    }));
   });
+
+  // Convenience: the viewed ticket's pending permission
+  const pendingPermission = activeTicketId ? (pendingPermissions[activeTicketId] ?? null) : null;
 
   const respondToPermission = useCallback(
     async (requestId: string, allowed: boolean) => {
+      // Find which issue this request belongs to
+      const entry = Object.values(pendingPermissions).find((p) => p.request_id === requestId);
+      if (!entry) return;
       try {
-        await commands.agentPermissionRespond(requestId, allowed);
-        setPendingPermission(null);
+        await commands.agentPermissionRespond(entry.issueId, requestId, allowed);
+        setPendingPermissions((prev) => {
+          const next = { ...prev };
+          delete next[entry.issueId];
+          return next;
+        });
       } catch (err) {
-        setPendingPermission(null);
+        setPendingPermissions((prev) => {
+          const next = { ...prev };
+          delete next[entry.issueId];
+          return next;
+        });
         const errStr = String(err);
         if (errStr.includes("Broken pipe") || errStr.includes("not available")) {
-          setError("Agent session expired. Click Resume to continue where you left off.");
+          setError(
+            entry.issueId,
+            "Agent session expired. Click Resume to continue where you left off.",
+          );
         } else {
-          setError(`Failed to respond to permission: ${err}`);
+          setError(entry.issueId, `Failed to respond to permission: ${err}`);
         }
       }
     },
-    [setError],
+    [pendingPermissions, setError],
   );
 
-  const clearPending = useCallback(() => {
-    setPendingPermission(null);
+  const clearPending = useCallback((issueId: string) => {
+    setPendingPermissions((prev) => {
+      const next = { ...prev };
+      delete next[issueId];
+      return next;
+    });
   }, []);
 
-  return { pendingPermission, respondToPermission, permissionsReady, clearPending };
+  return {
+    pendingPermission,
+    pendingPermissions,
+    respondToPermission,
+    permissionsReady,
+    clearPending,
+  };
 }

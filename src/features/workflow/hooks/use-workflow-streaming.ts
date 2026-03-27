@@ -1,5 +1,5 @@
 import { Channel } from "@tauri-apps/api/core";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type {
   ContentBlock,
   ContextUsage,
@@ -60,24 +60,26 @@ function emptyStepOutput(): StepOutputStream {
 }
 
 export function useWorkflowStreaming(
-  activeTicketId: string | null,
-  executingStepRef: React.MutableRefObject<string | null>,
+  _activeTicketId: string | null,
+  executingStepsRef: React.MutableRefObject<Record<string, string | null>>,
 ) {
   const [stepOutputs, setStepOutputs] = useState<Record<string, StepOutputStream>>({});
+  // Tracks which ticket each step belongs to — used for clearTicketOutputs
+  const stepToTicketRef = useRef<Record<string, string>>({});
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: executingStepRef is read at call time, not memoization time
+  // biome-ignore lint/correctness/useExhaustiveDependencies: executingStepsRef is read at call time, not memoization time
   const createStreamChannel = useCallback((): Channel<StreamChunk> => {
     const channel = new Channel<StreamChunk>();
 
     channel.onmessage = (chunk: StreamChunk) => {
-      // Only process chunks for the active ticket
-      if (activeTicketId && chunk.issue_id !== activeTicketId) return;
-
-      const stepId = executingStepRef.current;
+      const stepId = executingStepsRef.current[chunk.issue_id];
       if (!stepId) return;
+      const outputKey = `${chunk.issue_id}:${stepId}`;
+      // Track this step's ticket ownership for clearTicketOutputs
+      stepToTicketRef.current[outputKey] = chunk.issue_id;
 
       setStepOutputs((prev) => {
-        const current = prev[stepId] ?? emptyStepOutput();
+        const current = prev[outputKey] ?? emptyStepOutput();
         const updated = { ...current };
 
         // Clear supervisor evaluating flag when agent content arrives (not supervisor chunks)
@@ -409,19 +411,42 @@ export function useWorkflowStreaming(
             return prev;
         }
 
-        return { ...prev, [stepId]: updated };
+        return { ...prev, [outputKey]: updated };
       });
     };
 
     return channel;
-  }, [activeTicketId]);
+  }, []);
 
   const getStepOutput = useCallback(
-    (stepId: string): StepOutputStream | undefined => {
-      return stepOutputs[stepId];
+    (issueId: string, stepId: string): StepOutputStream | undefined => {
+      return stepOutputs[`${issueId}:${stepId}`];
     },
     [stepOutputs],
   );
 
-  return { stepOutputs, getStepOutput, createStreamChannel, streamingReady: true as const };
+  const clearTicketOutputs = useCallback((issueId: string) => {
+    const keysToRemove = Object.entries(stepToTicketRef.current)
+      .filter(([, ticketId]) => ticketId === issueId)
+      .map(([key]) => key);
+
+    if (keysToRemove.length === 0) return;
+
+    setStepOutputs((prev) => {
+      const next = { ...prev };
+      for (const key of keysToRemove) {
+        delete next[key];
+        delete stepToTicketRef.current[key];
+      }
+      return next;
+    });
+  }, []);
+
+  return {
+    stepOutputs,
+    getStepOutput,
+    createStreamChannel,
+    streamingReady: true as const,
+    clearTicketOutputs,
+  };
 }

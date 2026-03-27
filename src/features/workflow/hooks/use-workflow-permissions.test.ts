@@ -4,7 +4,7 @@ import { mockInvoke, clearTauriMocks, emitTauriEvent } from "@/shared/test/mocks
 import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
 
 describe("useWorkflowPermissions", () => {
-  const setError = vi.fn();
+  const setError = vi.fn<(issueId: string, msg: string) => void>();
 
   beforeEach(() => {
     clearTauriMocks();
@@ -26,6 +26,7 @@ describe("useWorkflowPermissions", () => {
 
     act(() => {
       emitTauriEvent("agent-permission-request", {
+        issue_id: "issue-1",
         request_id: "perm-1",
         tool_name: "Bash",
         input: { command: "rm -rf" },
@@ -45,6 +46,7 @@ describe("useWorkflowPermissions", () => {
 
     act(() => {
       emitTauriEvent("agent-permission-request", {
+        issue_id: "issue-1",
         request_id: "perm-1",
         tool_name: "Bash",
         input: {},
@@ -69,6 +71,7 @@ describe("useWorkflowPermissions", () => {
 
     act(() => {
       emitTauriEvent("agent-permission-request", {
+        issue_id: "issue-1",
         request_id: "perm-1",
         tool_name: "Bash",
         input: {},
@@ -87,6 +90,7 @@ describe("useWorkflowPermissions", () => {
 
     expect(result.current.pendingPermission).toBeNull();
     expect(setError).toHaveBeenCalledWith(
+      "issue-1",
       "Agent session expired. Click Resume to continue where you left off.",
     );
   });
@@ -98,6 +102,7 @@ describe("useWorkflowPermissions", () => {
 
     act(() => {
       emitTauriEvent("agent-permission-request", {
+        issue_id: "issue-1",
         request_id: "perm-1",
         tool_name: "Bash",
         input: {},
@@ -107,7 +112,7 @@ describe("useWorkflowPermissions", () => {
     await waitFor(() => expect(result.current.pendingPermission).not.toBeNull());
 
     act(() => {
-      result.current.clearPending();
+      result.current.clearPending("issue-1");
     });
 
     expect(result.current.pendingPermission).toBeNull();

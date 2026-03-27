@@ -185,9 +185,13 @@ impl AgentHandle {
     }
 }
 
-/// Managed state for the active agent handle.
+/// Managed state for all active agent handles, keyed by issue_id.
 pub struct AgentState {
-    pub handle: Mutex<Option<AgentHandle>>,
+    pub handles: Mutex<std::collections::HashMap<String, Arc<AgentHandle>>>,
+    /// Tracks issue_ids that are in the process of starting (between duplicate-check and handle
+    /// insert). Prevents two concurrent `execute_step` calls from both passing the duplicate check
+    /// before either has inserted into `handles` (TOCTOU race).
+    pub(crate) pending_starts: Mutex<std::collections::HashSet<String>>,
     /// Auto-advance enabled per project (keyed by project_dir).
     /// Uses RwLock since reads are frequent (every queryComplete) and writes are rare (toggle).
     pub auto_advance: tokio::sync::RwLock<std::collections::HashMap<String, bool>>,
@@ -196,7 +200,8 @@ pub struct AgentState {
 impl AgentState {
     pub fn new() -> Self {
         Self {
-            handle: Mutex::new(None),
+            handles: Mutex::new(std::collections::HashMap::new()),
+            pending_starts: Mutex::new(std::collections::HashSet::new()),
             auto_advance: tokio::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
@@ -205,17 +210,24 @@ impl AgentState {
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_set_model(
+    issue_id: String,
     model: String,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
-    agent_set_model_inner(model, &state)
+    agent_set_model_inner(&issue_id, model, &state)
         .await
         .map_err(|e| e.to_string())
 }
 
-async fn agent_set_model_inner(model: String, state: &AgentState) -> Result<(), AgentError> {
-    let handle_guard = state.handle.lock().await;
-    let handle = handle_guard.as_ref().ok_or(AgentError::NotRunning)?;
+async fn agent_set_model_inner(
+    issue_id: &str,
+    model: String,
+    state: &AgentState,
+) -> Result<(), AgentError> {
+    let handle = {
+        let guard = state.handles.lock().await;
+        guard.get(issue_id).cloned().ok_or(AgentError::NotRunning)?
+    };
     let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
     let request = serde_json::json!({
         "jsonrpc": "2.0",
@@ -230,22 +242,26 @@ async fn agent_set_model_inner(model: String, state: &AgentState) -> Result<(), 
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_set_thinking(
+    issue_id: String,
     thinking_type: String,
     budget_tokens: Option<u32>,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
-    agent_set_thinking_inner(thinking_type, budget_tokens, &state)
+    agent_set_thinking_inner(&issue_id, thinking_type, budget_tokens, &state)
         .await
         .map_err(|e| e.to_string())
 }
 
 async fn agent_set_thinking_inner(
+    issue_id: &str,
     thinking_type: String,
     budget_tokens: Option<u32>,
     state: &AgentState,
 ) -> Result<(), AgentError> {
-    let handle_guard = state.handle.lock().await;
-    let handle = handle_guard.as_ref().ok_or(AgentError::NotRunning)?;
+    let handle = {
+        let guard = state.handles.lock().await;
+        guard.get(issue_id).cloned().ok_or(AgentError::NotRunning)?
+    };
     let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
     let mut params = serde_json::json!({ "type": thinking_type });
     if let Some(tokens) = budget_tokens {
@@ -264,17 +280,24 @@ async fn agent_set_thinking_inner(
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_set_effort(
+    issue_id: String,
     effort: String,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
-    agent_set_effort_inner(effort, &state)
+    agent_set_effort_inner(&issue_id, effort, &state)
         .await
         .map_err(|e| e.to_string())
 }
 
-async fn agent_set_effort_inner(effort: String, state: &AgentState) -> Result<(), AgentError> {
-    let handle_guard = state.handle.lock().await;
-    let handle = handle_guard.as_ref().ok_or(AgentError::NotRunning)?;
+async fn agent_set_effort_inner(
+    issue_id: &str,
+    effort: String,
+    state: &AgentState,
+) -> Result<(), AgentError> {
+    let handle = {
+        let guard = state.handles.lock().await;
+        guard.get(issue_id).cloned().ok_or(AgentError::NotRunning)?
+    };
     let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
     let request = serde_json::json!({
         "jsonrpc": "2.0",
@@ -289,17 +312,24 @@ async fn agent_set_effort_inner(effort: String, state: &AgentState) -> Result<()
 #[tauri::command]
 #[specta::specta]
 pub async fn agent_set_fast_mode(
+    issue_id: String,
     enabled: bool,
     state: tauri::State<'_, AgentState>,
 ) -> Result<(), String> {
-    agent_set_fast_mode_inner(enabled, &state)
+    agent_set_fast_mode_inner(&issue_id, enabled, &state)
         .await
         .map_err(|e| e.to_string())
 }
 
-async fn agent_set_fast_mode_inner(enabled: bool, state: &AgentState) -> Result<(), AgentError> {
-    let handle_guard = state.handle.lock().await;
-    let handle = handle_guard.as_ref().ok_or(AgentError::NotRunning)?;
+async fn agent_set_fast_mode_inner(
+    issue_id: &str,
+    enabled: bool,
+    state: &AgentState,
+) -> Result<(), AgentError> {
+    let handle = {
+        let guard = state.handles.lock().await;
+        guard.get(issue_id).cloned().ok_or(AgentError::NotRunning)?
+    };
     let id = handle.next_id.fetch_add(1, Ordering::Relaxed);
     let request = serde_json::json!({
         "jsonrpc": "2.0",
@@ -501,7 +531,39 @@ pub async fn execute_step(
     step_name: String,
     step_prompt_for_supervisor: String,
 ) -> Result<(String, String), String> {
-    let agent_bin = find_agent_binary().ok_or_else(|| AgentError::BinaryNotFound.to_string())?;
+    // Reject duplicate concurrent runs for the same ticket.
+    // Both locks are acquired together under `handles` to make the check-then-insert atomic:
+    // pending_starts guards the window between this check and the handle insert below.
+    if let Some(state) = app_handle.try_state::<AgentState>() {
+        let guard = state.handles.lock().await;
+        if guard.contains_key(issue_id) {
+            return Err(format!("Agent already running for ticket {issue_id}"));
+        }
+        let mut pending = state.pending_starts.lock().await;
+        if !pending.insert(issue_id.to_string()) {
+            return Err(format!("Agent already starting for ticket {issue_id}"));
+        }
+    }
+
+    // Helper: remove issue_id from pending_starts on any early exit before handle is inserted.
+    // Called explicitly on every error path between the pending_starts.insert above and the
+    // handle_guard.insert below. Once the handle is inserted, removal from pending_starts happens
+    // inside that same lock scope.
+    let remove_pending = |app: &tauri::AppHandle, id: &str| {
+        if let Some(s) = app.try_state::<AgentState>() {
+            // Best-effort sync removal — we are in an async context but only need fire-and-forget
+            // cleanup. Use try_lock to avoid blocking; if the lock is contended the entry will be
+            // cleaned up when the next acquire succeeds (worst case: one extra rejected call).
+            if let Ok(mut pending) = s.pending_starts.try_lock() {
+                pending.remove(id);
+            }
+        }
+    };
+
+    let agent_bin = find_agent_binary().ok_or_else(|| {
+        remove_pending(app_handle, issue_id);
+        AgentError::BinaryNotFound.to_string()
+    })?;
 
     log::info!("agent: using binary at {agent_bin:?}");
 
@@ -580,16 +642,17 @@ pub async fn execute_step(
         cmd.env("MOCK_FIXTURE_DIR", fixture_dir);
     }
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| AgentError::SpawnFailed(e).to_string())?;
+    let mut child = cmd.spawn().map_err(|e| {
+        remove_pending(app_handle, issue_id);
+        AgentError::SpawnFailed(e).to_string()
+    })?;
 
     // ── Read SOCKET_PATH from stdout ──
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| AgentError::StdioCaptureError("stdout").to_string())?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        remove_pending(app_handle, issue_id);
+        AgentError::StdioCaptureError("stdout").to_string()
+    })?;
 
     let mut stdout_reader = BufReader::new(stdout);
     let mut first_line = String::new();
@@ -604,14 +667,17 @@ pub async fn execute_step(
         match read_result {
             Err(_) => {
                 let _ = child.kill().await;
+                remove_pending(app_handle, issue_id);
                 return Err(AgentError::SocketPathTimeout.to_string());
             }
             Ok(Err(e)) => {
                 let _ = child.kill().await;
+                remove_pending(app_handle, issue_id);
                 return Err(AgentError::StdoutReadFailed(e).to_string());
             }
             Ok(Ok(0)) => {
                 let _ = child.kill().await;
+                remove_pending(app_handle, issue_id);
                 return Err(AgentError::SocketPathEof.to_string());
             }
             Ok(Ok(_)) => {
@@ -620,6 +686,7 @@ pub async fn execute_step(
                     PathBuf::from(path)
                 } else {
                     let _ = child.kill().await;
+                    remove_pending(app_handle, issue_id);
                     let preview = &trimmed[..trimmed.len().min(200)];
                     return Err(AgentError::SocketPathInvalid(preview.to_string()).to_string());
                 }
@@ -631,9 +698,10 @@ pub async fn execute_step(
 
     // ── Connect to Unix socket ──
 
-    let stream = UnixStream::connect(&socket_path)
-        .await
-        .map_err(|e| AgentError::SocketConnectFailed(e).to_string())?;
+    let stream = UnixStream::connect(&socket_path).await.map_err(|e| {
+        remove_pending(app_handle, issue_id);
+        AgentError::SocketConnectFailed(e).to_string()
+    })?;
 
     let (read_half, write_half) = tokio::io::split(stream);
     let write_half = Arc::new(Mutex::new(write_half));
@@ -651,10 +719,13 @@ pub async fn execute_step(
         next_id: next_id.clone(),
     };
 
-    // Store the handle in Tauri managed state
+    // Store the handle in Tauri managed state, keyed by issue_id.
+    // Also remove from pending_starts here so the transition from "starting" to "running"
+    // is visible atomically to any concurrent call that acquires handles first.
     if let Some(state) = app_handle.try_state::<AgentState>() {
-        let mut handle_guard = state.handle.lock().await;
-        *handle_guard = Some(agent_handle);
+        let mut handle_guard = state.handles.lock().await;
+        handle_guard.insert(issue_id.to_string(), Arc::new(agent_handle));
+        state.pending_starts.lock().await.remove(issue_id);
     }
 
     // ── Send `query` JSON-RPC request ──
@@ -978,6 +1049,7 @@ pub async fn execute_step(
 
                     // Emit Tauri event for frontend
                     let _ = AgentPermissionRequest {
+                        issue_id: issue_id.to_string(),
                         request_id,
                         tool_name,
                         input,
@@ -1041,9 +1113,13 @@ pub async fn execute_step(
         });
         let _ = child.kill().await;
         if let Some(state) = app_handle.try_state::<AgentState>() {
-            let mut handle_guard = state.handle.lock().await;
-            *handle_guard = None;
+            let mut handle_guard = state.handles.lock().await;
+            handle_guard.remove(issue_id);
         }
+        let _ = AgentSessionEnded {
+            issue_id: issue_id.to_string(),
+        }
+        .emit(app_handle);
         // Clean up socket file
         let _ = std::fs::remove_file(&socket_path);
         return Err(timeout_msg);
@@ -1051,6 +1127,14 @@ pub async fn execute_step(
 
     if let Err(e) = read_result {
         let _ = child.kill().await;
+        if let Some(state) = app_handle.try_state::<AgentState>() {
+            let mut handle_guard = state.handles.lock().await;
+            handle_guard.remove(issue_id);
+        }
+        let _ = AgentSessionEnded {
+            issue_id: issue_id.to_string(),
+        }
+        .emit(app_handle);
         let _ = std::fs::remove_file(&socket_path);
         return Err(e);
     }
@@ -1060,9 +1144,13 @@ pub async fn execute_step(
     // our write half before waiting for the child to exit — otherwise we
     // deadlock (Rust waits for child exit, child waits for socket close).
     if let Some(state) = app_handle.try_state::<AgentState>() {
-        let mut handle_guard = state.handle.lock().await;
-        *handle_guard = None;
+        let mut handle_guard = state.handles.lock().await;
+        handle_guard.remove(issue_id);
     }
+    let _ = AgentSessionEnded {
+        issue_id: issue_id.to_string(),
+    }
+    .emit(app_handle);
     // Drop our local Arc to the write half — combined with the AgentHandle
     // drop above, this fully closes the socket write end.
     drop(write_half);
@@ -1520,6 +1608,7 @@ pub(crate) fn dispatch_message_to_tauri(
                 .unwrap_or_default();
 
             let _ = AgentInitMetadata {
+                issue_id: issue_id.to_string(),
                 model: params
                     .get("model")
                     .and_then(|m| m.as_str())

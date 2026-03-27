@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Permission request received from the sidecar.
 #[derive(Clone, Debug, Deserialize, Serialize, specta::Type, tauri_specta::Event)]
 pub struct AgentPermissionRequest {
+    pub issue_id: String,
     pub request_id: String,
     pub tool_name: String,
     pub input: serde_json::Value,
@@ -22,6 +23,7 @@ pub struct AgentReviewFindingsRequest {
 /// Emitted when the agent sidecar initializes and reports its configuration.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct AgentInitMetadata {
+    pub issue_id: String,
     pub model: String,
     pub available_models: Vec<String>,
     pub tools: Vec<String>,
@@ -91,14 +93,23 @@ pub struct PrUrlReportedEvent {
 
 /// Emitted when the supervisor starts evaluating.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
-pub struct SupervisorEvaluating {}
+pub struct SupervisorEvaluating {
+    pub issue_id: String,
+}
 
 /// Emitted when the supervisor auto-replies on behalf of the user.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
 pub struct SupervisorReply {
+    pub issue_id: String,
     pub message: String,
     pub reasoning: Option<String>,
     pub turn_number: u32,
+}
+
+/// Emitted when an agent session ends (timeout, error, or success).
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type, tauri_specta::Event)]
+pub struct AgentSessionEnded {
+    pub issue_id: String,
 }
 
 // ── Pending request types for oneshot channels ──

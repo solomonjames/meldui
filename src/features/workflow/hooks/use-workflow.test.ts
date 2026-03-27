@@ -73,6 +73,10 @@ describe("useWorkflow", () => {
     const { result } = renderHook(() => useWorkflow("/test/project"), { wrapper });
     await waitFor(() => expect(result.current.listenersReady).toBe(true));
 
+    act(() => {
+      result.current.setActiveTicketId("issue-1");
+    });
+
     await act(async () => {
       await result.current.executeStep("issue-1");
     });
@@ -82,7 +86,7 @@ describe("useWorkflow", () => {
   });
 
   // Helper: sets up hook with active ticket, current step, and a blocking
-  // executeStep call so that executingStepRef is set for streaming output routing.
+  // executeStep call so that executingStepsRef is set for streaming output routing.
   // Returns the captured channel so tests can send chunks through it.
   async function setupWithActiveExecution() {
     let capturedChannel: MockChannel<StreamChunk> | null = null;
@@ -119,7 +123,7 @@ describe("useWorkflow", () => {
       await result.current.getWorkflowState("issue-1");
     });
 
-    // Start a blocking executeStep to set executingStepRef
+    // Start a blocking executeStep to set executingStepsRef
     act(() => {
       result.current.executeStep("issue-1");
     });
@@ -148,7 +152,7 @@ describe("useWorkflow", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.stepOutputs["step-1"]?.textContent).toBe("Hello World");
+      expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("Hello World");
     });
   });
 
@@ -165,7 +169,7 @@ describe("useWorkflow", () => {
     });
 
     await waitFor(() => {
-      const output = result.current.stepOutputs["step-1"];
+      const output = result.current.stepOutputs["issue-1:step-1"];
       expect(output?.stderrLines).toContainEqual("[error] Something went wrong");
     });
   });
@@ -183,7 +187,7 @@ describe("useWorkflow", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.stepOutputs["step-1"]?.resultContent).toBe("Final result text");
+      expect(result.current.stepOutputs["issue-1:step-1"]?.resultContent).toBe("Final result text");
     });
   });
 
@@ -201,10 +205,10 @@ describe("useWorkflow", () => {
 
     // Small delay to ensure chunk would have been processed
     await new Promise((r) => setTimeout(r, 50));
-    expect(result.current.stepOutputs["step-1"]?.textContent).toBeFalsy();
+    expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBeFalsy();
   });
 
-  describe("executingStepRef output routing", () => {
+  describe("executingStepsRef output routing", () => {
     it("streaming output only routes to step when executeStep is active", async () => {
       const { result, resolveExecute, getCapturedChannel } = await setupWithActiveExecution();
       const channel = getCapturedChannel();
@@ -219,7 +223,7 @@ describe("useWorkflow", () => {
       });
 
       await waitFor(() => {
-        expect(result.current.stepOutputs["step-1"]?.textContent).toBe("During execution");
+        expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("During execution");
       });
 
       // Resolve executeStep
@@ -229,7 +233,7 @@ describe("useWorkflow", () => {
         await new Promise((r) => setTimeout(r, 10));
       });
 
-      // After executeStep completes, executingStepRef is null.
+      // After executeStep completes, executingStepsRef entry is null.
       // New streaming events through the same channel should be dropped (no active execution).
       act(() => {
         channel.send({
@@ -240,7 +244,7 @@ describe("useWorkflow", () => {
       });
 
       await new Promise((r) => setTimeout(r, 50));
-      expect(result.current.stepOutputs["step-1"]?.textContent).toBe("During execution");
+      expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("During execution");
     });
   });
 
@@ -270,6 +274,7 @@ describe("useWorkflow", () => {
       // Simulate pending permission being set (as if sidecar requested it before dying)
       act(() => {
         emitTauriEvent("agent-permission-request", {
+          issue_id: "issue-1",
           request_id: "perm-1",
           tool_name: "Bash",
           input: { command: "rm -rf" },
@@ -304,6 +309,7 @@ describe("useWorkflow", () => {
       // Simulate permission request
       act(() => {
         emitTauriEvent("agent-permission-request", {
+          issue_id: "issue-1",
           request_id: "perm-1",
           tool_name: "Bash",
           input: { command: "rm -rf" },

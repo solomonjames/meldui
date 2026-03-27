@@ -124,7 +124,9 @@ export function ChatView({
     Array<{ id: string; content: string; insertAt: number }>
   >([]);
   const [supervisorActive, setSupervisorActive] = useState(false);
-  const { config, setModel, setThinking, setEffort, setFastMode } = useAgentConfig();
+  const { config, setModel, setThinking, setEffort, setFastMode } = useAgentConfig(
+    ticketId ?? null,
+  );
   const { data: appPreferences } = useQuery({
     queryKey: ["app", "preferences"],
     queryFn: () => commands.getAppPreferences(),

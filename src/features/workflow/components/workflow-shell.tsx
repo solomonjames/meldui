@@ -288,46 +288,20 @@ export function WorkflowShell({
 
   // Derive completed step IDs from step history
   const completedStepIds = (workflowState?.step_history ?? []).map((r) => r.step_id);
+  const workflowComplete = !currentStep && completedStepIds.length > 0;
 
-  // Workflow completed
-  if (!currentStep) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex justify-center px-4 py-2.5">
-          <div className="shadow-[0_0_20px_rgba(16,185,129,0.12)] dark:shadow-[0_0_20px_rgba(16,185,129,0.15)] rounded-full">
-            <CompactWorkflowIndicator
-              steps={workflowDef.steps}
-              currentStepId={null}
-              completedStepIds={completedStepIds}
-              autoAdvance={autoAdvance}
-              onAutoAdvanceChange={setAutoAdvance}
-            />
-          </div>
-        </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-3">
-            <h2 className="text-xl font-semibold">Workflow Complete</h2>
-            <p className="text-muted-foreground">
-              All steps have been completed for {ticket.title}
-            </p>
-            <button
-              type="button"
-              onClick={onNavigateToBacklog}
-              className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-medium"
-            >
-              Back to Board
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const isExecuting = workflowState.step_status === "in_progress" || loading;
+  const isExecuting = workflowComplete
+    ? loading
+    : workflowState.step_status === "in_progress" || loading;
   const isFailed =
-    typeof workflowState.step_status === "object" && "failed" in workflowState.step_status;
-  const currentStepOutput =
-    currentStep && ticket.id ? stepOutputs[`${ticket.id}:${currentStep.id}`] : undefined;
+    !workflowComplete &&
+    typeof workflowState.step_status === "object" &&
+    "failed" in workflowState.step_status;
+  const lastStepId = workflowComplete
+    ? completedStepIds[completedStepIds.length - 1]
+    : currentStep?.id;
+  const stepOutputKey = lastStepId && ticket.id ? `${ticket.id}:${lastStepId}` : undefined;
+  const currentStepOutput = stepOutputKey ? stepOutputs[stepOutputKey] : undefined;
   const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
   const reviewDisabled = !pendingReviewRequestId;
   const agentCommitMessage = lastResult?.response ?? currentStepOutput?.textContent ?? null;
@@ -411,18 +385,26 @@ export function WorkflowShell({
           </div>
           <div className="flex flex-1 flex-col overflow-hidden">
             <ChatView
-              stepName={currentStep.name}
+              stepName={currentStep?.name ?? "Complete"}
               response={responseText}
               isExecuting={isExecuting}
-              stepStatus={workflowState.step_status}
+              stepStatus={workflowComplete ? "completed" : workflowState.step_status}
               stepOutput={currentStepOutput}
               onExecute={handleExecute}
-              onAdvanceStep={() => advanceStep(ticket.id).then(() => onRefreshTicket())}
+              onAdvanceStep={
+                !workflowComplete
+                  ? () => advanceStep(ticket.id).then(() => onRefreshTicket())
+                  : undefined
+              }
               projectDir={projectDir}
               ticketId={ticket.id}
-              isInteractive={currentStep.view === "chat" || currentStep.view === "review"}
+              isInteractive={
+                workflowComplete || currentStep?.view === "chat" || currentStep?.view === "review"
+              }
               pendingPermission={pendingPermission}
               onRespondToPermission={respondToPermission}
+              workflowComplete={workflowComplete}
+              onMarkComplete={onNavigateToBacklog}
             />
           </div>
         </TabsContent>

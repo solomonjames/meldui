@@ -1,4 +1,4 @@
-import { Check, Circle, CircleDot } from "lucide-react";
+import { Check, CheckCheck, Circle, CircleDot } from "lucide-react";
 import type { StepRecord, WorkflowStep } from "@/shared/types";
 
 interface WorkflowTabProps {
@@ -67,6 +67,20 @@ export function WorkflowTab({ steps, currentStepId, stepHistory, onStepClick }: 
           </button>
         );
       })}
+      {!currentStepId && stepHistory.length === steps.length && steps.length > 0 && (
+        <button
+          type="button"
+          onClick={() => onStepClick("workflow-complete")}
+          className="flex items-start gap-2 rounded-md px-3 py-2 text-left text-emerald-400 cursor-pointer hover:bg-muted/50"
+        >
+          <div className="mt-0.5 shrink-0">
+            <CheckCheck className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">Workflow Complete</div>
+          </div>
+        </button>
+      )}
     </div>
   );
 }

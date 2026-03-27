@@ -98,20 +98,32 @@ pub async fn execute_step(
     let state =
         read_workflow_state(&ticket.metadata).ok_or("No workflow assigned to this ticket")?;
 
-    let current_step_id = state
-        .current_step_id
-        .as_ref()
-        .ok_or("Workflow already completed")?;
-
-    // 2. Load workflow definition to get step details
-    let wf = get_workflow(project_dir, &state.workflow_id)
-        .ok_or_else(|| format!("Workflow '{}' not found", state.workflow_id))?;
-
-    let step = wf
-        .steps
-        .iter()
-        .find(|s| &s.id == current_step_id)
-        .ok_or_else(|| format!("Step '{current_step_id}' not found in workflow"))?;
+    // For completed workflows, allow follow-up messages using the last step's context
+    let (current_step_id, step) = if let Some(ref step_id) = state.current_step_id {
+        let wf = get_workflow(project_dir, &state.workflow_id)
+            .ok_or_else(|| format!("Workflow '{}' not found", state.workflow_id))?;
+        let s = wf
+            .steps
+            .iter()
+            .find(|s| &s.id == step_id)
+            .ok_or_else(|| format!("Step '{step_id}' not found in workflow"))?
+            .clone();
+        (step_id.clone(), s)
+    } else {
+        // Workflow completed — require a user message for follow-up
+        if user_message.is_none() {
+            return Err("Workflow already completed".to_string());
+        }
+        let wf = get_workflow(project_dir, &state.workflow_id)
+            .ok_or_else(|| format!("Workflow '{}' not found", state.workflow_id))?;
+        let last_step = wf.steps.last().ok_or("Workflow has no steps")?.clone();
+        let last_step_id = state
+            .step_history
+            .last()
+            .map(|r| r.step_id.clone())
+            .unwrap_or_else(|| last_step.id.clone());
+        (last_step_id, last_step)
+    };
 
     // 3. Create worktree if this is the first step (no worktree_path in metadata yet)
     let has_worktree = ticket
@@ -142,23 +154,27 @@ pub async fn execute_step(
     let agent_project_dir = effective_project_dir(project_dir, ticket_id);
 
     // 4. Set status to InProgress
-    update_step_status(project_dir, ticket_id, StepStatus::InProgress)?;
+    // Skip status update for completed workflow follow-ups (no current step to update)
+    if state.current_step_id.is_some() {
+        update_step_status(project_dir, ticket_id, StepStatus::InProgress)?;
+    }
 
     // 5. Build prompt
     // If user sent a follow-up message on a completed step, use that as the prompt.
     // Otherwise, build the normal step prompt and optionally append the user message.
-    let is_follow_up = state
-        .step_history
-        .iter()
-        .any(|r| r.step_id == *current_step_id);
+    let is_follow_up = state.current_step_id.is_none()
+        || state
+            .step_history
+            .iter()
+            .any(|r| r.step_id == current_step_id);
     let prompt = if is_follow_up {
         if let Some(ref msg) = user_message {
             msg.clone()
         } else {
-            build_step_prompt(step, &ticket, &state)?
+            build_step_prompt(&step, &ticket, &state)?
         }
     } else {
-        let mut base_prompt = build_step_prompt(step, &ticket, &state)?;
+        let mut base_prompt = build_step_prompt(&step, &ticket, &state)?;
         if let Some(ref msg) = user_message {
             base_prompt.push_str("\n\n## User Message\n\n");
             base_prompt.push_str(msg);
@@ -187,7 +203,7 @@ pub async fn execute_step(
             Ok(mut w) => {
                 // Write step_start marker
                 if let Err(e) = w.write_step_marker(
-                    current_step_id,
+                    &current_step_id,
                     &crate::conversation::StepMarker::Start {
                         label: step.name.clone(),
                     },
@@ -207,7 +223,7 @@ pub async fn execute_step(
         if let Some(ref writer) = conversation_writer {
             let mut w = writer.lock().await;
             let params = serde_json::json!({ "content": msg });
-            if let Err(e) = w.append_raw("user_message", &params, current_step_id) {
+            if let Err(e) = w.append_raw("user_message", &params, &current_step_id) {
                 log::error!("conversation: failed to write user_message: {e}");
             }
         }
@@ -220,10 +236,12 @@ pub async fn execute_step(
         .join(TICKETS_DIR)
         .to_string_lossy()
         .to_string();
-    let step_index = wf
+    let wf_for_index = get_workflow(project_dir, &state.workflow_id)
+        .ok_or_else(|| format!("Workflow '{}' not found", state.workflow_id))?;
+    let step_index = wf_for_index
         .steps
         .iter()
-        .position(|s| &s.id == current_step_id)
+        .position(|s| s.id == current_step_id)
         .unwrap_or(0) as u32;
 
     let (response_text, new_session_id) = match crate::agent::execute_step(
@@ -251,7 +269,7 @@ pub async fn execute_step(
             if let Some(ref writer) = conversation_writer {
                 let mut w = writer.lock().await;
                 let _ = w.write_step_marker(
-                    current_step_id,
+                    &current_step_id,
                     &crate::conversation::StepMarker::End {
                         status: "failed".to_string(),
                     },
@@ -268,7 +286,7 @@ pub async fn execute_step(
     if let Some(ref writer) = conversation_writer {
         let mut w = writer.lock().await;
         if let Err(e) = w.write_step_marker(
-            current_step_id,
+            &current_step_id,
             &crate::conversation::StepMarker::End {
                 status: "completed".to_string(),
             },
@@ -313,7 +331,7 @@ pub async fn execute_step(
     // mark the NEXT step as completed before it runs.
     let fresh_state = get_workflow_state(project_dir, ticket_id)?;
     let already_advanced = match &fresh_state {
-        Some(s) => s.current_step_id.as_deref() != Some(current_step_id),
+        Some(s) => s.current_step_id.as_deref() != Some(current_step_id.as_str()),
         None => false,
     };
 

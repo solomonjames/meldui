@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { commands } from "@/bindings";
+import { commands, events } from "@/bindings";
 import { useWorkflowNotifications } from "@/features/workflow/hooks/use-workflow-notifications";
 import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
 import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
@@ -27,9 +27,11 @@ const workflowKeys = {
 
 export function useWorkflow(projectDir: string) {
   const queryClient = useQueryClient();
-  const [currentState, setCurrentState] = useState<WorkflowState | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // ── Per-ticket state ──
+  const [workflowStates, setWorkflowStates] = useState<Record<string, WorkflowState>>({});
+  const [loadingTickets, setLoadingTickets] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
 
   // Auto-advance state (backed by Rust)
@@ -53,22 +55,31 @@ export function useWorkflow(projectDir: string) {
     [setAutoAdvanceMutation],
   );
 
-  const currentStepRef = useRef<string | null>(null);
-  const executingStepRef = useRef<string | null>(null);
+  const currentStepsRef = useRef<Record<string, string | null>>({});
+  const executingStepsRef = useRef<Record<string, string | null>>({});
+  const unloadTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const onRefreshTicketRef = useRef<(() => Promise<void>) | null>(null);
   const createStreamChannelRef = useRef<
     ReturnType<typeof useWorkflowStreaming>["createStreamChannel"]
   >(null!);
 
   useEffect(() => {
-    currentStepRef.current = currentState?.current_step_id ?? null;
-  }, [currentState?.current_step_id]);
+    if (activeTicketId) {
+      const state = workflowStates[activeTicketId];
+      currentStepsRef.current[activeTicketId] = state?.current_step_id ?? null;
+    }
+  }, [activeTicketId, workflowStates]);
 
-  // Compose sub-hooks (untouched)
-  const streaming = useWorkflowStreaming(activeTicketId, executingStepRef);
+  // Keyed error setter for sub-hooks
+  const setErrorKeyed = useCallback((issueId: string, msg: string) => {
+    setErrors((prev) => ({ ...prev, [issueId]: msg }));
+  }, []);
+
+  // Compose sub-hooks
+  const streaming = useWorkflowStreaming(activeTicketId, executingStepsRef);
   createStreamChannelRef.current = streaming.createStreamChannel;
-  const permissions = useWorkflowPermissions(activeTicketId, setError);
-  const review = useWorkflowReview(activeTicketId, setError);
+  const permissions = useWorkflowPermissions(activeTicketId, setErrorKeyed);
+  const review = useWorkflowReview(activeTicketId, setErrorKeyed);
   const notifications = useWorkflowNotifications(activeTicketId, onRefreshTicketRef);
 
   const listenersReady =
@@ -76,6 +87,54 @@ export function useWorkflow(projectDir: string) {
     permissions.permissionsReady &&
     review.reviewReady &&
     notifications.notificationsReady;
+
+  // ── Idle timeout: unload state 10 minutes after agent session ends ──
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    events.agentSessionEnded
+      .listen((event) => {
+        if (cancelled) return;
+        const { issue_id } = event.payload;
+
+        // Start 10-minute unload timer
+        unloadTimersRef.current[issue_id] = setTimeout(
+          () => {
+            setWorkflowStates((prev) => {
+              const next = { ...prev };
+              delete next[issue_id];
+              return next;
+            });
+            setLoadingTickets((prev) => {
+              const next = { ...prev };
+              delete next[issue_id];
+              return next;
+            });
+            setErrors((prev) => {
+              const next = { ...prev };
+              delete next[issue_id];
+              return next;
+            });
+            streaming.clearTicketOutputs?.(issue_id);
+            delete unloadTimersRef.current[issue_id];
+          },
+          10 * 60 * 1000,
+        ); // 10 minutes
+      })
+      .then((u) => {
+        if (cancelled) u();
+        else unlisten = u;
+      });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+      for (const timer of Object.values(unloadTimersRef.current)) {
+        clearTimeout(timer);
+      }
+    };
+  }, [streaming]);
 
   // ── Queries ──
 
@@ -103,11 +162,13 @@ export function useWorkflow(projectDir: string) {
           queryFn: () => commands.workflowGet(projectDir, workflowId),
         });
       } catch (err) {
-        setError(`Failed to get workflow: ${err}`);
+        if (activeTicketId) {
+          setErrors((prev) => ({ ...prev, [activeTicketId]: `Failed to get workflow: ${err}` }));
+        }
         return null;
       }
     },
-    [projectDir, queryClient],
+    [projectDir, queryClient, activeTicketId],
   );
 
   // getWorkflowState — imperative (called after executeStep, from notifications, etc.)
@@ -115,10 +176,10 @@ export function useWorkflow(projectDir: string) {
     async (issueId: string) => {
       try {
         const state = await commands.workflowState(projectDir, issueId);
-        setCurrentState(state);
+        setWorkflowStates((prev) => ({ ...prev, [issueId]: state }));
         return state;
       } catch (err) {
-        setError(`Failed to get workflow state: ${err}`);
+        setErrors((prev) => ({ ...prev, [issueId]: `Failed to get workflow state: ${err}` }));
         return null;
       }
     },
@@ -131,11 +192,13 @@ export function useWorkflow(projectDir: string) {
       try {
         return await commands.workflowGetDiff(dirOverride ?? projectDir, baseCommit ?? null);
       } catch (err) {
-        setError(`Failed to get diff: ${err}`);
+        if (activeTicketId) {
+          setErrors((prev) => ({ ...prev, [activeTicketId]: `Failed to get diff: ${err}` }));
+        }
         return [] as DiffFile[];
       }
     },
-    [projectDir],
+    [projectDir, activeTicketId],
   );
 
   // getBranchInfo — imperative
@@ -144,11 +207,16 @@ export function useWorkflow(projectDir: string) {
       try {
         return await commands.workflowGetBranchInfo(dirOverride ?? projectDir);
       } catch (err) {
-        setError(`Failed to get branch info: ${err}`);
+        if (activeTicketId) {
+          setErrors((prev) => ({
+            ...prev,
+            [activeTicketId]: `Failed to get branch info: ${err}`,
+          }));
+        }
         return null as BranchInfo | null;
       }
     },
-    [projectDir],
+    [projectDir, activeTicketId],
   );
 
   // ── Mutations ──
@@ -156,15 +224,15 @@ export function useWorkflow(projectDir: string) {
   const assignWorkflow = useCallback(
     async (issueId: string, workflowId: string) => {
       try {
-        setLoading(true);
+        setLoadingTickets((prev) => ({ ...prev, [issueId]: true }));
         const state = await commands.workflowAssign(projectDir, issueId, workflowId);
-        setCurrentState(state);
+        setWorkflowStates((prev) => ({ ...prev, [issueId]: state }));
         return state;
       } catch (err) {
-        setError(`Failed to assign workflow: ${err}`);
+        setErrors((prev) => ({ ...prev, [issueId]: `Failed to assign workflow: ${err}` }));
         return null;
       } finally {
-        setLoading(false);
+        setLoadingTickets((prev) => ({ ...prev, [issueId]: false }));
       }
     },
     [projectDir],
@@ -174,12 +242,19 @@ export function useWorkflow(projectDir: string) {
 
   const executeStep = useCallback(
     async (issueId: string, userMessage?: string) => {
-      try {
-        setLoading(true);
-        setError(null);
+      // Cancel any pending unload timer when agent restarts
+      if (unloadTimersRef.current[issueId]) {
+        clearTimeout(unloadTimersRef.current[issueId]);
+        delete unloadTimersRef.current[issueId];
+      }
 
-        if (currentState?.workflow_id) {
-          const wf = workflows.find((w) => w.id === currentState.workflow_id);
+      try {
+        setLoadingTickets((prev) => ({ ...prev, [issueId]: true }));
+        setErrors((prev) => ({ ...prev, [issueId]: null }));
+
+        const ticketState = workflowStates[issueId];
+        if (ticketState?.workflow_id) {
+          const wf = workflows.find((w) => w.id === ticketState.workflow_id);
           if (wf?.ticket_sections && wf.ticket_sections.length > 0) {
             try {
               await commands.ticketInitializeSections(projectDir, issueId, wf.ticket_sections);
@@ -189,8 +264,11 @@ export function useWorkflow(projectDir: string) {
           }
         }
 
-        executingStepRef.current = currentStepRef.current;
-        setCurrentState((prev) => (prev ? { ...prev, step_status: "in_progress" } : prev));
+        executingStepsRef.current[issueId] = currentStepsRef.current[issueId] ?? null;
+        setWorkflowStates((prev) => {
+          const s = prev[issueId];
+          return s ? { ...prev, [issueId]: { ...s, step_status: "in_progress" } } : prev;
+        });
         const channel = createStreamChannelRef.current();
         const result = await commands.workflowExecuteStep(
           projectDir,
@@ -199,35 +277,38 @@ export function useWorkflow(projectDir: string) {
           userMessage ?? null,
         );
 
-        executingStepRef.current = null;
+        executingStepsRef.current[issueId] = null;
         await getWorkflowState(issueId);
         return result as StepExecutionResult;
       } catch (err) {
-        executingStepRef.current = null;
+        executingStepsRef.current[issueId] = null;
         clearPermissionPending();
-        setError(`Step execution failed: ${err}`);
+        setErrors((prev) => ({ ...prev, [issueId]: `Step execution failed: ${err}` }));
         await getWorkflowState(issueId);
         return null;
       } finally {
-        setLoading(false);
+        setLoadingTickets((prev) => ({ ...prev, [issueId]: false }));
       }
     },
-    [projectDir, getWorkflowState, currentState?.workflow_id, workflows, clearPermissionPending],
+    [projectDir, getWorkflowState, workflowStates, workflows, clearPermissionPending],
   );
 
   const suggestWorkflow = useCallback(
     async (issueId: string) => {
       try {
-        setLoading(true);
-        setError(null);
+        setLoadingTickets((prev) => ({ ...prev, [issueId]: true }));
+        setErrors((prev) => ({ ...prev, [issueId]: null }));
         const channel = createStreamChannelRef.current();
         const suggestion = await commands.workflowSuggest(projectDir, issueId, channel);
         return suggestion as WorkflowSuggestion;
       } catch {
-        setError(`Unable to suggest workflow — please select manually`);
+        setErrors((prev) => ({
+          ...prev,
+          [issueId]: `Unable to suggest workflow — please select manually`,
+        }));
         return null;
       } finally {
-        setLoading(false);
+        setLoadingTickets((prev) => ({ ...prev, [issueId]: false }));
       }
     },
     [projectDir],
@@ -253,18 +334,18 @@ export function useWorkflow(projectDir: string) {
   const executeCommitAction = useCallback(
     async (issueId: string, action: "commit" | "commit_and_pr", commitMessage: string) => {
       try {
-        setLoading(true);
-        setError(null);
+        setLoadingTickets((prev) => ({ ...prev, [issueId]: true }));
+        setErrors((prev) => ({ ...prev, [issueId]: null }));
         return (await executeCommitActionMutation.mutateAsync({
           issueId,
           action,
           commitMessage,
         })) as CommitActionResult;
       } catch (err) {
-        setError(`Commit action failed: ${err}`);
+        setErrors((prev) => ({ ...prev, [issueId]: `Commit action failed: ${err}` }));
         return null;
       } finally {
-        setLoading(false);
+        setLoadingTickets((prev) => ({ ...prev, [issueId]: false }));
       }
     },
     [executeCommitActionMutation],
@@ -275,7 +356,7 @@ export function useWorkflow(projectDir: string) {
       try {
         await commands.workflowCleanupWorktree(projectDir, issueId);
       } catch (err) {
-        setError(`Failed to cleanup worktree: ${err}`);
+        setErrors((prev) => ({ ...prev, [issueId]: `Failed to cleanup worktree: ${err}` }));
       }
     },
     [projectDir],
@@ -285,13 +366,13 @@ export function useWorkflow(projectDir: string) {
     async (issueId: string) => {
       try {
         const newState = await commands.workflowAdvance(projectDir, issueId);
-        setCurrentState(newState);
+        setWorkflowStates((prev) => ({ ...prev, [issueId]: newState }));
         // Invalidate conversation cache so the next step sees prior step history
         queryClient.invalidateQueries({
           queryKey: ["conversations", projectDir, issueId],
         });
       } catch (err) {
-        setError(`Failed to advance step: ${err}`);
+        setErrors((prev) => ({ ...prev, [issueId]: `Failed to advance step: ${err}` }));
       }
     },
     [projectDir, queryClient],
@@ -303,6 +384,21 @@ export function useWorkflow(projectDir: string) {
 
   const respondToPermission = permissions.respondToPermission;
 
+  // ── Convenience accessors for the active ticket ──
+  const currentState = activeTicketId ? (workflowStates[activeTicketId] ?? null) : null;
+  const loading = activeTicketId ? (loadingTickets[activeTicketId] ?? false) : false;
+  const error = activeTicketId ? (errors[activeTicketId] ?? null) : null;
+
+  const runningTicketIds = useMemo(
+    () =>
+      new Set(
+        Object.entries(loadingTickets)
+          .filter(([, v]) => v)
+          .map(([k]) => k),
+      ),
+    [loadingTickets],
+  );
+
   return {
     workflows,
     currentState,
@@ -312,6 +408,7 @@ export function useWorkflow(projectDir: string) {
     stepOutputs: streaming.stepOutputs,
     activeTicketId,
     setActiveTicketId,
+    runningTicketIds,
     pendingPermission: permissions.pendingPermission,
     respondToPermission,
     notifications: notifications.notifications,

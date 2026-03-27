@@ -38,7 +38,6 @@ export function WorkflowShell({
     getDiff: onGetDiff,
     notifications,
     clearNotification: onClearNotification,
-    statusText,
     autoAdvance,
     setAutoAdvance,
     advanceStep,
@@ -416,7 +415,6 @@ export function WorkflowShell({
               isExecuting={isExecuting}
               stepStatus={workflowState.step_status}
               stepOutput={currentStepOutput}
-              statusText={statusText}
               onExecute={handleExecute}
               onAdvanceStep={() => advanceStep(ticket.id).then(() => onRefreshTicket())}
               projectDir={projectDir}

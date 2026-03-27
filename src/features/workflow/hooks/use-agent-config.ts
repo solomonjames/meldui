@@ -43,7 +43,7 @@ function persistConfig(config: AgentConfig) {
   }
 }
 
-export function useAgentConfig() {
+export function useAgentConfig(activeTicketId: string | null = null) {
   const queryClient = useQueryClient();
 
   const { data: config = DEFAULT_CONFIG } = useQuery({
@@ -102,24 +102,36 @@ export function useAgentConfig() {
   };
 
   const setModel = useMutation({
-    mutationFn: (model: string) => commands.agentSetModel(model).catch(() => {}),
+    mutationFn: (model: string) =>
+      activeTicketId
+        ? commands.agentSetModel(activeTicketId, model).catch(() => {})
+        : Promise.resolve(),
     onMutate: (model) => updateConfig({ model }),
   });
 
   const setThinking = useMutation({
     mutationFn: (params: { type: "adaptive" | "enabled" | "disabled"; budgetTokens?: number }) =>
-      commands.agentSetThinking(params.type, params.budgetTokens ?? null).catch(() => {}),
+      activeTicketId
+        ? commands
+            .agentSetThinking(activeTicketId, params.type, params.budgetTokens ?? null)
+            .catch(() => {})
+        : Promise.resolve(),
     onMutate: (params) => updateConfig({ thinking: params }),
   });
 
   const setEffort = useMutation({
     mutationFn: (effort: "low" | "medium" | "high" | "max") =>
-      commands.agentSetEffort(effort).catch(() => {}),
+      activeTicketId
+        ? commands.agentSetEffort(activeTicketId, effort).catch(() => {})
+        : Promise.resolve(),
     onMutate: (effort) => updateConfig({ effort }),
   });
 
   const setFastMode = useMutation({
-    mutationFn: (enabled: boolean) => commands.agentSetFastMode(enabled).catch(() => {}),
+    mutationFn: (enabled: boolean) =>
+      activeTicketId
+        ? commands.agentSetFastMode(activeTicketId, enabled).catch(() => {})
+        : Promise.resolve(),
     onMutate: (enabled) => updateConfig({ fastMode: enabled }),
   });
 

@@ -12,7 +12,7 @@ export function StepDividerBar({ label, stepId, variant = "default" }: StepDivid
       <span
         className={`text-xs font-medium uppercase tracking-wider ${
           isComplete
-            ? "text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1"
+            ? "text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1.5 leading-none"
             : "text-muted-foreground"
         }`}
       >

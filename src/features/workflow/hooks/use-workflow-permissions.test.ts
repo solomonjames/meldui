@@ -112,7 +112,7 @@ describe("useWorkflowPermissions", () => {
     await waitFor(() => expect(result.current.pendingPermission).not.toBeNull());
 
     act(() => {
-      result.current.clearPending();
+      result.current.clearPending("issue-1");
     });
 
     expect(result.current.pendingPermission).toBeNull();

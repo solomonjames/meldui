@@ -59,15 +59,13 @@ export function useWorkflowPermissions(
     [pendingPermissions, setError],
   );
 
-  const clearPending = useCallback(() => {
-    if (activeTicketId) {
-      setPendingPermissions((prev) => {
-        const next = { ...prev };
-        delete next[activeTicketId];
-        return next;
-      });
-    }
-  }, [activeTicketId]);
+  const clearPending = useCallback((issueId: string) => {
+    setPendingPermissions((prev) => {
+      const next = { ...prev };
+      delete next[issueId];
+      return next;
+    });
+  }, []);
 
   return {
     pendingPermission,

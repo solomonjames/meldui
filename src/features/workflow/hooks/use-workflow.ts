@@ -64,11 +64,10 @@ export function useWorkflow(projectDir: string) {
   >(null!);
 
   useEffect(() => {
-    if (activeTicketId) {
-      const state = workflowStates[activeTicketId];
-      currentStepsRef.current[activeTicketId] = state?.current_step_id ?? null;
+    for (const [issueId, state] of Object.entries(workflowStates)) {
+      currentStepsRef.current[issueId] = state?.current_step_id ?? null;
     }
-  }, [activeTicketId, workflowStates]);
+  }, [workflowStates]);
 
   // Keyed error setter for sub-hooks
   const setErrorKeyed = useCallback((issueId: string, msg: string) => {
@@ -134,7 +133,7 @@ export function useWorkflow(projectDir: string) {
         clearTimeout(timer);
       }
     };
-  }, [streaming]);
+  }, [streaming.clearTicketOutputs]);
 
   // ── Queries ──
 
@@ -176,7 +175,9 @@ export function useWorkflow(projectDir: string) {
     async (issueId: string) => {
       try {
         const state = await commands.workflowState(projectDir, issueId);
-        setWorkflowStates((prev) => ({ ...prev, [issueId]: state }));
+        if (state) {
+          setWorkflowStates((prev) => ({ ...prev, [issueId]: state }));
+        }
         return state;
       } catch (err) {
         setErrors((prev) => ({ ...prev, [issueId]: `Failed to get workflow state: ${err}` }));
@@ -282,7 +283,7 @@ export function useWorkflow(projectDir: string) {
         return result as StepExecutionResult;
       } catch (err) {
         executingStepsRef.current[issueId] = null;
-        clearPermissionPending();
+        clearPermissionPending(issueId);
         setErrors((prev) => ({ ...prev, [issueId]: `Step execution failed: ${err}` }));
         await getWorkflowState(issueId);
         return null;
@@ -414,6 +415,7 @@ export function useWorkflow(projectDir: string) {
     notifications: notifications.notifications,
     clearNotification: notifications.clearNotification,
     lastUpdatedSectionId: notifications.lastUpdatedSectionId,
+    statusText: notifications.statusText,
     autoAdvance,
     setAutoAdvance,
     advanceStep,

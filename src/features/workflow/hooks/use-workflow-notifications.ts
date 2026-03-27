@@ -47,5 +47,5 @@ export function useWorkflowNotifications(
     setNotifications((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  return { notifications, clearNotification, lastUpdatedSectionId, notificationsReady };
+  return { notifications, clearNotification, lastUpdatedSectionId, statusText, notificationsReady };
 }

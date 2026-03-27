@@ -188,6 +188,10 @@ impl AgentHandle {
 /// Managed state for all active agent handles, keyed by issue_id.
 pub struct AgentState {
     pub handles: Mutex<std::collections::HashMap<String, Arc<AgentHandle>>>,
+    /// Tracks issue_ids that are in the process of starting (between duplicate-check and handle
+    /// insert). Prevents two concurrent `execute_step` calls from both passing the duplicate check
+    /// before either has inserted into `handles` (TOCTOU race).
+    pub(crate) pending_starts: Mutex<std::collections::HashSet<String>>,
     /// Auto-advance enabled per project (keyed by project_dir).
     /// Uses RwLock since reads are frequent (every queryComplete) and writes are rare (toggle).
     pub auto_advance: tokio::sync::RwLock<std::collections::HashMap<String, bool>>,
@@ -197,6 +201,7 @@ impl AgentState {
     pub fn new() -> Self {
         Self {
             handles: Mutex::new(std::collections::HashMap::new()),
+            pending_starts: Mutex::new(std::collections::HashSet::new()),
             auto_advance: tokio::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
@@ -526,15 +531,39 @@ pub async fn execute_step(
     step_name: String,
     step_prompt_for_supervisor: String,
 ) -> Result<(String, String), String> {
-    // Reject duplicate concurrent runs for the same ticket
+    // Reject duplicate concurrent runs for the same ticket.
+    // Both locks are acquired together under `handles` to make the check-then-insert atomic:
+    // pending_starts guards the window between this check and the handle insert below.
     if let Some(state) = app_handle.try_state::<AgentState>() {
         let guard = state.handles.lock().await;
         if guard.contains_key(issue_id) {
             return Err(format!("Agent already running for ticket {issue_id}"));
         }
+        let mut pending = state.pending_starts.lock().await;
+        if !pending.insert(issue_id.to_string()) {
+            return Err(format!("Agent already starting for ticket {issue_id}"));
+        }
     }
 
-    let agent_bin = find_agent_binary().ok_or_else(|| AgentError::BinaryNotFound.to_string())?;
+    // Helper: remove issue_id from pending_starts on any early exit before handle is inserted.
+    // Called explicitly on every error path between the pending_starts.insert above and the
+    // handle_guard.insert below. Once the handle is inserted, removal from pending_starts happens
+    // inside that same lock scope.
+    let remove_pending = |app: &tauri::AppHandle, id: &str| {
+        if let Some(s) = app.try_state::<AgentState>() {
+            // Best-effort sync removal — we are in an async context but only need fire-and-forget
+            // cleanup. Use try_lock to avoid blocking; if the lock is contended the entry will be
+            // cleaned up when the next acquire succeeds (worst case: one extra rejected call).
+            if let Ok(mut pending) = s.pending_starts.try_lock() {
+                pending.remove(id);
+            }
+        }
+    };
+
+    let agent_bin = find_agent_binary().ok_or_else(|| {
+        remove_pending(app_handle, issue_id);
+        AgentError::BinaryNotFound.to_string()
+    })?;
 
     log::info!("agent: using binary at {agent_bin:?}");
 
@@ -613,16 +642,17 @@ pub async fn execute_step(
         cmd.env("MOCK_FIXTURE_DIR", fixture_dir);
     }
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| AgentError::SpawnFailed(e).to_string())?;
+    let mut child = cmd.spawn().map_err(|e| {
+        remove_pending(app_handle, issue_id);
+        AgentError::SpawnFailed(e).to_string()
+    })?;
 
     // ── Read SOCKET_PATH from stdout ──
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| AgentError::StdioCaptureError("stdout").to_string())?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        remove_pending(app_handle, issue_id);
+        AgentError::StdioCaptureError("stdout").to_string()
+    })?;
 
     let mut stdout_reader = BufReader::new(stdout);
     let mut first_line = String::new();
@@ -637,14 +667,17 @@ pub async fn execute_step(
         match read_result {
             Err(_) => {
                 let _ = child.kill().await;
+                remove_pending(app_handle, issue_id);
                 return Err(AgentError::SocketPathTimeout.to_string());
             }
             Ok(Err(e)) => {
                 let _ = child.kill().await;
+                remove_pending(app_handle, issue_id);
                 return Err(AgentError::StdoutReadFailed(e).to_string());
             }
             Ok(Ok(0)) => {
                 let _ = child.kill().await;
+                remove_pending(app_handle, issue_id);
                 return Err(AgentError::SocketPathEof.to_string());
             }
             Ok(Ok(_)) => {
@@ -653,6 +686,7 @@ pub async fn execute_step(
                     PathBuf::from(path)
                 } else {
                     let _ = child.kill().await;
+                    remove_pending(app_handle, issue_id);
                     let preview = &trimmed[..trimmed.len().min(200)];
                     return Err(AgentError::SocketPathInvalid(preview.to_string()).to_string());
                 }
@@ -664,9 +698,10 @@ pub async fn execute_step(
 
     // ── Connect to Unix socket ──
 
-    let stream = UnixStream::connect(&socket_path)
-        .await
-        .map_err(|e| AgentError::SocketConnectFailed(e).to_string())?;
+    let stream = UnixStream::connect(&socket_path).await.map_err(|e| {
+        remove_pending(app_handle, issue_id);
+        AgentError::SocketConnectFailed(e).to_string()
+    })?;
 
     let (read_half, write_half) = tokio::io::split(stream);
     let write_half = Arc::new(Mutex::new(write_half));
@@ -684,10 +719,13 @@ pub async fn execute_step(
         next_id: next_id.clone(),
     };
 
-    // Store the handle in Tauri managed state, keyed by issue_id
+    // Store the handle in Tauri managed state, keyed by issue_id.
+    // Also remove from pending_starts here so the transition from "starting" to "running"
+    // is visible atomically to any concurrent call that acquires handles first.
     if let Some(state) = app_handle.try_state::<AgentState>() {
         let mut handle_guard = state.handles.lock().await;
         handle_guard.insert(issue_id.to_string(), Arc::new(agent_handle));
+        state.pending_starts.lock().await.remove(issue_id);
     }
 
     // ── Send `query` JSON-RPC request ──

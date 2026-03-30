@@ -149,7 +149,6 @@ The sidecar is excluded from the frontend `tsc` build via `tsconfig.app.json` `"
 - **React 19** with hooks-only state management (no Redux/Zustand)
 - **Tailwind CSS v4** via `@tailwindcss/vite` plugin (no tailwind.config file — theme is in `src/index.css`)
 - **shadcn** components (base-nova style, neutral base color) in `src/shared/ui/`
-- **@dnd-kit** for kanban drag-and-drop
 - **Lucide React** for icons
 - Path alias: `@/` → `src/`
 
@@ -182,7 +181,7 @@ WebdriverIO tests in `e2e/` with a mock sidecar (`e2e/mock-sidecar/`). Run `bun 
 
 **Session continuity**: The agent's `session_id` is stored in ticket metadata (`agent_session_id`). When the next workflow step starts, the sidecar resumes the session so Claude retains context from prior steps.
 
-**Kanban board**: Issues flow through `BacklogPage` → `KanbanColumn` → `KanbanCard`. Columns are defined statically in `backlog-page.tsx`. Cards are draggable between columns, which triggers status updates through beads.
+**Kanban board**: Issues flow through `BacklogPage` → `KanbanColumn` → `KanbanCard`. Columns are phase-based (Backlog/Research/Spec/Implementation/Review/Done), derived from the current workflow step's `phase` field via `getTicketPhase()` in `src/shared/lib/tickets/phase.ts`. Cards are display-only (no drag-and-drop).
 
 **TanStack Query**: All Tauri `invoke()` calls go through `useQuery`/`useMutation` from `@tanstack/react-query`. Query client config is in `src/shared/lib/query-client.ts`. Cache invalidation is event-driven via `src/shared/lib/invalidation.ts` — Tauri events trigger targeted `queryClient.invalidateQueries()` calls.
 

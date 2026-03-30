@@ -10,10 +10,12 @@ export type {
   SectionType,
   Ticket,
   TicketComment,
+  TicketPhase,
   TicketSection,
   TicketStatus,
   TicketType,
 } from "@/shared/lib/tickets";
+export { getTicketPhase, PHASE_CONFIG } from "@/shared/lib/tickets";
 
 export interface ClaudeStatus {
   installed: boolean;
@@ -30,6 +32,8 @@ export interface ChatMessage {
 }
 
 // ── Workflow Types ──
+
+export type WorkflowPhase = "research" | "spec" | "implementation" | "review";
 
 export type StepViewType = "chat" | "review" | "progress" | "diff_review" | "commit";
 
@@ -55,6 +59,7 @@ export interface WorkflowStep {
   description: string;
   instructions: StepInstructions;
   view: StepViewType;
+  phase?: WorkflowPhase;
 }
 
 export type StepInstructions = { prompt: string } | { file: string };

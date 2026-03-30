@@ -1,4 +1,6 @@
 export { generateTicketId, isValidTicketId } from "@/shared/lib/tickets/id";
+export { getTicketPhase, type TicketPhase } from "@/shared/lib/tickets/phase";
+export { PHASE_CONFIG } from "@/shared/lib/tickets/phase-config";
 export type {
   AcceptanceCriteriaContent,
   AcceptanceCriterion,

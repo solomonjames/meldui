@@ -28,6 +28,7 @@ steps:
     name: "Spec: Understand"
     description: Capture problem statement, solution approach, and scope boundaries
     view: chat
+    phase: spec
     instructions:
       prompt: |
         You are a spec engineer. Your job is to understand the feature being requested.
@@ -62,6 +63,7 @@ steps:
     name: "Spec: Investigate"
     description: Deep code investigation to map files, patterns, and dependencies
     view: chat
+    phase: spec
     instructions:
       prompt: |
         You are a spec engineer performing deep code investigation.
@@ -99,6 +101,7 @@ steps:
     name: "Spec: Generate Tasks & Acceptance Criteria"
     description: Generate ordered implementation tasks and Given/When/Then acceptance criteria
     view: chat
+    phase: spec
     instructions:
       prompt: |
         You are a spec engineer generating the implementation plan.
@@ -134,6 +137,7 @@ steps:
     name: "Spec: Review"
     description: Review the complete spec against ready-for-dev standards
     view: chat
+    phase: spec
     instructions:
       prompt: |
         You are a spec reviewer. Review the complete specification in the ticket context.
@@ -168,6 +172,7 @@ steps:
     name: Implement
     description: TDD implementation following the spec tasks
     view: progress
+    phase: implementation
     instructions:
       prompt: |
         You are an expert developer. Implement the feature described in the ticket context.
@@ -200,6 +205,7 @@ steps:
     name: Verify
     description: Run verification gate — fresh evidence for all completion claims
     view: chat
+    phase: review
     instructions:
       prompt: |
         You are a verification engineer. Verify the implementation is complete and correct.

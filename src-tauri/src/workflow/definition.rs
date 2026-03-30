@@ -34,6 +34,15 @@ pub struct WorkflowDefinition {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
+pub enum WorkflowPhase {
+    Research,
+    Spec,
+    Implementation,
+    Review,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
 pub enum StepViewType {
     Chat,
     Review,
@@ -49,6 +58,7 @@ pub struct WorkflowStep {
     pub description: String,
     pub instructions: StepInstructions,
     pub view: StepViewType,
+    pub phase: Option<WorkflowPhase>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, specta::Type)]

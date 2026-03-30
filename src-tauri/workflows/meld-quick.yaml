@@ -16,6 +16,7 @@ steps:
     name: Implement
     description: TDD implementation from the ticket description
     view: progress
+    phase: implementation
     instructions:
       prompt: |
         You are an expert developer. Implement the feature described in the ticket context.
@@ -46,6 +47,7 @@ steps:
     name: Verify
     description: Run verification gate — fresh evidence for all completion claims
     view: review
+    phase: review
     instructions:
       prompt: |
         You are a verification engineer. Verify the implementation is complete and correct.

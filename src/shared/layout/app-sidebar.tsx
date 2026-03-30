@@ -1,6 +1,8 @@
 import { FolderOpen, LayoutGrid, Settings } from "lucide-react";
+import { useMemo } from "react";
 import { MeldLogo } from "@/shared/components/meld-logo";
-import type { Ticket } from "@/shared/types";
+import type { Ticket, TicketPhase, WorkflowDefinition } from "@/shared/types";
+import { getTicketPhase, PHASE_CONFIG } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { Separator } from "@/shared/ui/separator";
@@ -9,6 +11,7 @@ interface AppSidebarProps {
   activePage: string;
   onNavigate: (page: string) => void;
   tickets: Ticket[];
+  workflows: WorkflowDefinition[];
   onCreateTicket: () => void;
   folderName: string | null;
   onOpenFolder: () => void;
@@ -18,14 +21,17 @@ interface AppSidebarProps {
 }
 
 const NAV_ITEMS = [
-  { id: "backlog", label: "Backlog", icon: LayoutGrid },
+  { id: "backlog", label: "Dashboard", icon: LayoutGrid },
   { id: "settings", label: "Settings", icon: Settings },
 ];
+
+const ACTIVE_PHASES = new Set<TicketPhase>(["research", "spec", "implementation", "review"]);
 
 export function AppSidebar({
   activePage,
   onNavigate,
   tickets,
+  workflows,
   onCreateTicket,
   folderName,
   onOpenFolder,
@@ -33,7 +39,17 @@ export function AppSidebar({
   activeTicketId,
   runningTicketIds,
 }: AppSidebarProps) {
-  const activeTickets = tickets.filter((t) => t.status === "in_progress");
+  const activeTickets = useMemo(() => {
+    const result: { ticket: Ticket; phase: TicketPhase }[] = [];
+    for (const ticket of tickets) {
+      if (ticket.parent_id) continue;
+      const phase = getTicketPhase(ticket, workflows);
+      if (ACTIVE_PHASES.has(phase)) {
+        result.push({ ticket, phase });
+      }
+    }
+    return result;
+  }, [tickets, workflows]);
 
   return (
     <div className="w-60 shrink-0 bg-zinc-50 dark:bg-zinc-900 border-r flex flex-col">
@@ -107,8 +123,9 @@ export function AppSidebar({
           {activeTickets.length === 0 ? (
             <p className="px-3 text-xs text-muted-foreground">No active tickets</p>
           ) : (
-            activeTickets.map((ticket) => {
+            activeTickets.map(({ ticket, phase }) => {
               const isSelected = activeTicketId === ticket.id;
+              const phaseConfig = PHASE_CONFIG[phase];
               return (
                 <button
                   type="button"
@@ -132,8 +149,10 @@ export function AppSidebar({
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald" />
                       </span>
                     ) : (
-                      <span className="inline-flex items-center rounded-full bg-emerald-muted text-emerald text-[10px] px-1.5 py-0.5 font-medium">
-                        in progress
+                      <span
+                        className={`inline-flex items-center rounded-full text-[10px] px-1.5 py-0.5 font-medium ${phaseConfig.badgeBg}`}
+                      >
+                        {phaseConfig.label}
                       </span>
                     )}
                   </div>

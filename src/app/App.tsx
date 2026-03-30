@@ -55,12 +55,7 @@ function AppContent() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activePage]);
 
-  const {
-    getWorkflowState,
-    suggestWorkflow: suggestWf,
-    assignWorkflow: assignWf,
-    setActiveTicketId: setWorkflowActiveTicketId,
-  } = workflow;
+  const { getWorkflowState, setActiveTicketId: setWorkflowActiveTicketId } = workflow;
 
   const navigateToTicket = useCallback(
     async (ticketId: string) => {
@@ -81,24 +76,6 @@ function AppContent() {
       }
     },
     [getWorkflowState, navigateToTicket],
-  );
-
-  const handleAutoStart = useCallback(
-    async (ticket: Ticket) => {
-      let state = await getWorkflowState(ticket.id);
-
-      if (!state) {
-        const suggestion = await suggestWf(ticket.id);
-        if (suggestion) {
-          await assignWf(ticket.id, suggestion.workflow_id);
-          state = await getWorkflowState(ticket.id);
-        }
-      }
-
-      // Navigate to ticket page regardless — user can start workflow from there
-      navigateToTicket(ticket.id);
-    },
-    [getWorkflowState, suggestWf, assignWf, navigateToTicket],
   );
 
   // TicketPage handles its own refresh via TanStack Query — register a stable no-op
@@ -196,10 +173,8 @@ function AppContent() {
           tickets={ticketStore.tickets}
           loading={ticketStore.isLoading}
           error={ticketStore.error}
-          onUpdateTicket={ticketStore.updateTicket}
-          onCloseTicket={ticketStore.closeTicket}
+          workflows={workflow.workflows}
           onRefresh={ticketStore.refreshTickets}
-          onAutoStart={handleAutoStart}
           onCardClick={handleTicketClick}
         />
       </ErrorBoundary>
@@ -213,6 +188,7 @@ function AppContent() {
           activePage={activePage}
           onNavigate={handleSidebarNavigate}
           tickets={ticketStore.tickets}
+          workflows={workflow.workflows}
           onCreateTicket={() => setCreateDialogOpen(true)}
           folderName={folderName}
           onOpenFolder={openFolderDialog}

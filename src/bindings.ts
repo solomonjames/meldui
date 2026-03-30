@@ -275,9 +275,10 @@ export type TicketSection = { id: string; label: string; type: string; content: 
  */
 export type TicketSectionDef = { id: string; label: string; type: string; collapsed?: boolean }
 export type WorkflowDefinition = { id: string; name: string; description: string; version: string; steps: WorkflowStep[]; ticket_sections?: WorkflowSectionDef[] }
+export type WorkflowPhase = "research" | "spec" | "implementation" | "review"
 export type WorkflowSectionDef = { id: string; label: string; type: string; collapsed?: boolean }
 export type WorkflowState = { workflow_id: string; current_step_id: string | null; step_status: StepStatus; step_history: StepRecord[] }
-export type WorkflowStep = { id: string; name: string; description: string; instructions: StepInstructions; view: StepViewType }
+export type WorkflowStep = { id: string; name: string; description: string; instructions: StepInstructions; view: StepViewType; phase: WorkflowPhase | null }
 export type WorkflowSuggestion = { workflow_id: string; reasoning: string }
 export type WorktreeSettings = { 
 /**

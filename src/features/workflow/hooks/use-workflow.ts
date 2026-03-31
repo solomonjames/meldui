@@ -5,6 +5,7 @@ import { useWorkflowNotifications } from "@/features/workflow/hooks/use-workflow
 import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
 import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
 import { useWorkflowStreaming } from "@/features/workflow/hooks/use-workflow-streaming";
+import { disposeTicketStores } from "@/features/workflow/stores/dispose";
 import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import type {
   BranchInfo,
@@ -102,8 +103,7 @@ export function useWorkflow(projectDir: string) {
         // Start 10-minute unload timer
         unloadTimersRef.current[issue_id] = setTimeout(
           () => {
-            orchestrationStoreFactory.getStore(issue_id).getState().clearState();
-            streaming.clearTicketOutputs?.(issue_id);
+            disposeTicketStores(issue_id);
             delete unloadTimersRef.current[issue_id];
           },
           10 * 60 * 1000, // 10 minutes

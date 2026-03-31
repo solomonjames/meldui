@@ -1,76 +1,33 @@
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { PRIORITY_CONFIG, TYPE_CONFIG } from "@/features/tickets/constants";
-import type { Ticket } from "@/shared/types";
-import { Button } from "@/shared/ui/button";
-
-const NEXT_STATUS: Record<string, string | null> = {
-  open: "in_progress",
-  in_progress: null,
-  blocked: "in_progress",
-  closed: null,
-};
+import type { Ticket, TicketPhase } from "@/shared/types";
 
 interface KanbanCardProps {
   ticket: Ticket;
-  variant: string;
-  onUpdate: (id: string, updates: { status?: string; priority?: string }) => Promise<void>;
-  onClose: (id: string) => Promise<void>;
+  variant: TicketPhase;
   onClick?: (ticket: Ticket) => void;
-  isOverlay?: boolean;
 }
 
-export function KanbanCard({
-  ticket,
-  variant,
-  onUpdate,
-  onClose,
-  onClick,
-  isOverlay,
-}: KanbanCardProps) {
+export function KanbanCard({ ticket, variant, onClick }: KanbanCardProps) {
   const typeInfo = TYPE_CONFIG[ticket.ticket_type] ?? TYPE_CONFIG.task;
   const priorityInfo = PRIORITY_CONFIG[ticket.priority] ?? PRIORITY_CONFIG[2];
   const TypeIcon = typeInfo.icon;
 
-  const isClosed = variant === "closed";
-  const isInProgress = variant === "in_progress";
-
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: ticket.id,
-    disabled: isOverlay,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  const isDone = variant === "done";
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: dnd-kit requires div for drag-and-drop
+    // biome-ignore lint/a11y/useSemanticElements: card acts as clickable navigation element
     <div
       role="button"
       tabIndex={0}
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      onClick={() => {
-        if (!isDragging && onClick) onClick(ticket);
-      }}
+      onClick={() => onClick?.(ticket)}
       onKeyDown={(e) => {
-        if ((e.key === "Enter" || e.key === " ") && !isDragging && onClick) onClick(ticket);
+        if ((e.key === "Enter" || e.key === " ") && onClick) onClick(ticket);
       }}
-      className={`rounded-[10px] border p-3.5 shadow-sm transition-colors cursor-grab active:cursor-grabbing ${
-        isDragging ? "opacity-40" : ""
-      } ${isOverlay ? "shadow-lg ring-2 ring-zinc-300 dark:ring-zinc-600 rotate-[2deg]" : ""} ${
-        isClosed
-          ? "bg-zinc-50 dark:bg-zinc-800/50 opacity-85"
-          : isInProgress
-            ? "bg-white dark:bg-zinc-800 border-blue-500/20"
-            : "bg-white dark:bg-zinc-800"
+      className={`rounded-[10px] border p-3.5 shadow-sm transition-colors cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-600 ${
+        isDone ? "bg-zinc-50 dark:bg-zinc-800/50 opacity-85" : "bg-white dark:bg-zinc-800"
       }`}
     >
-      <h4 className={`text-sm font-medium leading-snug ${isClosed ? "text-muted-foreground" : ""}`}>
+      <h4 className={`text-sm font-medium leading-snug ${isDone ? "text-muted-foreground" : ""}`}>
         {ticket.title}
       </h4>
       {ticket.description && (
@@ -88,35 +45,10 @@ export function KanbanCard({
         >
           {priorityInfo.label}
         </span>
-        {!isClosed && (
-          <div className="ml-auto flex gap-1">
-            {NEXT_STATUS[ticket.status] && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 text-[10px] px-1.5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdate(ticket.id, { status: NEXT_STATUS[ticket.status]! });
-                }}
-              >
-                {NEXT_STATUS[ticket.status]?.replace("_", " ")} →
-              </Button>
-            )}
-            {ticket.status === "in_progress" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 text-[10px] px-1.5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose(ticket.id);
-                }}
-              >
-                close →
-              </Button>
-            )}
-          </div>
+        {ticket.status === "blocked" && (
+          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-red-500/10 text-red-600">
+            blocked
+          </span>
         )}
       </div>
     </div>

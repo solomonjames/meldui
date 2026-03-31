@@ -1,51 +1,55 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { events } from "@/bindings";
+import { notificationsStoreFactory } from "@/features/workflow/stores/notifications-store";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
-import type { NotificationEvent } from "@/shared/types";
 
 export function useWorkflowNotifications(
   activeTicketId: string | null,
   onRefreshTicketRef: React.MutableRefObject<(() => Promise<void>) | null>,
 ) {
-  const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
-  const [statusTextMap, setStatusTextMap] = useState<Record<string, string>>({});
-  const [lastUpdatedSectionMap, setLastUpdatedSectionMap] = useState<Record<string, string>>({});
-
   const sectionReady = useTauriEvent(events.sectionUpdateEvent, (payload) => {
-    // Store for all tickets, not just active
-    setLastUpdatedSectionMap((prev) => ({
-      ...prev,
-      [payload.ticket_id]: payload.section_id ?? payload.section,
-    }));
-    // Trigger refresh if this is the viewed ticket
+    const store = notificationsStoreFactory.getStore(payload.ticket_id);
+    store.getState().setLastUpdatedSectionId(payload.section_id ?? payload.section);
     if (activeTicketId && payload.ticket_id === activeTicketId) {
       onRefreshTicketRef.current?.();
     }
   });
 
   const notificationReady = useTauriEvent(events.notificationEvent, (payload) => {
-    setNotifications((prev) => [...prev, payload]);
+    // Notifications are global (not per-ticket), but we store on active ticket if available.
+    // For backward compat, we keep a flat list approach.
+    if (activeTicketId) {
+      notificationsStoreFactory.getStore(activeTicketId).getState().addNotification(payload);
+    }
   });
 
   const statusReady = useTauriEvent(events.statusUpdateEvent, (payload) => {
-    // Store for all tickets
-    setStatusTextMap((prev) => ({
-      ...prev,
-      [payload.ticket_id]: payload.status_text,
-    }));
+    const store = notificationsStoreFactory.getStore(payload.ticket_id);
+    store.getState().setStatusText(payload.status_text);
   });
 
   const notificationsReady = sectionReady && notificationReady && statusReady;
 
-  // Convenience: viewed ticket's state
-  const statusText = activeTicketId ? (statusTextMap[activeTicketId] ?? null) : null;
-  const lastUpdatedSectionId = activeTicketId
-    ? (lastUpdatedSectionMap[activeTicketId] ?? null)
+  const notifications = activeTicketId
+    ? notificationsStoreFactory.getStore(activeTicketId).getState().notifications
+    : [];
+
+  const statusText = activeTicketId
+    ? notificationsStoreFactory.getStore(activeTicketId).getState().statusText
     : null;
 
-  const clearNotification = useCallback((index: number) => {
-    setNotifications((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  const lastUpdatedSectionId = activeTicketId
+    ? notificationsStoreFactory.getStore(activeTicketId).getState().lastUpdatedSectionId
+    : null;
+
+  const clearNotification = useCallback(
+    (index: number) => {
+      if (activeTicketId) {
+        notificationsStoreFactory.getStore(activeTicketId).getState().clearNotification(index);
+      }
+    },
+    [activeTicketId],
+  );
 
   return { notifications, clearNotification, lastUpdatedSectionId, statusText, notificationsReady };
 }

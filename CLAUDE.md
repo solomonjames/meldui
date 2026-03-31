@@ -80,7 +80,7 @@ src/
     components/           # Cross-feature components (diff/, error/, sections/, chat/)
     layout/               # AppLayout, AppSidebar, StatusBar
     hooks/                # useClaude, useDebugLog, useProjectDir, useTheme, useUpdater
-    lib/                  # query-client, invalidation, query-keys, utils, sync/, tickets/
+    lib/                  # query-client, invalidation, query-keys, utils, tickets/
     types/                # Central type hub (mirrors Rust serde structs)
     test/                 # Test helpers and mocks
   agent/                  # Separate sidecar build (excluded from frontend tsc)
@@ -116,7 +116,7 @@ Rust Backend (src-tauri/src/agent.rs)
     ↕ Unix socket + JSON-RPC 2.0
 Bun Sidecar (src/agent/main.ts → compiled binary)
     ├── ClaudeAgent class (wraps Agent SDK query())
-    ├── Beads MCP Server (exposes bd as tools Claude can call)
+    ├── MeldUI MCP Server (exposes ticket tools to Claude)
     └── @anthropic-ai/claude-agent-sdk
 ```
 
@@ -125,7 +125,7 @@ The sidecar creates a Unix socket server on startup, announces `SOCKET_PATH=<pat
 Key files in `src/agent/`:
 - `main.ts` — entry point, creates Unix socket server, handles JSON-RPC methods
 - `claude-agent.ts` — wraps `query()` with EventEmitter, handles `canUseTool` permissions
-- `mcp/meldui-server.ts` — in-process MCP server with beads tools (uses `createSdkMcpServer`)
+- `mcp/meldui-server.ts` — in-process MCP server with ticket tools (uses `createSdkMcpServer`)
 - `protocol.ts` — JSON-RPC method names, typed params/results for each RPC method
 - `build.ts` — compiles to `src-tauri/binaries/agent-{arch}-apple-darwin`
 

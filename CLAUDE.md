@@ -97,15 +97,13 @@ src/
 
 React hooks in `src/features/*/hooks/` and `src/shared/hooks/` call Tauri commands defined in `src-tauri/src/lib.rs`. The Rust side coordinates several modules:
 
-- **Beads (`bd`)** — issue tracking. `src-tauri/src/beads.rs` spawns the `bd` CLI, parses JSON output into `BeadsIssue` structs.
 - **Tickets** — `src-tauri/src/tickets.rs` handles ticket operations and state management.
 - **Agent sidecar** — AI workflow execution. `src-tauri/src/agent.rs` spawns a compiled Bun binary (`src/agent/`) that wraps `@anthropic-ai/claude-agent-sdk`. Communication is JSON-RPC 2.0 over a Unix domain socket.
 - **Workflow** — `src-tauri/src/workflow.rs` manages workflow orchestration.
 - **Claude status/login** — `src-tauri/src/claude.rs` handles auth status checks and login only (no longer does streaming).
 - **Settings** — `src-tauri/src/settings.rs` handles app settings persistence.
-- **Sync** — `src-tauri/src/sync/` module with `beads_adapter.rs` for syncing beads data.
 
-Both `bd` and `claude` CLIs are discovered at runtime by searching common install paths (homebrew, ~/.local/bin, etc.).
+The `claude` CLI is discovered at runtime by searching common install paths (homebrew, ~/.local/bin, etc.).
 
 ### Agent Sidecar Architecture
 
@@ -158,7 +156,6 @@ The sidecar is excluded from the frontend `tsc` build via `tsconfig.app.json` `"
 - `invalidation.ts` — event-driven cache invalidation (Tauri events → query invalidation)
 - `query-keys.ts` — shared query key factories (ticketKeys) used by both features and invalidation
 - `tickets/` — ticket type definitions and helpers
-- `sync/` — beads sync logic
 - `utils.ts` — general utilities (cn, etc.)
 
 ### E2E Testing
@@ -172,8 +169,6 @@ WebdriverIO tests in `e2e/` with a mock sidecar (`e2e/mock-sidecar/`). Run `bun 
 - `tauri-plugin-shell` — CLI process spawning
 
 ## Key Patterns
-
-**Beads parent-child relationships**: `bd list --json` doesn't return a `parent_id` field. Sub-tickets have a `dependencies` array with entries where `type === "parent-child"`. The Rust `list_issues()` function derives `parent_id` from this at fetch time.
 
 **Hook pattern**: Each integration has a custom hook wrapping Tauri invoke calls via TanStack Query. Feature hooks live in `src/features/*/hooks/`, shared hooks in `src/shared/hooks/`. Workflow is split across `useWorkflow`, `useWorkflowStreaming`, `useWorkflowPermissions`, `useWorkflowReview`, and `useWorkflowNotifications`.
 

@@ -1,12 +1,7 @@
 import { RefreshCw, Save, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ProjectSettings, SupervisorSettings, WorktreeSettings } from "@/bindings";
 import { useSettings } from "@/features/settings/hooks/use-settings";
-import type {
-  ProjectSettings,
-  SupervisorSettings,
-  SyncSettings,
-  WorktreeSettings,
-} from "@/shared/lib/sync";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { ScrollArea } from "@/shared/ui/scroll-area";
@@ -36,23 +31,6 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }, [effectiveDraft, updateSettings]);
-
-  const updateSync = useCallback((patch: Partial<SyncSettings>) => {
-    setDraft((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        sync: {
-          enabled: false,
-          provider: "beads",
-          auto_push: false,
-          config: {},
-          ...prev.sync,
-          ...patch,
-        },
-      };
-    });
-  }, []);
 
   const updateWorktree = useCallback((patch: Partial<WorktreeSettings>) => {
     setDraft((prev) => {
@@ -133,46 +111,6 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
 
       <ScrollArea className="flex-1">
         <div className="max-w-2xl mx-auto p-6 space-y-8">
-          {/* Sync Section */}
-          <section className="space-y-4">
-            <div>
-              <h4 className="text-sm font-semibold">Sync</h4>
-              <p className="text-xs text-muted-foreground mt-1">
-                Sync tickets with an external provider like Beads
-              </p>
-            </div>
-            <Separator />
-            <div className="space-y-4">
-              <ToggleField
-                label="Enable sync"
-                description="Synchronize tickets with the configured provider"
-                checked={effectiveDraft.sync?.enabled ?? false}
-                onChange={(enabled) => updateSync({ enabled })}
-              />
-              <div className="space-y-1.5">
-                <label
-                  className="text-xs font-medium text-muted-foreground"
-                  htmlFor="sync-provider"
-                >
-                  Provider
-                </label>
-                <Input
-                  id="sync-provider"
-                  value={effectiveDraft.sync?.provider ?? "beads"}
-                  onChange={(e) => updateSync({ provider: e.target.value })}
-                  placeholder="beads"
-                  className="text-sm"
-                />
-              </div>
-              <ToggleField
-                label="Auto-push"
-                description="Automatically push ticket changes to the provider"
-                checked={effectiveDraft.sync?.auto_push ?? false}
-                onChange={(auto_push) => updateSync({ auto_push })}
-              />
-            </div>
-          </section>
-
           {/* Worktree Section */}
           <section className="space-y-4">
             <div>
@@ -270,41 +208,5 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
         </div>
       </ScrollArea>
     </div>
-  );
-}
-
-function ToggleField({
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className="flex items-start gap-3 cursor-pointer">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`mt-0.5 relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-          checked ? "bg-emerald-500" : "bg-zinc-200 dark:bg-zinc-700"
-        }`}
-      >
-        <span
-          className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-            checked ? "translate-x-4" : "translate-x-0"
-          }`}
-        />
-      </button>
-      <div>
-        <span className="text-sm font-medium">{label}</span>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-    </label>
   );
 }

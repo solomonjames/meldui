@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ProjectSettings } from "@/bindings";
 import { commands } from "@/bindings";
-import type { ProjectSettings } from "@/shared/lib/sync";
 
 const settingsKeys = {
   project: (projectDir: string) => ["settings", "project", projectDir] as const,

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import { permissionsStoreFactory } from "@/features/workflow/stores/permissions-store";
+import { streamingStoreFactory } from "@/features/workflow/stores/streaming-store";
 import {
   mockInvoke,
   clearTauriMocks,
@@ -7,8 +9,8 @@ import {
   MockChannel,
 } from "@/shared/test/mocks/tauri";
 import { createQueryWrapper } from "@/shared/test/helpers/query-wrapper";
-import { useWorkflow } from "@/features/workflow/hooks/use-workflow";
 import type { StreamChunk } from "@/shared/types";
+import { useWorkflow } from "@/features/workflow/hooks/use-workflow";
 
 describe("useWorkflow", () => {
   let wrapper: ReturnType<typeof createQueryWrapper>;
@@ -16,6 +18,9 @@ describe("useWorkflow", () => {
   beforeEach(() => {
     clearTauriMocks();
     wrapper = createQueryWrapper();
+    streamingStoreFactory.disposeStore("issue-1");
+    streamingStoreFactory.disposeStore("issue-OTHER");
+    permissionsStoreFactory.disposeStore("issue-1");
   });
 
   it("listenersReady becomes true after mount", async () => {
@@ -135,7 +140,7 @@ describe("useWorkflow", () => {
   }
 
   it("text StreamChunk events accumulate in stepOutputs via channel", async () => {
-    const { result, getCapturedChannel } = await setupWithActiveExecution();
+    const { getCapturedChannel } = await setupWithActiveExecution();
     const channel = getCapturedChannel();
 
     act(() => {
@@ -151,13 +156,14 @@ describe("useWorkflow", () => {
       });
     });
 
-    await waitFor(() => {
-      expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("Hello World");
-    });
+    const output = streamingStoreFactory.getStore("issue-1").getState().stepOutputs[
+      "issue-1:step-1"
+    ];
+    expect(output?.textContent).toBe("Hello World");
   });
 
   it("error StreamChunk events are captured in stderrLines via channel", async () => {
-    const { result, getCapturedChannel } = await setupWithActiveExecution();
+    const { getCapturedChannel } = await setupWithActiveExecution();
     const channel = getCapturedChannel();
 
     act(() => {
@@ -168,14 +174,14 @@ describe("useWorkflow", () => {
       });
     });
 
-    await waitFor(() => {
-      const output = result.current.stepOutputs["issue-1:step-1"];
-      expect(output?.stderrLines).toContainEqual("[error] Something went wrong");
-    });
+    const output = streamingStoreFactory.getStore("issue-1").getState().stepOutputs[
+      "issue-1:step-1"
+    ];
+    expect(output?.stderrLines).toContainEqual("[error] Something went wrong");
   });
 
   it("result StreamChunk events set resultContent via channel", async () => {
-    const { result, getCapturedChannel } = await setupWithActiveExecution();
+    const { getCapturedChannel } = await setupWithActiveExecution();
     const channel = getCapturedChannel();
 
     act(() => {
@@ -186,13 +192,14 @@ describe("useWorkflow", () => {
       });
     });
 
-    await waitFor(() => {
-      expect(result.current.stepOutputs["issue-1:step-1"]?.resultContent).toBe("Final result text");
-    });
+    const output = streamingStoreFactory.getStore("issue-1").getState().stepOutputs[
+      "issue-1:step-1"
+    ];
+    expect(output?.resultContent).toBe("Final result text");
   });
 
   it("chunks for a different issue_id are filtered out via channel", async () => {
-    const { result, getCapturedChannel } = await setupWithActiveExecution();
+    const { getCapturedChannel } = await setupWithActiveExecution();
     const channel = getCapturedChannel();
 
     act(() => {
@@ -203,14 +210,16 @@ describe("useWorkflow", () => {
       });
     });
 
-    // Small delay to ensure chunk would have been processed
-    await new Promise((r) => setTimeout(r, 50));
-    expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBeFalsy();
+    // issue-1 should have no output for step-1
+    const output = streamingStoreFactory.getStore("issue-1").getState().stepOutputs[
+      "issue-1:step-1"
+    ];
+    expect(output?.textContent).toBeFalsy();
   });
 
   describe("executingStepsRef output routing", () => {
     it("streaming output only routes to step when executeStep is active", async () => {
-      const { result, resolveExecute, getCapturedChannel } = await setupWithActiveExecution();
+      const { resolveExecute, getCapturedChannel } = await setupWithActiveExecution();
       const channel = getCapturedChannel();
 
       // Send chunk while executeStep is active -- should be captured
@@ -222,9 +231,10 @@ describe("useWorkflow", () => {
         });
       });
 
-      await waitFor(() => {
-        expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("During execution");
-      });
+      expect(
+        streamingStoreFactory.getStore("issue-1").getState().stepOutputs["issue-1:step-1"]
+          ?.textContent,
+      ).toBe("During execution");
 
       // Resolve executeStep
       await act(async () => {
@@ -244,7 +254,10 @@ describe("useWorkflow", () => {
       });
 
       await new Promise((r) => setTimeout(r, 50));
-      expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("During execution");
+      expect(
+        streamingStoreFactory.getStore("issue-1").getState().stepOutputs["issue-1:step-1"]
+          ?.textContent,
+      ).toBe("During execution");
     });
   });
 
@@ -281,9 +294,9 @@ describe("useWorkflow", () => {
         });
       });
 
-      await waitFor(() => {
-        expect(result.current.pendingPermission).not.toBeNull();
-      });
+      expect(
+        permissionsStoreFactory.getStore("issue-1").getState().pendingPermission,
+      ).not.toBeNull();
 
       // Now executeStep fails
       await act(async () => {
@@ -291,7 +304,7 @@ describe("useWorkflow", () => {
       });
 
       // pendingPermission should be cleared
-      expect(result.current.pendingPermission).toBeNull();
+      expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).toBeNull();
       expect(result.current.error).toContain("Step execution failed");
     });
   });
@@ -316,9 +329,9 @@ describe("useWorkflow", () => {
         });
       });
 
-      await waitFor(() => {
-        expect(result.current.pendingPermission).not.toBeNull();
-      });
+      expect(
+        permissionsStoreFactory.getStore("issue-1").getState().pendingPermission,
+      ).not.toBeNull();
 
       mockInvoke.mockRejectedValueOnce(
         new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)"),
@@ -328,7 +341,7 @@ describe("useWorkflow", () => {
         await result.current.respondToPermission("perm-1", true);
       });
 
-      expect(result.current.pendingPermission).toBeNull();
+      expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).toBeNull();
       expect(result.current.error).toContain("session expired");
     });
   });

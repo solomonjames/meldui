@@ -23,23 +23,26 @@ export function useWorkflowReview(
 
   const addReviewComment = useCallback(
     (filePath: string, lineNumber: number, content: string, suggestion?: string) => {
-      getActiveStore()?.getState().addComment(filePath, lineNumber, content, suggestion);
+      if (!activeTicketId) return;
+      reviewStoreFactory
+        .getStore(activeTicketId)
+        .getState()
+        .addComment(filePath, lineNumber, content, suggestion);
     },
-    // biome-ignore lint/correctness/useExhaustiveDependencies: getActiveStore reads activeTicketId
     [activeTicketId],
   );
 
   const deleteReviewComment = useCallback(
     (commentId: string) => {
-      getActiveStore()?.getState().deleteComment(commentId);
+      if (!activeTicketId) return;
+      reviewStoreFactory.getStore(activeTicketId).getState().deleteComment(commentId);
     },
-    // biome-ignore lint/correctness/useExhaustiveDependencies: getActiveStore reads activeTicketId
     [activeTicketId],
   );
 
   const submitReview = useCallback(
     async (submission: ReviewSubmission) => {
-      const store = getActiveStore();
+      const store = activeTicketId ? reviewStoreFactory.getStore(activeTicketId) : null;
       if (!store || !activeTicketId) return;
       const requestId = store.getState().pendingRequestId;
       if (!requestId) return;

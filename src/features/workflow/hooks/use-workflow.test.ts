@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import { permissionsStoreFactory } from "@/features/workflow/stores/permissions-store";
 import { streamingStoreFactory } from "@/features/workflow/stores/streaming-store";
 import {
@@ -21,6 +22,7 @@ describe("useWorkflow", () => {
     streamingStoreFactory.disposeStore("issue-1");
     streamingStoreFactory.disposeStore("issue-OTHER");
     permissionsStoreFactory.disposeStore("issue-1");
+    orchestrationStoreFactory.disposeStore("issue-1");
   });
 
   it("listenersReady becomes true after mount", async () => {
@@ -86,8 +88,10 @@ describe("useWorkflow", () => {
       await result.current.executeStep("issue-1");
     });
 
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toContain("Step execution failed");
+    expect(orchestrationStoreFactory.getStore("issue-1").getState().loading).toBe(false);
+    expect(orchestrationStoreFactory.getStore("issue-1").getState().error).toContain(
+      "Step execution failed",
+    );
   });
 
   // Helper: sets up hook with active ticket, current step, and a blocking
@@ -342,7 +346,9 @@ describe("useWorkflow", () => {
       });
 
       expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).toBeNull();
-      expect(result.current.error).toContain("session expired");
+      expect(orchestrationStoreFactory.getStore("issue-1").getState().error).toContain(
+        "session expired",
+      );
     });
   });
 });

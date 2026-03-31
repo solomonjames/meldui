@@ -5,12 +5,12 @@ import { useWorkflowNotifications } from "@/features/workflow/hooks/use-workflow
 import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
 import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
 import { useWorkflowStreaming } from "@/features/workflow/hooks/use-workflow-streaming";
+import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import type {
   BranchInfo,
   CommitActionResult,
   DiffFile,
   StepExecutionResult,
-  WorkflowState,
   WorkflowSuggestion,
 } from "@/shared/types";
 
@@ -28,11 +28,9 @@ const workflowKeys = {
 export function useWorkflow(projectDir: string) {
   const queryClient = useQueryClient();
 
-  // ── Per-ticket state ──
-  const [workflowStates, setWorkflowStates] = useState<Record<string, WorkflowState>>({});
-  const [loadingTickets, setLoadingTickets] = useState<Record<string, boolean>>({});
-  const [errors, setErrors] = useState<Record<string, string | null>>({});
+  // ── Per-ticket state now in orchestration store ──
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const [loadingTicketSet, setLoadingTicketSet] = useState<Set<string>>(new Set());
 
   // Auto-advance state (backed by Rust)
   const autoAdvanceQuery = useQuery({
@@ -63,15 +61,9 @@ export function useWorkflow(projectDir: string) {
     ReturnType<typeof useWorkflowStreaming>["createStreamChannel"]
   >(null!);
 
-  useEffect(() => {
-    for (const [issueId, state] of Object.entries(workflowStates)) {
-      currentStepsRef.current[issueId] = state?.current_step_id ?? null;
-    }
-  }, [workflowStates]);
-
   // Keyed error setter for sub-hooks
   const setErrorKeyed = useCallback((issueId: string, msg: string) => {
-    setErrors((prev) => ({ ...prev, [issueId]: msg }));
+    orchestrationStoreFactory.getStore(issueId).getState().setError(msg);
   }, []);
 
   // Compose sub-hooks
@@ -87,6 +79,16 @@ export function useWorkflow(projectDir: string) {
     review.reviewReady &&
     notifications.notificationsReady;
 
+  // Update the active ticket's store when listenersReady changes
+  useEffect(() => {
+    if (activeTicketId) {
+      orchestrationStoreFactory
+        .getStore(activeTicketId)
+        .getState()
+        .setListenersReady(listenersReady);
+    }
+  }, [activeTicketId, listenersReady]);
+
   // ── Idle timeout: unload state 10 minutes after agent session ends ──
   useEffect(() => {
     let cancelled = false;
@@ -100,26 +102,12 @@ export function useWorkflow(projectDir: string) {
         // Start 10-minute unload timer
         unloadTimersRef.current[issue_id] = setTimeout(
           () => {
-            setWorkflowStates((prev) => {
-              const next = { ...prev };
-              delete next[issue_id];
-              return next;
-            });
-            setLoadingTickets((prev) => {
-              const next = { ...prev };
-              delete next[issue_id];
-              return next;
-            });
-            setErrors((prev) => {
-              const next = { ...prev };
-              delete next[issue_id];
-              return next;
-            });
+            orchestrationStoreFactory.getStore(issue_id).getState().clearState();
             streaming.clearTicketOutputs?.(issue_id);
             delete unloadTimersRef.current[issue_id];
           },
-          10 * 60 * 1000,
-        ); // 10 minutes
+          10 * 60 * 1000, // 10 minutes
+        );
       })
       .then((u) => {
         if (cancelled) u();
@@ -162,7 +150,10 @@ export function useWorkflow(projectDir: string) {
         });
       } catch (err) {
         if (activeTicketId) {
-          setErrors((prev) => ({ ...prev, [activeTicketId]: `Failed to get workflow: ${err}` }));
+          orchestrationStoreFactory
+            .getStore(activeTicketId)
+            .getState()
+            .setError(`Failed to get workflow: ${err}`);
         }
         return null;
       }
@@ -176,11 +167,15 @@ export function useWorkflow(projectDir: string) {
       try {
         const state = await commands.workflowState(projectDir, issueId);
         if (state) {
-          setWorkflowStates((prev) => ({ ...prev, [issueId]: state }));
+          orchestrationStoreFactory.getStore(issueId).getState().setWorkflowState(state);
+          currentStepsRef.current[issueId] = state.current_step_id ?? null;
         }
         return state;
       } catch (err) {
-        setErrors((prev) => ({ ...prev, [issueId]: `Failed to get workflow state: ${err}` }));
+        orchestrationStoreFactory
+          .getStore(issueId)
+          .getState()
+          .setError(`Failed to get workflow state: ${err}`);
         return null;
       }
     },
@@ -194,7 +189,10 @@ export function useWorkflow(projectDir: string) {
         return await commands.workflowGetDiff(dirOverride ?? projectDir, baseCommit ?? null);
       } catch (err) {
         if (activeTicketId) {
-          setErrors((prev) => ({ ...prev, [activeTicketId]: `Failed to get diff: ${err}` }));
+          orchestrationStoreFactory
+            .getStore(activeTicketId)
+            .getState()
+            .setError(`Failed to get diff: ${err}`);
         }
         return [] as DiffFile[];
       }
@@ -209,10 +207,10 @@ export function useWorkflow(projectDir: string) {
         return await commands.workflowGetBranchInfo(dirOverride ?? projectDir);
       } catch (err) {
         if (activeTicketId) {
-          setErrors((prev) => ({
-            ...prev,
-            [activeTicketId]: `Failed to get branch info: ${err}`,
-          }));
+          orchestrationStoreFactory
+            .getStore(activeTicketId)
+            .getState()
+            .setError(`Failed to get branch info: ${err}`);
         }
         return null as BranchInfo | null;
       }
@@ -224,16 +222,17 @@ export function useWorkflow(projectDir: string) {
 
   const assignWorkflow = useCallback(
     async (issueId: string, workflowId: string) => {
+      const store = orchestrationStoreFactory.getStore(issueId);
       try {
-        setLoadingTickets((prev) => ({ ...prev, [issueId]: true }));
+        store.getState().setLoading(true);
         const state = await commands.workflowAssign(projectDir, issueId, workflowId);
-        setWorkflowStates((prev) => ({ ...prev, [issueId]: state }));
+        store.getState().setWorkflowState(state);
         return state;
       } catch (err) {
-        setErrors((prev) => ({ ...prev, [issueId]: `Failed to assign workflow: ${err}` }));
+        store.getState().setError(`Failed to assign workflow: ${err}`);
         return null;
       } finally {
-        setLoadingTickets((prev) => ({ ...prev, [issueId]: false }));
+        store.getState().setLoading(false);
       }
     },
     [projectDir],
@@ -249,11 +248,14 @@ export function useWorkflow(projectDir: string) {
         delete unloadTimersRef.current[issueId];
       }
 
-      try {
-        setLoadingTickets((prev) => ({ ...prev, [issueId]: true }));
-        setErrors((prev) => ({ ...prev, [issueId]: null }));
+      const store = orchestrationStoreFactory.getStore(issueId);
 
-        const ticketState = workflowStates[issueId];
+      try {
+        store.getState().setLoading(true);
+        store.getState().setError(null);
+        setLoadingTicketSet((prev) => new Set(prev).add(issueId));
+
+        const ticketState = store.getState().workflowState;
         if (ticketState?.workflow_id) {
           const wf = workflows.find((w) => w.id === ticketState.workflow_id);
           if (wf?.ticket_sections && wf.ticket_sections.length > 0) {
@@ -270,10 +272,10 @@ export function useWorkflow(projectDir: string) {
           : null;
         executingStepsRef.current[issueId] =
           currentStepsRef.current[issueId] ?? lastCompletedStepId;
-        setWorkflowStates((prev) => {
-          const s = prev[issueId];
-          return s ? { ...prev, [issueId]: { ...s, step_status: "in_progress" } } : prev;
-        });
+        const ws = store.getState().workflowState;
+        if (ws) {
+          store.getState().setWorkflowState({ ...ws, step_status: "in_progress" });
+        }
         const channel = createStreamChannelRef.current();
         const result = await commands.workflowExecuteStep(
           projectDir,
@@ -288,32 +290,41 @@ export function useWorkflow(projectDir: string) {
       } catch (err) {
         executingStepsRef.current[issueId] = null;
         clearPermissionPending(issueId);
-        setErrors((prev) => ({ ...prev, [issueId]: `Step execution failed: ${err}` }));
+        store.getState().setError(`Step execution failed: ${err}`);
         await getWorkflowState(issueId);
         return null;
       } finally {
-        setLoadingTickets((prev) => ({ ...prev, [issueId]: false }));
+        store.getState().setLoading(false);
+        setLoadingTicketSet((prev) => {
+          const next = new Set(prev);
+          next.delete(issueId);
+          return next;
+        });
       }
     },
-    [projectDir, getWorkflowState, workflowStates, workflows, clearPermissionPending],
+    [projectDir, getWorkflowState, workflows, clearPermissionPending],
   );
 
   const suggestWorkflow = useCallback(
     async (issueId: string) => {
+      const store = orchestrationStoreFactory.getStore(issueId);
       try {
-        setLoadingTickets((prev) => ({ ...prev, [issueId]: true }));
-        setErrors((prev) => ({ ...prev, [issueId]: null }));
+        store.getState().setLoading(true);
+        store.getState().setError(null);
+        setLoadingTicketSet((prev) => new Set(prev).add(issueId));
         const channel = createStreamChannelRef.current();
         const suggestion = await commands.workflowSuggest(projectDir, issueId, channel);
         return suggestion as WorkflowSuggestion;
       } catch {
-        setErrors((prev) => ({
-          ...prev,
-          [issueId]: `Unable to suggest workflow — please select manually`,
-        }));
+        store.getState().setError("Unable to suggest workflow — please select manually");
         return null;
       } finally {
-        setLoadingTickets((prev) => ({ ...prev, [issueId]: false }));
+        store.getState().setLoading(false);
+        setLoadingTicketSet((prev) => {
+          const next = new Set(prev);
+          next.delete(issueId);
+          return next;
+        });
       }
     },
     [projectDir],
@@ -338,19 +349,20 @@ export function useWorkflow(projectDir: string) {
 
   const executeCommitAction = useCallback(
     async (issueId: string, action: "commit" | "commit_and_pr", commitMessage: string) => {
+      const store = orchestrationStoreFactory.getStore(issueId);
       try {
-        setLoadingTickets((prev) => ({ ...prev, [issueId]: true }));
-        setErrors((prev) => ({ ...prev, [issueId]: null }));
+        store.getState().setLoading(true);
+        store.getState().setError(null);
         return (await executeCommitActionMutation.mutateAsync({
           issueId,
           action,
           commitMessage,
         })) as CommitActionResult;
       } catch (err) {
-        setErrors((prev) => ({ ...prev, [issueId]: `Commit action failed: ${err}` }));
+        store.getState().setError(`Commit action failed: ${err}`);
         return null;
       } finally {
-        setLoadingTickets((prev) => ({ ...prev, [issueId]: false }));
+        store.getState().setLoading(false);
       }
     },
     [executeCommitActionMutation],
@@ -361,7 +373,10 @@ export function useWorkflow(projectDir: string) {
       try {
         await commands.workflowCleanupWorktree(projectDir, issueId);
       } catch (err) {
-        setErrors((prev) => ({ ...prev, [issueId]: `Failed to cleanup worktree: ${err}` }));
+        orchestrationStoreFactory
+          .getStore(issueId)
+          .getState()
+          .setError(`Failed to cleanup worktree: ${err}`);
       }
     },
     [projectDir],
@@ -371,13 +386,16 @@ export function useWorkflow(projectDir: string) {
     async (issueId: string) => {
       try {
         const newState = await commands.workflowAdvance(projectDir, issueId);
-        setWorkflowStates((prev) => ({ ...prev, [issueId]: newState }));
+        orchestrationStoreFactory.getStore(issueId).getState().setWorkflowState(newState);
         // Invalidate conversation cache so the next step sees prior step history
         queryClient.invalidateQueries({
           queryKey: ["conversations", projectDir, issueId],
         });
       } catch (err) {
-        setErrors((prev) => ({ ...prev, [issueId]: `Failed to advance step: ${err}` }));
+        orchestrationStoreFactory
+          .getStore(issueId)
+          .getState()
+          .setError(`Failed to advance step: ${err}`);
       }
     },
     [projectDir, queryClient],
@@ -390,19 +408,15 @@ export function useWorkflow(projectDir: string) {
   const respondToPermission = permissions.respondToPermission;
 
   // ── Convenience accessors for the active ticket ──
-  const currentState = activeTicketId ? (workflowStates[activeTicketId] ?? null) : null;
-  const loading = activeTicketId ? (loadingTickets[activeTicketId] ?? false) : false;
-  const error = activeTicketId ? (errors[activeTicketId] ?? null) : null;
-
-  const runningTicketIds = useMemo(
-    () =>
-      new Set(
-        Object.entries(loadingTickets)
-          .filter(([, v]) => v)
-          .map(([k]) => k),
-      ),
-    [loadingTickets],
-  );
+  const currentState = activeTicketId
+    ? orchestrationStoreFactory.getStore(activeTicketId).getState().workflowState
+    : null;
+  const loading = activeTicketId
+    ? orchestrationStoreFactory.getStore(activeTicketId).getState().loading
+    : false;
+  const error = activeTicketId
+    ? orchestrationStoreFactory.getStore(activeTicketId).getState().error
+    : null;
 
   return {
     workflows,
@@ -413,7 +427,7 @@ export function useWorkflow(projectDir: string) {
     stepOutputs: streaming.stepOutputs,
     activeTicketId,
     setActiveTicketId,
-    runningTicketIds,
+    runningTicketIds: loadingTicketSet,
     pendingPermission: permissions.pendingPermission,
     respondToPermission,
     notifications: notifications.notifications,

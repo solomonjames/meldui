@@ -387,6 +387,7 @@ export function useWorkflow(projectDir: string) {
       try {
         const newState = await commands.workflowAdvance(projectDir, issueId);
         orchestrationStoreFactory.getStore(issueId).getState().setWorkflowState(newState);
+        currentStepsRef.current[issueId] = newState.current_step_id ?? null;
         // Invalidate conversation cache so the next step sees prior step history
         queryClient.invalidateQueries({
           queryKey: ["conversations", projectDir, issueId],
@@ -407,16 +408,12 @@ export function useWorkflow(projectDir: string) {
 
   const respondToPermission = permissions.respondToPermission;
 
-  // ── Convenience accessors for the active ticket ──
-  const currentState = activeTicketId
-    ? orchestrationStoreFactory.getStore(activeTicketId).getState().workflowState
-    : null;
-  const loading = activeTicketId
-    ? orchestrationStoreFactory.getStore(activeTicketId).getState().loading
-    : false;
-  const error = activeTicketId
-    ? orchestrationStoreFactory.getStore(activeTicketId).getState().error
-    : null;
+  // ── Reactive convenience accessors for the active ticket ──
+  const EMPTY_TICKET = "__none__";
+  const storeId = activeTicketId ?? EMPTY_TICKET;
+  const currentState = orchestrationStoreFactory.useTicketStore(storeId, (s) => s.workflowState);
+  const loading = orchestrationStoreFactory.useTicketStore(storeId, (s) => s.loading);
+  const error = orchestrationStoreFactory.useTicketStore(storeId, (s) => s.error);
 
   return {
     workflows,

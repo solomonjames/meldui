@@ -3,6 +3,9 @@ import { commands, events } from "@/bindings";
 import { permissionsStoreFactory } from "@/features/workflow/stores/permissions-store";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 
+// Stable ID used when no ticket is active — ensures hooks are called unconditionally
+const EMPTY_TICKET = "__none__";
+
 export function useWorkflowPermissions(
   activeTicketId: string | null,
   setError: (issueId: string, msg: string) => void,
@@ -17,9 +20,12 @@ export function useWorkflowPermissions(
     });
   });
 
-  const pendingPermission = activeTicketId
-    ? permissionsStoreFactory.getStore(activeTicketId).getState().pendingPermission
-    : null;
+  // Reactive store subscription (always called — rules of hooks)
+  const storeId = activeTicketId ?? EMPTY_TICKET;
+  const pendingPermission = permissionsStoreFactory.useTicketStore(
+    storeId,
+    (s) => s.pendingPermission,
+  );
 
   const respondToPermission = useCallback(
     async (requestId: string, allowed: boolean) => {
@@ -52,8 +58,7 @@ export function useWorkflowPermissions(
   }, []);
 
   return {
-    pendingPermission,
-    pendingPermissions: {} as Record<string, never>, // Deprecated — kept for backward compat
+    pendingPermission: activeTicketId ? pendingPermission : null,
     respondToPermission,
     permissionsReady,
     clearPending,

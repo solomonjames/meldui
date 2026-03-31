@@ -104,8 +104,6 @@ export function WorkflowShell({
   );
   const reviewRoundKey = reviewStoreFactory.useTicketStore(ticket.id, (s) => s.roundKey);
 
-  // workflowState is guaranteed non-null by the parent guard in App.tsx
-  // but the context type includes null, so we assert here
   const workflowDef = useWorkflowDefinition(workflowState?.workflow_id, onGetWorkflow);
   const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
   // Use a ref with a monotonic counter to prevent StrictMode double-fire

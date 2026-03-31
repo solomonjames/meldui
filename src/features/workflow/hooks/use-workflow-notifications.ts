@@ -1,12 +1,21 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { events } from "@/bindings";
 import { notificationsStoreFactory } from "@/features/workflow/stores/notifications-store";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
+
+// Stable ID used when no ticket is active — ensures hooks are called unconditionally
+const EMPTY_TICKET = "__none__";
 
 export function useWorkflowNotifications(
   activeTicketId: string | null,
   onRefreshTicketRef: React.MutableRefObject<(() => Promise<void>) | null>,
 ) {
+  // Track last active ticket so notifications aren't dropped during navigation transitions
+  const lastActiveTicketRef = useRef(activeTicketId);
+  if (activeTicketId) {
+    lastActiveTicketRef.current = activeTicketId;
+  }
+
   const sectionReady = useTauriEvent(events.sectionUpdateEvent, (payload) => {
     const store = notificationsStoreFactory.getStore(payload.ticket_id);
     store.getState().setLastUpdatedSectionId(payload.section_id ?? payload.section);
@@ -16,10 +25,10 @@ export function useWorkflowNotifications(
   });
 
   const notificationReady = useTauriEvent(events.notificationEvent, (payload) => {
-    // Notifications are global (not per-ticket), but we store on active ticket if available.
-    // For backward compat, we keep a flat list approach.
-    if (activeTicketId) {
-      notificationsStoreFactory.getStore(activeTicketId).getState().addNotification(payload);
+    // Notifications don't carry a ticket_id, so route to active or last-active ticket.
+    const targetTicket = activeTicketId ?? lastActiveTicketRef.current;
+    if (targetTicket) {
+      notificationsStoreFactory.getStore(targetTicket).getState().addNotification(payload);
     }
   });
 
@@ -30,17 +39,14 @@ export function useWorkflowNotifications(
 
   const notificationsReady = sectionReady && notificationReady && statusReady;
 
-  const notifications = activeTicketId
-    ? notificationsStoreFactory.getStore(activeTicketId).getState().notifications
-    : [];
-
-  const statusText = activeTicketId
-    ? notificationsStoreFactory.getStore(activeTicketId).getState().statusText
-    : null;
-
-  const lastUpdatedSectionId = activeTicketId
-    ? notificationsStoreFactory.getStore(activeTicketId).getState().lastUpdatedSectionId
-    : null;
+  // Reactive store subscriptions (always called — rules of hooks)
+  const storeId = activeTicketId ?? EMPTY_TICKET;
+  const notifications = notificationsStoreFactory.useTicketStore(storeId, (s) => s.notifications);
+  const statusText = notificationsStoreFactory.useTicketStore(storeId, (s) => s.statusText);
+  const lastUpdatedSectionId = notificationsStoreFactory.useTicketStore(
+    storeId,
+    (s) => s.lastUpdatedSectionId,
+  );
 
   const clearNotification = useCallback(
     (index: number) => {
@@ -51,5 +57,11 @@ export function useWorkflowNotifications(
     [activeTicketId],
   );
 
-  return { notifications, clearNotification, lastUpdatedSectionId, statusText, notificationsReady };
+  return {
+    notifications: activeTicketId ? notifications : [],
+    clearNotification,
+    lastUpdatedSectionId: activeTicketId ? lastUpdatedSectionId : null,
+    statusText: activeTicketId ? statusText : null,
+    notificationsReady,
+  };
 }

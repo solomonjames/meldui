@@ -4,6 +4,9 @@ import { reviewStoreFactory } from "@/features/workflow/stores/review-store";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
 import type { ReviewFinding, ReviewSubmission } from "@/shared/types";
 
+// Stable ID used when no ticket is active — ensures hooks are called unconditionally
+const EMPTY_TICKET = "__none__";
+
 export function useWorkflowReview(
   activeTicketId: string | null,
   setError: (issueId: string, msg: string) => void,
@@ -13,13 +16,15 @@ export function useWorkflowReview(
     store.getState().setFindings(payload.findings as ReviewFinding[], payload.request_id);
   });
 
-  const getActiveStore = () =>
-    activeTicketId ? reviewStoreFactory.getStore(activeTicketId) : null;
-
-  const reviewFindings = getActiveStore()?.getState().findings ?? [];
-  const reviewComments = getActiveStore()?.getState().comments ?? [];
-  const pendingReviewRequestId = getActiveStore()?.getState().pendingRequestId ?? null;
-  const reviewRoundKey = getActiveStore()?.getState().roundKey ?? 0;
+  // Reactive store subscriptions (always called — rules of hooks)
+  const storeId = activeTicketId ?? EMPTY_TICKET;
+  const reviewFindings = reviewStoreFactory.useTicketStore(storeId, (s) => s.findings);
+  const reviewComments = reviewStoreFactory.useTicketStore(storeId, (s) => s.comments);
+  const pendingReviewRequestId = reviewStoreFactory.useTicketStore(
+    storeId,
+    (s) => s.pendingRequestId,
+  );
+  const reviewRoundKey = reviewStoreFactory.useTicketStore(storeId, (s) => s.roundKey);
 
   const addReviewComment = useCallback(
     (filePath: string, lineNumber: number, content: string, suggestion?: string) => {
@@ -75,13 +80,13 @@ export function useWorkflowReview(
   );
 
   return {
-    reviewFindings,
-    reviewComments,
-    pendingReviewRequestId,
+    reviewFindings: activeTicketId ? reviewFindings : [],
+    reviewComments: activeTicketId ? reviewComments : [],
+    pendingReviewRequestId: activeTicketId ? pendingReviewRequestId : null,
     addReviewComment,
     deleteReviewComment,
     submitReview,
-    reviewRoundKey,
+    reviewRoundKey: activeTicketId ? reviewRoundKey : 0,
     reviewReady,
   };
 }

@@ -17,11 +17,11 @@ export const PHASE_CONFIG: Record<
     badgeBg: "bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-400",
     label: "Research",
   },
-  spec: {
+  plan: {
     icon: FileText,
     iconColor: "text-amber-500",
     badgeBg: "bg-amber-100 text-amber-600 dark:bg-amber-900 dark:text-amber-400",
-    label: "Spec",
+    label: "Plan",
   },
   implementation: {
     icon: Code,

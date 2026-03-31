@@ -25,7 +25,7 @@ const NAV_ITEMS = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-const ACTIVE_PHASES = new Set<TicketPhase>(["research", "spec", "implementation", "review"]);
+const ACTIVE_PHASES = new Set<TicketPhase>(["research", "plan", "implementation", "review"]);
 
 export function AppSidebar({
   activePage,

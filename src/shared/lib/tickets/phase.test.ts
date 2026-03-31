@@ -32,7 +32,7 @@ const testWorkflow: WorkflowDefinition = {
       description: "",
       instructions: { prompt: "" },
       view: "chat",
-      phase: "spec",
+      phase: "plan",
     },
     {
       id: "implement",
@@ -83,7 +83,7 @@ describe("getTicketPhase", () => {
       step_history: [],
     };
     const ticket = makeTicket({ metadata: { workflow: workflowState } });
-    expect(getTicketPhase(ticket, [testWorkflow])).toBe("spec");
+    expect(getTicketPhase(ticket, [testWorkflow])).toBe("plan");
   });
 
   it("returns 'implementation' for implementation step", () => {

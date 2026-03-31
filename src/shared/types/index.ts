@@ -33,7 +33,7 @@ export interface ChatMessage {
 
 // ── Workflow Types ──
 
-export type WorkflowPhase = "research" | "spec" | "implementation" | "review";
+export type WorkflowPhase = "research" | "plan" | "implementation" | "review";
 
 export type StepViewType = "chat" | "review" | "progress" | "diff_review" | "commit";
 

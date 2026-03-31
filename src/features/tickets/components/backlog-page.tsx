@@ -22,7 +22,7 @@ const TICKET_TYPES = ["feature", "task", "bug", "chore", "epic"] as const;
 const COLUMNS: { key: TicketPhase; title: string }[] = [
   { key: "backlog", title: "Backlog" },
   { key: "research", title: "Research" },
-  { key: "spec", title: "Spec" },
+  { key: "plan", title: "Plan" },
   { key: "implementation", title: "Implementation" },
   { key: "review", title: "Review" },
   { key: "done", title: "Done" },
@@ -54,7 +54,7 @@ export function BacklogPage({
     const buckets: Record<TicketPhase, Ticket[]> = {
       backlog: [],
       research: [],
-      spec: [],
+      plan: [],
       implementation: [],
       review: [],
       done: [],

@@ -36,7 +36,7 @@ pub struct WorkflowDefinition {
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowPhase {
     Research,
-    Spec,
+    Plan,
     Implementation,
     Review,
 }

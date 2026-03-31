@@ -71,12 +71,6 @@ async settingsGet(projectDir: string) : Promise<ProjectSettings> {
 async settingsUpdate(projectDir: string, settings: ProjectSettings) : Promise<null> {
     return await TAURI_INVOKE("settings_update", { projectDir, settings });
 },
-async syncPullAll(projectDir: string) : Promise<Ticket[]> {
-    return await TAURI_INVOKE("sync_pull_all", { projectDir });
-},
-async syncPushTicket(projectDir: string, id: string) : Promise<string> {
-    return await TAURI_INVOKE("sync_push_ticket", { projectDir, id });
-},
 async conversationRestore(projectDir: string, ticketId: string) : Promise<ConversationSnapshot | null> {
     return await TAURI_INVOKE("conversation_restore", { projectDir, ticketId });
 },
@@ -218,7 +212,7 @@ export type NotificationEvent = { title: string; message: string; level: string 
  * Emitted when the agent reports a pull request URL.
  */
 export type PrUrlReportedEvent = { ticket_id: string; url: string }
-export type ProjectSettings = { sync?: SyncSettings | null; worktree?: WorktreeSettings | null; supervisor?: SupervisorSettings | null }
+export type ProjectSettings = { worktree?: WorktreeSettings | null; supervisor?: SupervisorSettings | null }
 /**
  * Emitted when a ticket section is updated by the agent.
  */
@@ -266,8 +260,7 @@ custom_prompt?: string | null;
  * Max supervisor replies per step before falling back to user. Default: 5.
  */
 max_replies_per_step?: number }
-export type SyncSettings = { enabled?: boolean; provider?: string; auto_push?: boolean; config?: Partial<{ [key in string]: string }> }
-export type Ticket = { id: string; title: string; status: string; priority: number; ticket_type: string; description?: string | null; notes?: string | null; design?: string | null; acceptance_criteria?: string | null; assignee?: string | null; created_by?: string | null; created_at: string; updated_at: string; closed_at?: string | null; close_reason?: string | null; labels?: string[]; parent_id?: string | null; children_ids?: string[]; sections?: TicketSection[]; metadata?: JsonValue; comments?: TicketComment[]; external_id?: string | null; external_source?: string | null }
+export type Ticket = { id: string; title: string; status: string; priority: number; ticket_type: string; description?: string | null; notes?: string | null; design?: string | null; acceptance_criteria?: string | null; assignee?: string | null; created_by?: string | null; created_at: string; updated_at: string; closed_at?: string | null; close_reason?: string | null; labels?: string[]; parent_id?: string | null; children_ids?: string[]; sections?: TicketSection[]; metadata?: JsonValue; comments?: TicketComment[] }
 export type TicketComment = { id: string; author: string; text: string; created_at: string }
 export type TicketSection = { id: string; label: string; type: string; content: JsonValue; collapsed?: boolean; source?: string; created_at?: string; updated_at?: string }
 /**

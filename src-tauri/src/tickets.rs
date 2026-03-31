@@ -135,10 +135,6 @@ pub struct Ticket {
     pub metadata: serde_json::Value,
     #[serde(default)]
     pub comments: Vec<TicketComment>,
-    #[serde(default)]
-    pub external_id: Option<String>,
-    #[serde(default)]
-    pub external_source: Option<String>,
 }
 
 /// Get path to the .meldui/tickets/ directory, creating if needed.
@@ -172,11 +168,6 @@ fn read_ticket(project_dir: &str, id: &str) -> Result<Ticket, TicketError> {
         id: id.to_owned(),
         source: e,
     })
-}
-
-/// Write a ticket to disk (public for sync module).
-pub fn write_ticket_raw(project_dir: &str, ticket: &Ticket) -> Result<(), String> {
-    write_ticket(project_dir, ticket).map_err(|e| e.to_string())
 }
 
 /// Write a ticket to disk.
@@ -308,8 +299,6 @@ fn create_ticket_inner(
         sections: Vec::new(),
         metadata: serde_json::json!({}),
         comments: Vec::new(),
-        external_id: None,
-        external_source: None,
     };
 
     write_ticket(project_dir, &ticket)?;

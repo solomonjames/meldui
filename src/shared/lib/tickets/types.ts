@@ -30,8 +30,6 @@ export interface Ticket {
   sections?: TicketSection[];
   metadata: Record<string, unknown>;
   comments: TicketComment[];
-  external_id?: string;
-  external_source?: string;
 }
 
 // ── Section Types ──

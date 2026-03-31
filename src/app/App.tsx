@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Toaster } from "sonner";
 import { TicketPage } from "@/app/ticket-page";
@@ -19,6 +19,7 @@ import { AppSidebar } from "@/shared/layout/app-sidebar";
 import { StatusBar } from "@/shared/layout/status-bar";
 import { useTauriEventInvalidation } from "@/shared/lib/invalidation";
 import { queryClient } from "@/shared/lib/query-client";
+import { navigationStore, useNavigationStore } from "@/shared/stores/navigation-store";
 import type { Ticket } from "@/shared/types";
 
 function AppContent() {
@@ -27,9 +28,9 @@ function AppContent() {
   const { projectDir, folderName, loading: dirLoading, openFolderDialog } = useProjectDir();
   const ticketStore = useTickets(projectDir ?? "");
   const workflow = useWorkflow(projectDir ?? "");
-  const [activePage, setActivePage] = useState<"backlog" | "ticket" | "settings">("backlog");
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [activeTicketId, setActiveTicketIdLocal] = useState<string | null>(null);
+  const activePage = useNavigationStore((s) => s.activePage);
+  const activeTicketId = useNavigationStore((s) => s.activeTicketId);
+  const createDialogOpen = useNavigationStore((s) => s.createDialogOpen);
 
   // Centralized event-driven query invalidation
   useTauriEventInvalidation(projectDir ?? "");
@@ -42,27 +43,25 @@ function AppContent() {
         !e.metaKey &&
         !e.ctrlKey &&
         !e.altKey &&
-        activePage !== "ticket" &&
+        navigationStore.getState().activePage !== "ticket" &&
         !(e.target instanceof HTMLInputElement) &&
         !(e.target instanceof HTMLTextAreaElement) &&
         !(e.target instanceof HTMLSelectElement)
       ) {
         e.preventDefault();
-        setCreateDialogOpen(true);
+        navigationStore.getState().setCreateDialogOpen(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activePage]);
+  }, []);
 
   const { getWorkflowState, setActiveTicketId: setWorkflowActiveTicketId } = workflow;
 
   const navigateToTicket = useCallback(
     async (ticketId: string) => {
-      setActiveTicketIdLocal(ticketId);
+      navigationStore.getState().navigateToTicket(ticketId);
       setWorkflowActiveTicketId(ticketId);
-      setActivePage("ticket");
-      // Fetch workflow state so WorkflowShell renders if a workflow is active
       await getWorkflowState(ticketId);
     },
     [setWorkflowActiveTicketId, getWorkflowState],
@@ -85,9 +84,8 @@ function AppContent() {
   }, [workflow.setOnRefreshTicket, noopRefresh]);
 
   const handleNavigateToBacklog = useCallback(() => {
-    setActiveTicketIdLocal(null);
+    navigationStore.getState().navigateToBacklog();
     setWorkflowActiveTicketId(null);
-    setActivePage("backlog");
     ticketStore.refreshTickets();
   }, [ticketStore, setWorkflowActiveTicketId]);
 
@@ -96,7 +94,7 @@ function AppContent() {
       if (page === "backlog") {
         handleNavigateToBacklog();
       } else if (page === "settings") {
-        setActivePage("settings");
+        navigationStore.getState().navigateToSettings();
       }
     },
     [handleNavigateToBacklog],
@@ -189,7 +187,7 @@ function AppContent() {
           onNavigate={handleSidebarNavigate}
           tickets={ticketStore.tickets}
           workflows={workflow.workflows}
-          onCreateTicket={() => setCreateDialogOpen(true)}
+          onCreateTicket={() => navigationStore.getState().setCreateDialogOpen(true)}
           folderName={folderName}
           onOpenFolder={openFolderDialog}
           onTicketClick={handleTicketClick}
@@ -202,7 +200,7 @@ function AppContent() {
       {renderActivePage()}
       <CreateTicketDialog
         open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
+        onOpenChange={(open) => navigationStore.getState().setCreateDialogOpen(open)}
         onCreateTicket={ticketStore.createTicket}
       />
       <Toaster position="top-right" richColors />

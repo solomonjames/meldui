@@ -271,7 +271,7 @@ export function useWorkflow(projectDir: string) {
           ? ticketState.step_history[ticketState.step_history.length - 1].step_id
           : null;
         executingStepsRef.current[issueId] =
-          currentStepsRef.current[issueId] ?? lastCompletedStepId;
+          ticketState?.current_step_id ?? currentStepsRef.current[issueId] ?? lastCompletedStepId;
         const ws = store.getState().workflowState;
         if (ws) {
           store.getState().setWorkflowState({ ...ws, step_status: "in_progress" });

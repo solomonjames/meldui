@@ -4,16 +4,14 @@
 //!
 //! Exposes Tauri commands that the React frontend calls via `invoke()`.
 //! Coordinates ticket CRUD, workflow orchestration, agent sidecar communication,
-//! external CLI wrappers (beads, claude, git), and conversation persistence.
+//! external CLI wrappers (claude, git), and conversation persistence.
 mod agent;
-mod beads;
 mod claude;
 mod constants;
 mod conversation;
 mod menu;
 mod preferences;
 mod settings;
-mod sync;
 mod tickets;
 mod workflow;
 
@@ -240,21 +238,6 @@ async fn settings_update(
     settings::update_settings(&project_dir, &settings)
 }
 
-// ── Sync commands ──
-
-#[tauri::command]
-#[specta::specta]
-async fn sync_pull_all(project_dir: String) -> Result<Vec<Ticket>, String> {
-    sync::pull_all(&project_dir).await
-}
-
-#[tauri::command]
-#[specta::specta]
-async fn sync_push_ticket(project_dir: String, id: String) -> Result<String, String> {
-    let ticket = tickets::show_ticket(&project_dir, &id)?;
-    sync::push_ticket(&project_dir, &ticket).await
-}
-
 // ── Conversation commands ──
 
 #[tauri::command]
@@ -473,8 +456,6 @@ pub fn run() {
             ticket_initialize_sections,
             settings_get,
             settings_update,
-            sync_pull_all,
-            sync_push_ticket,
             conversation_restore,
             conversation_list,
             list_project_files,

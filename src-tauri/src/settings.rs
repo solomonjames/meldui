@@ -28,18 +28,6 @@ pub(crate) enum SettingsError {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, specta::Type)]
-pub struct SyncSettings {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(default)]
-    pub provider: String,
-    #[serde(default)]
-    pub auto_push: bool,
-    #[serde(default)]
-    pub config: std::collections::HashMap<String, String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct WorktreeSettings {
     /// Optional shell command to run after worktree creation (e.g., "bun install")
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -72,8 +60,6 @@ impl Default for SupervisorSettings {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, specta::Type)]
 pub struct ProjectSettings {
-    #[serde(default)]
-    pub sync: Option<SyncSettings>,
     #[serde(default)]
     pub worktree: Option<WorktreeSettings>,
     #[serde(default)]

@@ -7,6 +7,11 @@ import { CompactWorkflowIndicator } from "@/features/workflow/components/compact
 import { DebugPanel } from "@/features/workflow/components/debug-panel";
 import { ChatView } from "@/features/workflow/components/views/chat-view";
 import { useWorkflowContext } from "@/features/workflow/context";
+import { notificationsStoreFactory } from "@/features/workflow/stores/notifications-store";
+import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
+import { permissionsStoreFactory } from "@/features/workflow/stores/permissions-store";
+import { reviewStoreFactory } from "@/features/workflow/stores/review-store";
+import { streamingStoreFactory } from "@/features/workflow/stores/streaming-store";
 import { useDebugLog } from "@/shared/hooks/use-debug-log";
 import type { StepExecutionResult, Ticket } from "@/shared/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
@@ -27,31 +32,50 @@ export function WorkflowShell({
   scrollToStepRef,
 }: WorkflowShellProps) {
   const {
-    currentState: workflowState,
-    stepOutputs,
-    loading,
-    error,
-    listenersReady,
-    pendingPermission,
-    respondToPermission,
     executeStep: onExecuteStep,
     getDiff: onGetDiff,
-    notifications,
-    clearNotification: onClearNotification,
     autoAdvance,
     setAutoAdvance,
     advanceStep,
-    reviewFindings,
-    reviewComments,
-    addReviewComment: onAddReviewComment,
-    deleteReviewComment: onDeleteReviewComment,
-    submitReview: onSubmitReview,
-    pendingReviewRequestId,
-    reviewRoundKey,
     getBranchInfo: onGetBranchInfo,
     executeCommitAction: onExecuteCommitAction,
     cleanupWorktree: onCleanupWorktree,
+    respondToPermission,
+    addReviewComment: onAddReviewComment,
+    deleteReviewComment: onDeleteReviewComment,
+    submitReview: onSubmitReview,
   } = useWorkflowContext();
+
+  const workflowState = orchestrationStoreFactory.useTicketStore(ticket.id, (s) => s.workflowState);
+  const loading = orchestrationStoreFactory.useTicketStore(ticket.id, (s) => s.loading);
+  const error = orchestrationStoreFactory.useTicketStore(ticket.id, (s) => s.error);
+  const listenersReady = orchestrationStoreFactory.useTicketStore(
+    ticket.id,
+    (s) => s.listenersReady,
+  );
+
+  const stepOutputs = streamingStoreFactory.useTicketStore(ticket.id, (s) => s.stepOutputs);
+
+  const pendingPermission = permissionsStoreFactory.useTicketStore(
+    ticket.id,
+    (s) => s.pendingPermission,
+  );
+
+  const notifications = notificationsStoreFactory.useTicketStore(ticket.id, (s) => s.notifications);
+  const onClearNotification = useCallback(
+    (index: number) => {
+      notificationsStoreFactory.getStore(ticket.id).getState().clearNotification(index);
+    },
+    [ticket.id],
+  );
+
+  const reviewFindings = reviewStoreFactory.useTicketStore(ticket.id, (s) => s.findings);
+  const reviewComments = reviewStoreFactory.useTicketStore(ticket.id, (s) => s.comments);
+  const pendingReviewRequestId = reviewStoreFactory.useTicketStore(
+    ticket.id,
+    (s) => s.pendingRequestId,
+  );
+  const reviewRoundKey = reviewStoreFactory.useTicketStore(ticket.id, (s) => s.roundKey);
 
   // workflowState is guaranteed non-null by the parent guard in App.tsx
   // but the context type includes null, so we assert here

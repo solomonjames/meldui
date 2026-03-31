@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@/shared/test/mocks/tauri";
 import { WorkflowShell } from "@/features/workflow/components/workflow-shell";
 import type { WorkflowContextValue } from "@/features/workflow/context";
 import { WorkflowProvider } from "@/features/workflow/context";
+import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import type { Ticket, WorkflowDefinition } from "@/shared/types";
 
 const mockWorkflowDef: WorkflowDefinition = {
@@ -94,6 +95,19 @@ function renderWithProviders(workflow: WorkflowContextValue = createMockWorkflow
 }
 
 describe("WorkflowShell tabs", () => {
+  beforeEach(() => {
+    orchestrationStoreFactory.disposeStore("t1");
+    // Populate orchestration store so WorkflowShell reads state from store
+    const store = orchestrationStoreFactory.getStore("t1");
+    store.getState().setWorkflowState({
+      workflow_id: "wf1",
+      current_step_id: "s1",
+      step_status: "in_progress",
+      step_history: [],
+    });
+    store.getState().setListenersReady(true);
+  });
+
   it("renders Chat, Changes, and Commit tabs", async () => {
     renderWithProviders();
     // Wait for the workflow def to load (useEffect async)

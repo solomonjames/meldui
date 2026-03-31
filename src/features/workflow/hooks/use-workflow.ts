@@ -121,7 +121,7 @@ export function useWorkflow(projectDir: string) {
         clearTimeout(timer);
       }
     };
-  }, [streaming.clearTicketOutputs]);
+  }, []);
 
   // ── Queries ──
 

@@ -8,7 +8,6 @@ import { SettingsPage } from "@/features/settings/components/settings-page";
 import { BacklogPage } from "@/features/tickets/components/backlog-page";
 import { CreateTicketDialog } from "@/features/tickets/components/create-ticket-dialog";
 import { useTickets } from "@/features/tickets/hooks/use-tickets";
-import { WorkflowProvider } from "@/features/workflow/context";
 import { useWorkflow } from "@/features/workflow/hooks/use-workflow";
 import { ViewErrorFallback } from "@/shared/components/error/view-error-fallback";
 import { useProjectDir } from "@/shared/hooks/use-project-dir";
@@ -123,24 +122,35 @@ function AppContent() {
             console.error("[ErrorBoundary:ticket]", error, info.componentStack)
           }
         >
-          <WorkflowProvider workflow={workflow}>
-            <TicketPage
-              ticketId={activeTicketId}
-              projectDir={projectDir}
-              allTickets={ticketStore.tickets}
-              workflows={workflow.workflows}
-              onNavigateToBacklog={handleNavigateToBacklog}
-              onUpdateTicket={ticketStore.updateTicket}
-              onShowTicket={ticketStore.showTicket}
-              onAddComment={ticketStore.addComment}
-              onUpdateSection={ticketStore.updateSection}
-              onAssignWorkflow={workflow.assignWorkflow}
-              onSuggestWorkflow={workflow.suggestWorkflow}
-              onStartWorkflow={handleStartWorkflow}
-              onRefreshTickets={ticketStore.refreshTickets}
-              onDeleteTicket={ticketStore.deleteTicket}
-            />
-          </WorkflowProvider>
+          <TicketPage
+            ticketId={activeTicketId}
+            projectDir={projectDir}
+            allTickets={ticketStore.tickets}
+            workflows={workflow.workflows}
+            onNavigateToBacklog={handleNavigateToBacklog}
+            onUpdateTicket={ticketStore.updateTicket}
+            onShowTicket={ticketStore.showTicket}
+            onAddComment={ticketStore.addComment}
+            onUpdateSection={ticketStore.updateSection}
+            onAssignWorkflow={workflow.assignWorkflow}
+            onSuggestWorkflow={workflow.suggestWorkflow}
+            onStartWorkflow={handleStartWorkflow}
+            onRefreshTickets={ticketStore.refreshTickets}
+            onDeleteTicket={ticketStore.deleteTicket}
+            onExecuteStep={workflow.executeStep}
+            onGetDiff={workflow.getDiff}
+            onAdvanceStep={workflow.advanceStep}
+            onGetBranchInfo={workflow.getBranchInfo}
+            onExecuteCommitAction={workflow.executeCommitAction}
+            onCleanupWorktree={workflow.cleanupWorktree}
+            onRespondToPermission={workflow.respondToPermission}
+            autoAdvance={workflow.autoAdvance}
+            onSetAutoAdvance={workflow.setAutoAdvance}
+            onAddReviewComment={workflow.addReviewComment}
+            onDeleteReviewComment={workflow.deleteReviewComment}
+            onSubmitReview={workflow.submitReview}
+            onGetWorkflow={workflow.getWorkflow}
+          />
         </ErrorBoundary>
       );
     }

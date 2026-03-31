@@ -3,8 +3,6 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@/shared/test/mocks/tauri";
 import { WorkflowShell } from "@/features/workflow/components/workflow-shell";
-import type { WorkflowContextValue } from "@/features/workflow/context";
-import { WorkflowProvider } from "@/features/workflow/context";
 import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import type { Ticket, WorkflowDefinition } from "@/shared/types";
 
@@ -20,52 +18,6 @@ const mockWorkflowDef: WorkflowDefinition = {
   ],
 };
 
-function createMockWorkflow(overrides: Partial<WorkflowContextValue> = {}): WorkflowContextValue {
-  return {
-    workflows: [mockWorkflowDef],
-    currentState: {
-      workflow_id: "wf1",
-      current_step_id: "s1",
-      step_status: "in_progress",
-      step_history: [],
-    },
-    loading: false,
-    error: null,
-    listenersReady: true,
-    stepOutputs: {},
-    activeTicketId: "t1",
-    setActiveTicketId: vi.fn(),
-    pendingPermission: null,
-    respondToPermission: vi.fn(),
-    notifications: [],
-    clearNotification: vi.fn(),
-    lastUpdatedSectionId: null,
-    autoAdvance: false,
-    setAutoAdvance: vi.fn(),
-    advanceStep: vi.fn().mockResolvedValue(null),
-    setOnRefreshTicket: vi.fn(),
-    listWorkflows: vi.fn().mockResolvedValue([mockWorkflowDef]),
-    getWorkflow: vi.fn().mockResolvedValue(mockWorkflowDef),
-    assignWorkflow: vi.fn().mockResolvedValue(null),
-    getWorkflowState: vi.fn().mockResolvedValue(null),
-    executeStep: vi.fn().mockResolvedValue(null),
-    suggestWorkflow: vi.fn().mockResolvedValue(null),
-    getDiff: vi.fn().mockResolvedValue([]),
-    getBranchInfo: vi.fn().mockResolvedValue(null),
-    executeCommitAction: vi.fn().mockResolvedValue(null),
-    cleanupWorktree: vi.fn().mockResolvedValue(undefined),
-    getStepOutput: vi.fn().mockResolvedValue(null),
-    reviewFindings: [],
-    reviewComments: [],
-    addReviewComment: vi.fn(),
-    deleteReviewComment: vi.fn(),
-    submitReview: vi.fn(),
-    pendingReviewRequestId: null,
-    reviewRoundKey: 0,
-    ...overrides,
-  };
-}
-
 const mockTicket: Ticket = {
   id: "t1",
   title: "Test Ticket",
@@ -76,20 +28,31 @@ const mockTicket: Ticket = {
   metadata: {},
 } as Ticket;
 
-function renderWithProviders(workflow: WorkflowContextValue = createMockWorkflow()) {
+function renderWithProviders() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <WorkflowProvider workflow={workflow}>
-        <WorkflowShell
-          ticket={mockTicket}
-          projectDir="/test"
-          onNavigateToBacklog={vi.fn()}
-          onRefreshTicket={vi.fn().mockResolvedValue(undefined)}
-        />
-      </WorkflowProvider>
+      <WorkflowShell
+        ticket={mockTicket}
+        projectDir="/test"
+        onNavigateToBacklog={vi.fn()}
+        onRefreshTicket={vi.fn().mockResolvedValue(undefined)}
+        onExecuteStep={vi.fn().mockResolvedValue(null)}
+        onGetDiff={vi.fn().mockResolvedValue([])}
+        onAdvanceStep={vi.fn().mockResolvedValue(undefined)}
+        onGetBranchInfo={vi.fn().mockResolvedValue(null)}
+        onExecuteCommitAction={vi.fn().mockResolvedValue(null)}
+        onCleanupWorktree={vi.fn().mockResolvedValue(undefined)}
+        onRespondToPermission={vi.fn().mockResolvedValue(undefined)}
+        autoAdvance={false}
+        onSetAutoAdvance={vi.fn()}
+        onAddReviewComment={vi.fn()}
+        onDeleteReviewComment={vi.fn()}
+        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
+        onGetWorkflow={vi.fn().mockResolvedValue(mockWorkflowDef)}
+      />
     </QueryClientProvider>,
   );
 }

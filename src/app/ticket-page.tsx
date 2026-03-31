@@ -8,7 +8,17 @@ import { WorkflowShell } from "@/features/workflow/components/workflow-shell";
 import { notificationsStoreFactory } from "@/features/workflow/stores/notifications-store";
 import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import { ticketKeys } from "@/shared/lib/query-keys";
-import type { Ticket, WorkflowDefinition, WorkflowState, WorkflowSuggestion } from "@/shared/types";
+import type {
+  BranchInfo,
+  CommitActionResult,
+  DiffFile,
+  ReviewSubmission,
+  StepExecutionResult,
+  Ticket,
+  WorkflowDefinition,
+  WorkflowState,
+  WorkflowSuggestion,
+} from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/shared/ui/resizable";
 
@@ -37,6 +47,28 @@ interface TicketPageProps {
   onStartWorkflow: (ticket: Ticket) => Promise<void>;
   onRefreshTickets: () => Promise<void>;
   onDeleteTicket?: (id: string) => Promise<void>;
+  onExecuteStep: (issueId: string, userMessage?: string) => Promise<StepExecutionResult | null>;
+  onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
+  onAdvanceStep: (issueId: string) => Promise<void>;
+  onGetBranchInfo: (dirOverride?: string) => Promise<BranchInfo | null>;
+  onExecuteCommitAction: (
+    issueId: string,
+    action: "commit" | "commit_and_pr",
+    commitMessage: string,
+  ) => Promise<CommitActionResult | null>;
+  onCleanupWorktree: (issueId: string) => Promise<void>;
+  onRespondToPermission: (requestId: string, allowed: boolean) => Promise<void>;
+  autoAdvance: boolean;
+  onSetAutoAdvance: (enabled: boolean) => void;
+  onAddReviewComment: (
+    filePath: string,
+    lineNumber: number,
+    content: string,
+    suggestion?: string,
+  ) => void;
+  onDeleteReviewComment: (commentId: string) => void;
+  onSubmitReview: (submission: ReviewSubmission) => Promise<void>;
+  onGetWorkflow: (workflowId: string) => Promise<WorkflowDefinition | null>;
 }
 
 export function TicketPage({
@@ -54,6 +86,19 @@ export function TicketPage({
   onStartWorkflow,
   onRefreshTickets,
   onDeleteTicket,
+  onExecuteStep,
+  onGetDiff,
+  onAdvanceStep,
+  onGetBranchInfo,
+  onExecuteCommitAction,
+  onCleanupWorktree,
+  onRespondToPermission,
+  autoAdvance,
+  onSetAutoAdvance,
+  onAddReviewComment,
+  onDeleteReviewComment,
+  onSubmitReview,
+  onGetWorkflow,
 }: TicketPageProps) {
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   const queryClient = useQueryClient();
@@ -158,6 +203,19 @@ export function TicketPage({
                   onNavigateToBacklog={onNavigateToBacklog}
                   onRefreshTicket={handleRefreshTicket}
                   scrollToStepRef={scrollToStepRef}
+                  onExecuteStep={onExecuteStep}
+                  onGetDiff={onGetDiff}
+                  onAdvanceStep={onAdvanceStep}
+                  onGetBranchInfo={onGetBranchInfo}
+                  onExecuteCommitAction={onExecuteCommitAction}
+                  onCleanupWorktree={onCleanupWorktree}
+                  onRespondToPermission={onRespondToPermission}
+                  autoAdvance={autoAdvance}
+                  onSetAutoAdvance={onSetAutoAdvance}
+                  onAddReviewComment={onAddReviewComment}
+                  onDeleteReviewComment={onDeleteReviewComment}
+                  onSubmitReview={onSubmitReview}
+                  onGetWorkflow={onGetWorkflow}
                 />
               ) : (
                 <WorkflowStartPanel

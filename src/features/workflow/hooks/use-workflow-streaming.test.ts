@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import { streamingStoreFactory } from "@/features/workflow/stores/streaming-store";
 import { clearTauriMocks } from "@/shared/test/mocks/tauri";
-import { useWorkflowStreaming } from "@/features/workflow/hooks/use-workflow-streaming";
 import type { StreamChunk } from "@/shared/types";
+import { useWorkflowStreaming } from "@/features/workflow/hooks/use-workflow-streaming";
 
 describe("useWorkflowStreaming", () => {
   beforeEach(() => {
     clearTauriMocks();
+    streamingStoreFactory.disposeStore("issue-1");
+    streamingStoreFactory.disposeStore("issue-2");
+    streamingStoreFactory.disposeStore("issue-OTHER");
   });
 
   it("streamingReady is always true", () => {
@@ -35,7 +39,11 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("Hello World");
+    // Read from store directly since hook no longer re-renders on store changes
+    const output = streamingStoreFactory.getStore("issue-1").getState().stepOutputs[
+      "issue-1:step-1"
+    ];
+    expect(output?.textContent).toBe("Hello World");
   });
 
   it("ignores chunks for a different issue_id (no entry in executingStepsRef)", () => {
@@ -52,7 +60,8 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(result.current.stepOutputs["issue-1:step-1"]).toBeUndefined();
+    const store = streamingStoreFactory.getStore("issue-1");
+    expect(store.getState().stepOutputs["issue-1:step-1"]).toBeUndefined();
   });
 
   it("ignores chunks when executingStepsRef has null for the issue", () => {
@@ -69,7 +78,8 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(Object.keys(result.current.stepOutputs)).toHaveLength(0);
+    const store = streamingStoreFactory.getStore("issue-1");
+    expect(Object.keys(store.getState().stepOutputs)).toHaveLength(0);
   });
 
   it("captures error chunks in stderrLines", () => {
@@ -86,7 +96,9 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    const output = result.current.stepOutputs["issue-1:step-1"];
+    const output = streamingStoreFactory.getStore("issue-1").getState().stepOutputs[
+      "issue-1:step-1"
+    ];
     expect(output?.stderrLines).toContainEqual("[error] Something went wrong");
   });
 
@@ -104,7 +116,10 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(result.current.stepOutputs["issue-1:step-1"]?.resultContent).toBe("Final result");
+    const output = streamingStoreFactory.getStore("issue-1").getState().stepOutputs[
+      "issue-1:step-1"
+    ];
+    expect(output?.resultContent).toBe("Final result");
   });
 
   it("getStepOutput returns the step's output", () => {
@@ -125,7 +140,7 @@ describe("useWorkflowStreaming", () => {
     expect(result.current.getStepOutput("issue-1", "nonexistent")).toBeUndefined();
   });
 
-  it("routes chunks for multiple issues concurrently to their respective steps", () => {
+  it("routes chunks for multiple issues concurrently to their respective stores", () => {
     const executingStepsRef = {
       current: {
         "issue-1": "step-1",
@@ -149,7 +164,13 @@ describe("useWorkflowStreaming", () => {
       } as StreamChunk);
     });
 
-    expect(result.current.stepOutputs["issue-1:step-1"]?.textContent).toBe("From issue 1");
-    expect(result.current.stepOutputs["issue-2:step-2"]?.textContent).toBe("From issue 2");
+    expect(
+      streamingStoreFactory.getStore("issue-1").getState().stepOutputs["issue-1:step-1"]
+        ?.textContent,
+    ).toBe("From issue 1");
+    expect(
+      streamingStoreFactory.getStore("issue-2").getState().stepOutputs["issue-2:step-2"]
+        ?.textContent,
+    ).toBe("From issue 2");
   });
 });

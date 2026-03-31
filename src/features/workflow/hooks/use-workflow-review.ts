@@ -1,97 +1,62 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { commands, events } from "@/bindings";
+import { reviewStoreFactory } from "@/features/workflow/stores/review-store";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
-import type { ReviewComment, ReviewFinding, ReviewSubmission } from "@/shared/types";
+import type { ReviewFinding, ReviewSubmission } from "@/shared/types";
 
 export function useWorkflowReview(
   activeTicketId: string | null,
   setError: (issueId: string, msg: string) => void,
 ) {
-  const [reviewFindingsMap, setReviewFindingsMap] = useState<Record<string, ReviewFinding[]>>({});
-  const [reviewCommentsMap, setReviewCommentsMap] = useState<Record<string, ReviewComment[]>>({});
-  const [pendingReviewMap, setPendingReviewMap] = useState<Record<string, string>>({});
-  const [reviewRoundKey, setReviewRoundKey] = useState(0);
-
   const reviewReady = useTauriEvent(events.agentReviewFindingsRequest, (payload) => {
-    // No activeTicketId filter — store for all tickets
-    setReviewFindingsMap((prev) => ({
-      ...prev,
-      [payload.ticket_id]: payload.findings as ReviewFinding[],
-    }));
-    setPendingReviewMap((prev) => ({
-      ...prev,
-      [payload.ticket_id]: payload.request_id,
-    }));
-    setReviewRoundKey((prev) => prev + 1);
+    const store = reviewStoreFactory.getStore(payload.ticket_id);
+    store.getState().setFindings(payload.findings as ReviewFinding[], payload.request_id);
   });
 
-  // Convenience: viewed ticket's state
-  const reviewFindings = activeTicketId ? (reviewFindingsMap[activeTicketId] ?? []) : [];
-  const reviewComments = activeTicketId ? (reviewCommentsMap[activeTicketId] ?? []) : [];
-  const pendingReviewRequestId = activeTicketId ? (pendingReviewMap[activeTicketId] ?? null) : null;
+  const getActiveStore = () =>
+    activeTicketId ? reviewStoreFactory.getStore(activeTicketId) : null;
+
+  const reviewFindings = getActiveStore()?.getState().findings ?? [];
+  const reviewComments = getActiveStore()?.getState().comments ?? [];
+  const pendingReviewRequestId = getActiveStore()?.getState().pendingRequestId ?? null;
+  const reviewRoundKey = getActiveStore()?.getState().roundKey ?? 0;
 
   const addReviewComment = useCallback(
     (filePath: string, lineNumber: number, content: string, suggestion?: string) => {
-      if (!activeTicketId) return;
-      const comment: ReviewComment = {
-        id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        file_path: filePath,
-        line_number: lineNumber,
-        content,
-        suggestion,
-        resolved: false,
-      };
-      setReviewCommentsMap((prev) => ({
-        ...prev,
-        [activeTicketId]: [...(prev[activeTicketId] ?? []), comment],
-      }));
+      getActiveStore()?.getState().addComment(filePath, lineNumber, content, suggestion);
     },
+    // biome-ignore lint/correctness/useExhaustiveDependencies: getActiveStore reads activeTicketId
     [activeTicketId],
   );
 
   const deleteReviewComment = useCallback(
     (commentId: string) => {
-      if (!activeTicketId) return;
-      setReviewCommentsMap((prev) => ({
-        ...prev,
-        [activeTicketId]: (prev[activeTicketId] ?? []).filter((c) => c.id !== commentId),
-      }));
+      getActiveStore()?.getState().deleteComment(commentId);
     },
+    // biome-ignore lint/correctness/useExhaustiveDependencies: getActiveStore reads activeTicketId
     [activeTicketId],
   );
 
   const submitReview = useCallback(
     async (submission: ReviewSubmission) => {
-      if (!activeTicketId || !pendingReviewMap[activeTicketId]) return;
-      const requestId = pendingReviewMap[activeTicketId];
+      const store = getActiveStore();
+      if (!store || !activeTicketId) return;
+      const requestId = store.getState().pendingRequestId;
+      if (!requestId) return;
+
       try {
         await commands.agentReviewRespond(
           activeTicketId,
           requestId,
           submission as import("@/bindings").JsonValue,
         );
-        setPendingReviewMap((prev) => {
-          const next = { ...prev };
-          delete next[activeTicketId];
-          return next;
-        });
-
         if (submission.action === "request_changes") {
-          setReviewCommentsMap((prev) => ({
-            ...prev,
-            [activeTicketId]: (prev[activeTicketId] ?? []).map((c) => ({ ...c, resolved: true })),
-          }));
-          setReviewFindingsMap((prev) => ({ ...prev, [activeTicketId]: [] }));
+          store.getState().clearAfterRequestChanges();
         } else {
-          setReviewCommentsMap((prev) => ({ ...prev, [activeTicketId]: [] }));
-          setReviewFindingsMap((prev) => ({ ...prev, [activeTicketId]: [] }));
+          store.getState().clearAfterApproval();
         }
       } catch (err) {
-        setPendingReviewMap((prev) => {
-          const next = { ...prev };
-          delete next[activeTicketId];
-          return next;
-        });
+        store.getState().clearAfterApproval();
         const errStr = String(err);
         if (errStr.includes("Broken pipe") || errStr.includes("not available")) {
           setError(
@@ -103,7 +68,7 @@ export function useWorkflowReview(
         }
       }
     },
-    [activeTicketId, pendingReviewMap, setError],
+    [activeTicketId, setError],
   );
 
   return {

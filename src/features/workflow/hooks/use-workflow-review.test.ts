@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import { reviewStoreFactory } from "@/features/workflow/stores/review-store";
 import { mockInvoke, clearTauriMocks, emitTauriEvent } from "@/shared/test/mocks/tauri";
 import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
 
@@ -9,6 +10,8 @@ describe("useWorkflowReview", () => {
   beforeEach(() => {
     clearTauriMocks();
     setError.mockReset();
+    reviewStoreFactory.disposeStore("issue-1");
+    reviewStoreFactory.disposeStore("issue-OTHER");
   });
 
   it("reviewReady becomes true after mount", async () => {
@@ -42,17 +45,16 @@ describe("useWorkflowReview", () => {
       });
     });
 
-    await waitFor(() => {
-      expect(result.current.reviewFindings).toHaveLength(1);
-      expect(result.current.pendingReviewRequestId).toBe("review-1");
-    });
+    const store = reviewStoreFactory.getStore("issue-1").getState();
+    expect(store.findings).toHaveLength(1);
+    expect(store.pendingRequestId).toBe("review-1");
   });
 
   it("increments reviewRoundKey on each agent-review-findings event", async () => {
     const { result } = renderHook(() => useWorkflowReview("issue-1", setError));
 
     await waitFor(() => expect(result.current.reviewReady).toBe(true));
-    expect(result.current.reviewRoundKey).toBe(0);
+    expect(reviewStoreFactory.getStore("issue-1").getState().roundKey).toBe(0);
 
     act(() => {
       emitTauriEvent("agent-review-findings-request", {
@@ -63,9 +65,7 @@ describe("useWorkflowReview", () => {
       });
     });
 
-    await waitFor(() => {
-      expect(result.current.reviewRoundKey).toBe(1);
-    });
+    expect(reviewStoreFactory.getStore("issue-1").getState().roundKey).toBe(1);
 
     act(() => {
       emitTauriEvent("agent-review-findings-request", {
@@ -76,9 +76,7 @@ describe("useWorkflowReview", () => {
       });
     });
 
-    await waitFor(() => {
-      expect(result.current.reviewRoundKey).toBe(2);
-    });
+    expect(reviewStoreFactory.getStore("issue-1").getState().roundKey).toBe(2);
   });
 
   it("ignores review events for different ticket_id", async () => {
@@ -104,8 +102,10 @@ describe("useWorkflowReview", () => {
       });
     });
 
-    await new Promise((r) => setTimeout(r, 50));
-    expect(result.current.reviewFindings).toHaveLength(0);
+    // issue-1 store should be empty
+    expect(reviewStoreFactory.getStore("issue-1").getState().findings).toHaveLength(0);
+    // issue-OTHER store should have the finding
+    expect(reviewStoreFactory.getStore("issue-OTHER").getState().findings).toHaveLength(1);
   });
 
   it("addReviewComment adds a comment", async () => {
@@ -117,9 +117,10 @@ describe("useWorkflowReview", () => {
       result.current.addReviewComment("src/foo.ts", 10, "Fix this", "const x = 1;");
     });
 
-    expect(result.current.reviewComments).toHaveLength(1);
-    expect(result.current.reviewComments[0].content).toBe("Fix this");
-    expect(result.current.reviewComments[0].suggestion).toBe("const x = 1;");
+    const comments = reviewStoreFactory.getStore("issue-1").getState().comments;
+    expect(comments).toHaveLength(1);
+    expect(comments[0].content).toBe("Fix this");
+    expect(comments[0].suggestion).toBe("const x = 1;");
   });
 
   it("deleteReviewComment removes a comment", async () => {
@@ -131,13 +132,13 @@ describe("useWorkflowReview", () => {
       result.current.addReviewComment("src/foo.ts", 10, "Fix this");
     });
 
-    const commentId = result.current.reviewComments[0].id;
+    const commentId = reviewStoreFactory.getStore("issue-1").getState().comments[0].id;
 
     act(() => {
       result.current.deleteReviewComment(commentId);
     });
 
-    expect(result.current.reviewComments).toHaveLength(0);
+    expect(reviewStoreFactory.getStore("issue-1").getState().comments).toHaveLength(0);
   });
 
   it("submitReview with approve clears all review state", async () => {
@@ -164,7 +165,7 @@ describe("useWorkflowReview", () => {
       });
     });
 
-    await waitFor(() => expect(result.current.pendingReviewRequestId).toBe("review-1"));
+    expect(reviewStoreFactory.getStore("issue-1").getState().pendingRequestId).toBe("review-1");
 
     act(() => {
       result.current.addReviewComment("src/foo.ts", 10, "Comment");
@@ -172,18 +173,21 @@ describe("useWorkflowReview", () => {
 
     mockInvoke.mockResolvedValueOnce(undefined);
 
+    const comments = reviewStoreFactory.getStore("issue-1").getState().comments;
+
     await act(async () => {
       await result.current.submitReview({
         action: "approve",
         summary: "LGTM",
-        comments: result.current.reviewComments,
+        comments,
         finding_actions: [],
       });
     });
 
-    expect(result.current.pendingReviewRequestId).toBeNull();
-    expect(result.current.reviewFindings).toHaveLength(0);
-    expect(result.current.reviewComments).toHaveLength(0);
+    const state = reviewStoreFactory.getStore("issue-1").getState();
+    expect(state.pendingRequestId).toBeNull();
+    expect(state.findings).toHaveLength(0);
+    expect(state.comments).toHaveLength(0);
   });
 
   it("submitReview with request_changes marks comments resolved", async () => {
@@ -209,7 +213,7 @@ describe("useWorkflowReview", () => {
       });
     });
 
-    await waitFor(() => expect(result.current.pendingReviewRequestId).toBe("review-1"));
+    expect(reviewStoreFactory.getStore("issue-1").getState().pendingRequestId).toBe("review-1");
 
     act(() => {
       result.current.addReviewComment("src/foo.ts", 10, "Fix this");
@@ -217,20 +221,23 @@ describe("useWorkflowReview", () => {
 
     mockInvoke.mockResolvedValueOnce(undefined);
 
+    const comments = reviewStoreFactory.getStore("issue-1").getState().comments;
+
     await act(async () => {
       await result.current.submitReview({
         action: "request_changes",
         summary: "Needs fixes",
-        comments: result.current.reviewComments,
+        comments,
         finding_actions: [],
       });
     });
 
-    expect(result.current.pendingReviewRequestId).toBeNull();
-    expect(result.current.reviewFindings).toHaveLength(0);
+    const state = reviewStoreFactory.getStore("issue-1").getState();
+    expect(state.pendingRequestId).toBeNull();
+    expect(state.findings).toHaveLength(0);
     // Comments are preserved but marked resolved
-    expect(result.current.reviewComments).toHaveLength(1);
-    expect(result.current.reviewComments[0].resolved).toBe(true);
+    expect(state.comments).toHaveLength(1);
+    expect(state.comments[0].resolved).toBe(true);
   });
 
   it("submitReview handles broken pipe error", async () => {
@@ -247,7 +254,7 @@ describe("useWorkflowReview", () => {
       });
     });
 
-    await waitFor(() => expect(result.current.pendingReviewRequestId).toBe("review-1"));
+    expect(reviewStoreFactory.getStore("issue-1").getState().pendingRequestId).toBe("review-1");
 
     mockInvoke.mockRejectedValueOnce(new Error("Broken pipe"));
 
@@ -260,7 +267,7 @@ describe("useWorkflowReview", () => {
       });
     });
 
-    expect(result.current.pendingReviewRequestId).toBeNull();
+    expect(reviewStoreFactory.getStore("issue-1").getState().pendingRequestId).toBeNull();
     expect(setError).toHaveBeenCalledWith(
       "issue-1",
       "Agent session expired. Click Resume to continue where you left off.",

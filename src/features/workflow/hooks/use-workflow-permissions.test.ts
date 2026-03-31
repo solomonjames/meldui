@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import { permissionsStoreFactory } from "@/features/workflow/stores/permissions-store";
 import { mockInvoke, clearTauriMocks, emitTauriEvent } from "@/shared/test/mocks/tauri";
 import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
 
@@ -9,6 +10,7 @@ describe("useWorkflowPermissions", () => {
   beforeEach(() => {
     clearTauriMocks();
     setError.mockReset();
+    permissionsStoreFactory.disposeStore("issue-1");
   });
 
   it("permissionsReady becomes true after mount", async () => {
@@ -33,10 +35,9 @@ describe("useWorkflowPermissions", () => {
       });
     });
 
-    await waitFor(() => {
-      expect(result.current.pendingPermission).not.toBeNull();
-      expect(result.current.pendingPermission?.request_id).toBe("perm-1");
-    });
+    const pending = permissionsStoreFactory.getStore("issue-1").getState().pendingPermission;
+    expect(pending).not.toBeNull();
+    expect(pending?.request_id).toBe("perm-1");
   });
 
   it("respondToPermission clears pendingPermission on success", async () => {
@@ -53,7 +54,7 @@ describe("useWorkflowPermissions", () => {
       });
     });
 
-    await waitFor(() => expect(result.current.pendingPermission).not.toBeNull());
+    expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).not.toBeNull();
 
     mockInvoke.mockResolvedValueOnce(undefined);
 
@@ -61,7 +62,7 @@ describe("useWorkflowPermissions", () => {
       await result.current.respondToPermission("perm-1", true);
     });
 
-    expect(result.current.pendingPermission).toBeNull();
+    expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).toBeNull();
   });
 
   it("respondToPermission handles broken pipe error", async () => {
@@ -78,7 +79,7 @@ describe("useWorkflowPermissions", () => {
       });
     });
 
-    await waitFor(() => expect(result.current.pendingPermission).not.toBeNull());
+    expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).not.toBeNull();
 
     mockInvoke.mockRejectedValueOnce(
       new Error("Failed to write to sidecar stdin: Broken pipe (os error 32)"),
@@ -88,7 +89,7 @@ describe("useWorkflowPermissions", () => {
       await result.current.respondToPermission("perm-1", true);
     });
 
-    expect(result.current.pendingPermission).toBeNull();
+    expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).toBeNull();
     expect(setError).toHaveBeenCalledWith(
       "issue-1",
       "Agent session expired. Click Resume to continue where you left off.",
@@ -109,12 +110,12 @@ describe("useWorkflowPermissions", () => {
       });
     });
 
-    await waitFor(() => expect(result.current.pendingPermission).not.toBeNull());
+    expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).not.toBeNull();
 
     act(() => {
       result.current.clearPending("issue-1");
     });
 
-    expect(result.current.pendingPermission).toBeNull();
+    expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).toBeNull();
   });
 });

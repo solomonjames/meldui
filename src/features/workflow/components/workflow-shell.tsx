@@ -464,9 +464,11 @@ export function WorkflowShell({
                 currentStepId={workflowState.current_step_id}
                 completedStepIds={completedStepIds}
                 autoAdvance={autoAdvanceStore}
-                onAutoAdvanceChange={(enabled) =>
-                  orchestrationStoreFactory.getStore(ticket.id).getState().setAutoAdvance(enabled)
-                }
+                onAutoAdvanceChange={(enabled) => {
+                  orchestrationStoreFactory.getStore(ticket.id).getState().setAutoAdvance(enabled);
+                  // Sync to Rust backend so the supervisor loop sees the change
+                  commands.setAutoAdvance(projectDir, enabled);
+                }}
               />
             </div>
           </div>

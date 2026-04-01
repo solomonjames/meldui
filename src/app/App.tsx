@@ -49,23 +49,6 @@ function AppContent() {
   });
   const workflows: WorkflowDefinition[] = workflowsQuery.data ?? [];
 
-  // ── Auto-advance setting (TanStack Query — server-state from Rust) ──
-  const autoAdvanceQuery = useQuery({
-    queryKey: ["autoAdvance", projectDir ?? ""],
-    queryFn: () => commands.getAutoAdvance(projectDir ?? ""),
-    staleTime: Infinity,
-    enabled: !!projectDir,
-  });
-  const autoAdvance = autoAdvanceQuery.data ?? false;
-  const setAutoAdvance = useCallback(
-    async (enabled: boolean) => {
-      if (!projectDir) return;
-      await commands.setAutoAdvance(projectDir, enabled);
-      queryClient.invalidateQueries({ queryKey: ["autoAdvance", projectDir] });
-    },
-    [projectDir],
-  );
-
   // ── Running tickets state (driven by action module) ──
   const [runningTicketIds, setRunningTicketIds] = useState<Set<string>>(
     () => new Set(runningTicketIdsSet),
@@ -211,8 +194,6 @@ function AppContent() {
             projectDir={projectDir}
             allTickets={ticketStore.tickets}
             workflows={workflows}
-            autoAdvance={autoAdvance}
-            onSetAutoAdvance={setAutoAdvance}
             onNavigateToBacklog={handleNavigateToBacklog}
             onUpdateTicket={ticketStore.updateTicket}
             onShowTicket={ticketStore.showTicket}

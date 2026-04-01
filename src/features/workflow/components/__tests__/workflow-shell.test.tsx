@@ -38,8 +38,6 @@ function renderWithProviders() {
         ticket={mockTicket}
         projectDir="/test"
         workflows={[mockWorkflowDef]}
-        autoAdvance={false}
-        onSetAutoAdvance={vi.fn()}
         onNavigateToBacklog={vi.fn()}
         onRefreshTicket={vi.fn().mockResolvedValue(undefined)}
       />

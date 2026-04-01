@@ -17,8 +17,6 @@ interface TicketPageProps {
   projectDir: string;
   allTickets: Ticket[];
   workflows: WorkflowDefinition[];
-  autoAdvance: boolean;
-  onSetAutoAdvance: (enabled: boolean) => void;
   onNavigateToBacklog: () => void;
   onUpdateTicket: (
     id: string,
@@ -44,8 +42,6 @@ export function TicketPage({
   projectDir,
   allTickets,
   workflows,
-  autoAdvance,
-  onSetAutoAdvance,
   onNavigateToBacklog,
   onUpdateTicket,
   onShowTicket,
@@ -156,8 +152,6 @@ export function TicketPage({
                   ticket={ticket}
                   projectDir={projectDir}
                   workflows={workflows}
-                  autoAdvance={autoAdvance}
-                  onSetAutoAdvance={onSetAutoAdvance}
                   onNavigateToBacklog={onNavigateToBacklog}
                   onRefreshTicket={handleRefreshTicket}
                   scrollToStepRef={scrollToStepRef}

@@ -29,8 +29,6 @@ interface WorkflowShellProps {
   ticket: Ticket;
   projectDir: string;
   workflows: WorkflowDefinition[];
-  autoAdvance: boolean;
-  onSetAutoAdvance: (enabled: boolean) => void;
   onNavigateToBacklog: () => void;
   onRefreshTicket: () => Promise<void>;
   scrollToStepRef?: React.MutableRefObject<(stepId: string) => void>;
@@ -40,8 +38,6 @@ export function WorkflowShell({
   ticket,
   projectDir,
   workflows,
-  autoAdvance,
-  onSetAutoAdvance,
   onNavigateToBacklog,
   onRefreshTicket,
   scrollToStepRef,
@@ -52,6 +48,14 @@ export function WorkflowShell({
   const listenersReady = orchestrationStoreFactory.useTicketStore(
     ticket.id,
     (s) => s.listenersReady,
+  );
+  const autoAdvanceStore = orchestrationStoreFactory.useTicketStore(
+    ticket.id,
+    (s) => s.autoAdvance,
+  );
+  const queryStartedAt = orchestrationStoreFactory.useTicketStore(
+    ticket.id,
+    (s) => s.queryStartedAt,
   );
 
   // Narrow selector: subscribe only to the current step's output, not the entire record.
@@ -337,7 +341,7 @@ export function WorkflowShell({
   // Auto-advance when step completes and autoAdvance is enabled
   const autoAdvancingRef = useRef(false);
   useEffect(() => {
-    if (!autoAdvance) return;
+    if (!autoAdvanceStore) return;
     if (workflowState?.step_status !== "completed") return;
     if (!workflowState.current_step_id) return;
     if (autoAdvancingRef.current) return;
@@ -353,7 +357,7 @@ export function WorkflowShell({
 
     return () => clearTimeout(timer);
   }, [
-    autoAdvance,
+    autoAdvanceStore,
     workflowState?.step_status,
     workflowState?.current_step_id,
     projectDir,
@@ -459,8 +463,10 @@ export function WorkflowShell({
                 steps={workflowDef.steps}
                 currentStepId={workflowState.current_step_id}
                 completedStepIds={completedStepIds}
-                autoAdvance={autoAdvance}
-                onAutoAdvanceChange={onSetAutoAdvance}
+                autoAdvance={autoAdvanceStore}
+                onAutoAdvanceChange={(enabled) =>
+                  orchestrationStoreFactory.getStore(ticket.id).getState().setAutoAdvance(enabled)
+                }
               />
             </div>
           </div>
@@ -471,6 +477,7 @@ export function WorkflowShell({
               isExecuting={isExecuting}
               stepStatus={workflowComplete ? "completed" : workflowState.step_status}
               stepOutput={currentStepOutput}
+              queryStartedAt={queryStartedAt}
               onExecute={handleExecute}
               onAdvanceStep={!workflowComplete ? handleAdvanceStep : undefined}
               projectDir={projectDir}

@@ -74,6 +74,7 @@ export async function executeStep(
   try {
     store.getState().setLoading(true);
     store.getState().setError(null);
+    store.getState().setQueryStartedAt(Date.now());
     addRunning(issueId);
 
     const ticketState = store.getState().workflowState;
@@ -115,6 +116,7 @@ export async function executeStep(
     return null;
   } finally {
     store.getState().setLoading(false);
+    store.getState().setQueryStartedAt(null);
     removeRunning(issueId);
   }
 }

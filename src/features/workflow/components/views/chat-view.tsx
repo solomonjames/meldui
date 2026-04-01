@@ -92,6 +92,7 @@ interface ChatViewProps {
   isExecuting: boolean;
   stepStatus: StepStatus;
   stepOutput?: StepOutputStream;
+  queryStartedAt?: number | null;
   onAdvanceStep?: () => void;
   onExecute: (message?: string) => void;
   projectDir?: string;
@@ -111,6 +112,7 @@ export function ChatView({
   isExecuting,
   stepStatus,
   stepOutput,
+  queryStartedAt,
   onAdvanceStep,
   onExecute,
   projectDir,
@@ -439,6 +441,7 @@ export function ChatView({
           isExecuting={isExecuting}
           isWaitingForUser={false}
           stepName={stepName}
+          queryStartedAt={queryStartedAt}
         />
 
         {/* Chat input — supervisor banner or compose toolbar */}

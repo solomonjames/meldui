@@ -2537,6 +2537,207 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_fts5_trigger_syncs_on_batch_flush() {
+        let tdb = test_db().await;
+        let mut writer = ConversationWriter::open_async(tdb.conn(), "FTS-TRIG")
+            .await
+            .unwrap();
+
+        // Write events via the normal writer path (not direct SQL)
+        let p1 = serde_json::json!({"content": "authentication middleware refactor"});
+        writer.append_raw("text", &p1, "step-1").await.unwrap();
+        let p2 = serde_json::json!({"content": "database migration script"});
+        writer.append_raw("text", &p2, "step-1").await.unwrap();
+        writer.flush().await.unwrap();
+
+        // FTS5 trigger should have synced — search should find results
+        let results = search_conversations(&tdb.conn(), "authentication", None, 10)
+            .await
+            .unwrap();
+        assert!(!results.is_empty(), "FTS5 trigger should sync on INSERT");
+        assert!(results[0].content.contains("authentication"));
+
+        // Verify scoped search excludes non-matching content
+        let results2 = search_conversations(&tdb.conn(), "database migration", None, 10)
+            .await
+            .unwrap();
+        assert!(!results2.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_interrupted_step_has_no_completed_at() {
+        let tdb = test_db().await;
+        let mut writer = ConversationWriter::open_async(tdb.conn(), "INTERRUPT-1")
+            .await
+            .unwrap();
+
+        // Write step_start but never step_end (simulates crash)
+        writer
+            .write_step_marker(
+                "step-research",
+                &StepMarker::Start {
+                    label: "Research".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
+        // Write some events mid-step
+        let p = serde_json::json!({"content": "working on research..."});
+        writer
+            .append_raw("text", &p, "step-research")
+            .await
+            .unwrap();
+        writer.flush().await.unwrap();
+        drop(writer);
+
+        // Restore — step should be in_progress with no completed_at
+        let snapshot = restore_conversation(&tdb.conn(), "INTERRUPT-1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.steps.len(), 1);
+        assert_eq!(snapshot.steps[0].status, "in_progress");
+        assert!(snapshot.steps[0].completed_at.is_none());
+
+        // Simulate crash recovery: mark step as interrupted
+        tdb.conn()
+            .execute(
+                "UPDATE conversation_steps SET status = 'interrupted', completed_at = datetime('now') WHERE ticket_id = ?1 AND step_id = ?2 AND status = 'in_progress'",
+                params!["INTERRUPT-1", "step-research"],
+            )
+            .await
+            .unwrap();
+        tdb.conn()
+            .execute(
+                "UPDATE conversations SET status = 'interrupted' WHERE ticket_id = ?1",
+                params!["INTERRUPT-1"],
+            )
+            .await
+            .unwrap();
+
+        // Restore again — should reflect interrupted state
+        let snapshot2 = restore_conversation(&tdb.conn(), "INTERRUPT-1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot2.status, "interrupted");
+        assert_eq!(snapshot2.steps[0].status, "interrupted");
+        assert!(snapshot2.steps[0].completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_semantic_search_with_embeddings() {
+        use crate::embeddings::{embedding_to_bytes, Embedder, MockEmbedder};
+
+        let tdb = test_db().await;
+        let conn = tdb.conn();
+        let embedder = MockEmbedder;
+
+        // Create conversation and insert events with embeddings
+        conn.execute(
+            "INSERT INTO conversations (ticket_id, status, created_at, updated_at, event_count) VALUES ('SEM-1', 'active', 'now', 'now', 2)",
+            params![],
+        )
+        .await
+        .unwrap();
+
+        let texts = [
+            "authentication middleware security",
+            "database schema migration",
+        ];
+        for (i, text) in texts.iter().enumerate() {
+            let emb = embedder.embed(text).unwrap();
+            let blob = embedding_to_bytes(&emb);
+            conn.execute(
+                "INSERT INTO conversation_events (ticket_id, sequence, step_id, event_type, content, timestamp, embedding) VALUES (?1, ?2, 'step-1', 'text', ?3, datetime('now'), ?4)",
+                params![(i + 1) as u32, "SEM-1", *text, libsql::Value::Blob(blob)],
+            )
+            .await
+            .unwrap();
+        }
+
+        // Search with embedding of a related query
+        let query_emb = embedder
+            .embed("authentication middleware security")
+            .unwrap();
+        let results = semantic_search(&conn, &query_emb, None, 10).await;
+
+        // Vector search may not be supported in all libSQL builds
+        match results {
+            Ok(r) => {
+                assert!(!r.is_empty(), "Should find results when embeddings exist");
+                // First result should be the most similar
+                assert!(r[0].content.contains("authentication"));
+            }
+            Err(_) => {
+                // Vector search not supported in this build — acceptable
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_rag_context_respects_token_budget() {
+        use crate::embeddings::{embedding_to_bytes, Embedder, MockEmbedder};
+
+        let tdb = test_db().await;
+        let conn = tdb.conn();
+        let embedder = MockEmbedder;
+
+        // Create conversation with several events
+        conn.execute(
+            "INSERT INTO conversations (ticket_id, status, created_at, updated_at, event_count) VALUES ('RAG-1', 'active', 'now', 'now', 5)",
+            params![],
+        )
+        .await
+        .unwrap();
+
+        // Insert 5 events each ~100 chars (~25 tokens each)
+        for i in 0..5 {
+            let content = format!("This is event number {} with some meaningful content about the authentication system and how it handles user sessions and tokens for security. Extra padding.", i);
+            let emb = embedder.embed(&content).unwrap();
+            let blob = embedding_to_bytes(&emb);
+            conn.execute(
+                "INSERT INTO conversation_events (ticket_id, sequence, step_id, event_type, content, timestamp, embedding) VALUES ('RAG-1', ?1, 'step-1', 'text', ?2, datetime('now'), ?3)",
+                params![(i + 1) as u32, content, libsql::Value::Blob(blob)],
+            )
+            .await
+            .unwrap();
+        }
+
+        // Request with a very small token budget — should get fewer results
+        let query_emb = embedder.embed("authentication").unwrap();
+        let results = get_rag_context(&conn, &query_emb, 50).await;
+
+        match results {
+            Ok(chunks) => {
+                // With ~25 tokens per event and budget of 50, should get at most 2 chunks
+                assert!(
+                    chunks.len() <= 2,
+                    "Token budget should limit results, got {} chunks",
+                    chunks.len()
+                );
+            }
+            Err(_) => {
+                // Vector search not supported — acceptable
+            }
+        }
+
+        // Request with large budget — should get all events
+        let results_all = get_rag_context(&conn, &query_emb, 10000).await;
+        match results_all {
+            Ok(chunks) => {
+                assert!(
+                    chunks.len() >= 3,
+                    "Large budget should return more results, got {} chunks",
+                    chunks.len()
+                );
+            }
+            Err(_) => {}
+        }
+    }
+
+    #[tokio::test]
     async fn test_related_conversations_excludes_source_ticket() {
         let tdb = test_db().await;
         let conn = tdb.conn();

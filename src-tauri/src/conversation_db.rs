@@ -364,6 +364,65 @@ mod tests {
         assert_eq!(tid, "t1");
     }
 
+    #[tokio::test]
+    async fn test_new_connection_works_without_encryption() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("nc.db").to_string_lossy().to_string();
+        let db = ConversationDb::open(&db_path, None).await.unwrap();
+
+        // Write via original connection
+        db.conn
+            .execute(
+                "INSERT INTO conversations (ticket_id, status, created_at, updated_at) VALUES ('nc1', 'active', 'now', 'now')",
+                params![],
+            )
+            .await
+            .unwrap();
+
+        // Read via new_connection()
+        let conn2 = db.new_connection().await.unwrap();
+        let mut rows = conn2
+            .query(
+                "SELECT ticket_id FROM conversations WHERE ticket_id = 'nc1'",
+                params![],
+            )
+            .await
+            .unwrap();
+        let row = rows.next().await.unwrap().unwrap();
+        assert_eq!(row.get::<String>(0).unwrap(), "nc1");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires libsql build with encryption support (PRAGMA key)"]
+    async fn test_new_connection_inherits_encryption_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("enc_nc.db").to_string_lossy().to_string();
+        let db = ConversationDb::open(&db_path, Some("secret-key"))
+            .await
+            .unwrap();
+
+        // Write via original keyed connection
+        db.conn
+            .execute(
+                "INSERT INTO conversations (ticket_id, status, created_at, updated_at) VALUES ('enc-nc', 'active', 'now', 'now')",
+                params![],
+            )
+            .await
+            .unwrap();
+
+        // Read via new_connection() — should inherit PRAGMA key
+        let conn2 = db.new_connection().await.unwrap();
+        let mut rows = conn2
+            .query(
+                "SELECT ticket_id FROM conversations WHERE ticket_id = 'enc-nc'",
+                params![],
+            )
+            .await
+            .unwrap();
+        let row = rows.next().await.unwrap().unwrap();
+        assert_eq!(row.get::<String>(0).unwrap(), "enc-nc");
+    }
+
     /// Test that opening a database with an encryption key succeeds and data round-trips.
     ///
     /// NOTE: This test requires a libsql build compiled with encryption support.

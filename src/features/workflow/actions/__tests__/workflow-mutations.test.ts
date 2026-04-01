@@ -88,6 +88,7 @@ describe("executeStep", () => {
 
     const autoAdvanceCall = calls.find((c) => c.cmd === "set_auto_advance");
     expect(autoAdvanceCall).toBeDefined();
+    expect(autoAdvanceCall!.args.issueId).toBe("ticket-1");
     expect(autoAdvanceCall!.args.enabled).toBe(true);
 
     // set_auto_advance must happen before workflow_execute_step
@@ -118,6 +119,7 @@ describe("executeStep", () => {
 
     const autoAdvanceCall = calls.find((c) => c.cmd === "set_auto_advance");
     expect(autoAdvanceCall).toBeDefined();
+    expect(autoAdvanceCall!.args.issueId).toBe("ticket-1");
     expect(autoAdvanceCall!.args.enabled).toBe(false);
   });
 
@@ -141,11 +143,11 @@ describe("executeStep", () => {
     storeA.getState().setAutoAdvance(true);
     // storeB.autoAdvance stays false
 
-    const autoAdvanceCalls: Array<{ projectDir: string; enabled: boolean }> = [];
+    const autoAdvanceCalls: Array<{ issueId: string; enabled: boolean }> = [];
     mockInvoke.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
       if (cmd === "set_auto_advance") {
         autoAdvanceCalls.push({
-          projectDir: args.projectDir as string,
+          issueId: args.issueId as string,
           enabled: args.enabled as boolean,
         });
         return null;
@@ -159,9 +161,11 @@ describe("executeStep", () => {
     await executeStep("/test", "ticket-1", []);
     await executeStep("/test", "ticket-2", []);
 
-    // Should have two set_auto_advance calls with different values
+    // Should have two set_auto_advance calls keyed by their own issueId
     expect(autoAdvanceCalls).toHaveLength(2);
+    expect(autoAdvanceCalls[0].issueId).toBe("ticket-1");
     expect(autoAdvanceCalls[0].enabled).toBe(true);
+    expect(autoAdvanceCalls[1].issueId).toBe("ticket-2");
     expect(autoAdvanceCalls[1].enabled).toBe(false);
   });
 

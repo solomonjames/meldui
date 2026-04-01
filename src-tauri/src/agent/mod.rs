@@ -192,7 +192,7 @@ pub struct AgentState {
     /// insert). Prevents two concurrent `execute_step` calls from both passing the duplicate check
     /// before either has inserted into `handles` (TOCTOU race).
     pub(crate) pending_starts: Mutex<std::collections::HashSet<String>>,
-    /// Auto-advance enabled per project (keyed by project_dir).
+    /// Auto-advance enabled per ticket (keyed by issue_id).
     /// Uses RwLock since reads are frequent (every queryComplete) and writes are rare (toggle).
     pub auto_advance: tokio::sync::RwLock<std::collections::HashMap<String, bool>>,
 }
@@ -345,11 +345,12 @@ async fn agent_set_fast_mode_inner(
 #[specta::specta]
 pub async fn set_auto_advance(
     state: tauri::State<'_, AgentState>,
-    project_dir: String,
+    _project_dir: String,
+    issue_id: String,
     enabled: bool,
 ) -> Result<(), String> {
     let mut map = state.auto_advance.write().await;
-    map.insert(project_dir, enabled);
+    map.insert(issue_id, enabled);
     Ok(())
 }
 
@@ -357,10 +358,11 @@ pub async fn set_auto_advance(
 #[specta::specta]
 pub async fn get_auto_advance(
     state: tauri::State<'_, AgentState>,
-    project_dir: String,
+    _project_dir: String,
+    issue_id: String,
 ) -> Result<bool, String> {
     let map = state.auto_advance.read().await;
-    Ok(map.get(&project_dir).copied().unwrap_or(false))
+    Ok(map.get(&issue_id).copied().unwrap_or(false))
 }
 
 /// Find the agent sidecar binary.
@@ -938,22 +940,20 @@ pub async fn execute_step(
                     response_text = resp.to_string();
                 }
 
-                // Check if supervisor should evaluate.
-                // Use canonical_project_dir (the original project root) for the lookup,
-                // because project_dir may be a worktree path while the frontend sets
-                // auto_advance keyed by the original project directory.
-                let lookup_dir = canonical_project_dir.unwrap_or(project_dir);
+                // Check if supervisor should evaluate for this specific ticket.
+                // Auto-advance is keyed by issue_id so each ticket can independently
+                // enable/disable the supervisor.
                 let auto_advance_enabled = {
                     match app_handle.try_state::<AgentState>() {
                         Some(agent_state) => {
                             let map = agent_state.auto_advance.read().await;
-                            map.get(lookup_dir).copied().unwrap_or(false)
+                            map.get(issue_id).copied().unwrap_or(false)
                         }
                         None => false,
                     }
                 };
                 log::info!(
-                    "queryComplete: auto_advance_enabled={auto_advance_enabled} (lookup_dir={lookup_dir})"
+                    "queryComplete: auto_advance_enabled={auto_advance_enabled} (issue_id={issue_id})"
                 );
 
                 if auto_advance_enabled {
@@ -1659,5 +1659,90 @@ pub(crate) fn dispatch_message_to_tauri(
             log::debug!("agent: heartbeat received");
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AgentState;
+
+    #[tokio::test]
+    async fn auto_advance_defaults_to_false() {
+        let state = AgentState::new();
+        let map = state.auto_advance.read().await;
+        assert!(!map.get("ticket-1").copied().unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn auto_advance_is_per_ticket() {
+        let state = AgentState::new();
+
+        // Enable for ticket-1 only
+        {
+            let mut map = state.auto_advance.write().await;
+            map.insert("ticket-1".to_string(), true);
+        }
+
+        let map = state.auto_advance.read().await;
+        assert!(map.get("ticket-1").copied().unwrap_or(false));
+        assert!(!map.get("ticket-2").copied().unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn auto_advance_independent_per_ticket() {
+        let state = AgentState::new();
+
+        {
+            let mut map = state.auto_advance.write().await;
+            map.insert("ticket-1".to_string(), true);
+            map.insert("ticket-2".to_string(), false);
+            map.insert("ticket-3".to_string(), true);
+        }
+
+        let map = state.auto_advance.read().await;
+        assert!(map.get("ticket-1").copied().unwrap_or(false));
+        assert!(!map.get("ticket-2").copied().unwrap_or(false));
+        assert!(map.get("ticket-3").copied().unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn auto_advance_toggle_does_not_affect_other_tickets() {
+        let state = AgentState::new();
+
+        // Enable both
+        {
+            let mut map = state.auto_advance.write().await;
+            map.insert("ticket-1".to_string(), true);
+            map.insert("ticket-2".to_string(), true);
+        }
+
+        // Disable ticket-1 only (simulates "Take Over" on one ticket)
+        {
+            let mut map = state.auto_advance.write().await;
+            map.insert("ticket-1".to_string(), false);
+        }
+
+        let map = state.auto_advance.read().await;
+        assert!(!map.get("ticket-1").copied().unwrap_or(false));
+        assert!(map.get("ticket-2").copied().unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn auto_advance_overwrite_updates_existing_ticket() {
+        let state = AgentState::new();
+
+        {
+            let mut map = state.auto_advance.write().await;
+            map.insert("ticket-1".to_string(), false);
+        }
+
+        // Simulate user toggling autoAdvance on
+        {
+            let mut map = state.auto_advance.write().await;
+            map.insert("ticket-1".to_string(), true);
+        }
+
+        let map = state.auto_advance.read().await;
+        assert!(map.get("ticket-1").copied().unwrap_or(false));
     }
 }

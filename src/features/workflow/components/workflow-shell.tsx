@@ -57,7 +57,6 @@ export function WorkflowShell({
     ticket.id,
     (s) => s.queryStartedAt,
   );
-
   // Narrow selector: subscribe only to the current step's output, not the entire record.
   const stepOutputKey = (() => {
     const history = workflowState?.step_history ?? [];
@@ -467,7 +466,7 @@ export function WorkflowShell({
                 onAutoAdvanceChange={(enabled) => {
                   orchestrationStoreFactory.getStore(ticket.id).getState().setAutoAdvance(enabled);
                   // Sync to Rust backend so the supervisor loop sees the change
-                  commands.setAutoAdvance(projectDir, enabled);
+                  commands.setAutoAdvance(projectDir, ticket.id, enabled);
                 }}
               />
             </div>

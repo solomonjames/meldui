@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { events } from "@/bindings";
 import { notificationsStoreFactory } from "@/features/workflow/stores/notifications-store";
+import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import { permissionsStoreFactory } from "@/features/workflow/stores/permissions-store";
 import { reviewStoreFactory } from "@/features/workflow/stores/review-store";
 import { useTauriEvent } from "@/shared/hooks/use-tauri-event";
@@ -66,8 +67,27 @@ export function useWorkflowEventRouting(
       .setFindings(payload.findings as ReviewFinding[], payload.request_id);
   });
 
+  // ── Supervisor events ──
+  const supervisorEvalReady = useTauriEvent(events.supervisorEvaluating, (payload) => {
+    const store = orchestrationStoreFactory.getStore(payload.issue_id).getState();
+    store.setSupervisorActive(true);
+    store.setSupervisorEvaluating(true);
+  });
+
+  const supervisorReplyReady = useTauriEvent(events.supervisorReply, (payload) => {
+    const store = orchestrationStoreFactory.getStore(payload.issue_id).getState();
+    store.setSupervisorActive(true);
+    store.setSupervisorEvaluating(false);
+  });
+
   return {
     allListenersReady:
-      permissionsReady && sectionReady && notificationReady && statusReady && reviewReady,
+      permissionsReady &&
+      sectionReady &&
+      notificationReady &&
+      statusReady &&
+      reviewReady &&
+      supervisorEvalReady &&
+      supervisorReplyReady,
   };
 }

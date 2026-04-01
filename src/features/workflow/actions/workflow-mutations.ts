@@ -79,7 +79,7 @@ export async function executeStep(
 
     // Sync this ticket's autoAdvance to Rust so the supervisor loop
     // only runs for tickets that actually have it enabled
-    await commands.setAutoAdvance(projectDir, store.getState().autoAdvance);
+    await commands.setAutoAdvance(projectDir, issueId, store.getState().autoAdvance);
 
     const ticketState = store.getState().workflowState;
     if (ticketState?.workflow_id) {
@@ -121,6 +121,8 @@ export async function executeStep(
   } finally {
     store.getState().setLoading(false);
     store.getState().setQueryStartedAt(null);
+    store.getState().setSupervisorActive(false);
+    store.getState().setSupervisorEvaluating(false);
     removeRunning(issueId);
   }
 }

@@ -3,7 +3,7 @@ import { ArrowRight, Check, Play, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { commands, events } from "@/bindings";
+import { commands } from "@/bindings";
 import { ActivityBar } from "@/features/workflow/components/shared/activity-bar";
 import { ActivityGroup } from "@/features/workflow/components/shared/activity-group";
 import { ComposeToolbar } from "@/features/workflow/components/shared/compose-toolbar";
@@ -13,6 +13,7 @@ import { StepDividerBar } from "@/features/workflow/components/shared/step-divid
 import { SubagentCard } from "@/features/workflow/components/shared/subagent-card";
 import { ThinkingBlock } from "@/features/workflow/components/shared/thinking-block";
 import { useAgentConfig } from "@/features/workflow/hooks/use-agent-config";
+import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import { useConversation } from "@/shared/hooks/use-conversation";
 import { snapshotToBlocks } from "@/shared/lib/conversations";
 import type { PermissionRequest, StepOutputStream, StepStatus } from "@/shared/types";
@@ -129,7 +130,6 @@ export function ChatView({
   const [userMessages, setUserMessages] = useState<
     Array<{ id: string; content: string; insertAt: number }>
   >([]);
-  const [supervisorActive, setSupervisorActive] = useState(false);
   const { config, setModel, setThinking, setEffort, setFastMode } = useAgentConfig(
     ticketId ?? null,
   );
@@ -155,31 +155,15 @@ export function ChatView({
     [onExecute],
   );
 
-  // Track supervisor evaluation state for typing indicator
-  const [supervisorEvaluating, setSupervisorEvaluating] = useState(false);
-
-  // Listen for supervisor events via Tauri events (reliable, not dependent on stream chunks)
-  useEffect(() => {
-    const unlistenEvaluating = events.supervisorEvaluating.listen(() => {
-      setSupervisorEvaluating(true);
-    });
-    const unlistenReply = events.supervisorReply.listen(() => {
-      setSupervisorActive(true);
-      setSupervisorEvaluating(false);
-    });
-    return () => {
-      unlistenEvaluating.then((fn) => fn());
-      unlistenReply.then((fn) => fn());
-    };
-  }, []);
-
-  // Reset supervisor state when step completes
-  useEffect(() => {
-    if (stepStatus === "completed" || stepStatus === "pending") {
-      setSupervisorActive(false);
-      setSupervisorEvaluating(false);
-    }
-  }, [stepStatus]);
+  // Supervisor state — persisted in per-ticket orchestration store, survives navigation
+  const supervisorActive = orchestrationStoreFactory.useTicketStore(
+    ticketId ?? "",
+    (s) => s.supervisorActive,
+  );
+  const supervisorEvaluating = orchestrationStoreFactory.useTicketStore(
+    ticketId ?? "",
+    (s) => s.supervisorEvaluating,
+  );
 
   // Load persisted conversation history
   const { data: snapshot } = useConversation(projectDir ?? "", ticketId ?? null);

@@ -75,12 +75,14 @@ pub(crate) async fn run_supervisor_loop(
             let auto_advance_enabled =
                 if let Some(state) = app_handle.try_state::<super::AgentState>() {
                     let map = state.auto_advance.read().await;
-                    map.get(settings_dir).copied().unwrap_or(false)
+                    map.get(issue_id).copied().unwrap_or(false)
                 } else {
                     false
                 };
             if !auto_advance_enabled {
-                log::info!("supervisor: auto-advance disabled mid-loop, returning to user");
+                log::info!(
+                    "supervisor: auto-advance disabled mid-loop for {issue_id}, returning to user"
+                );
                 return Ok((SupervisorDecision::Advance, response_text, final_session_id));
             }
         }

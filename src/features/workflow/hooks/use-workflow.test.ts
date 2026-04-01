@@ -309,7 +309,9 @@ describe("useWorkflow", () => {
 
       // pendingPermission should be cleared
       expect(permissionsStoreFactory.getStore("issue-1").getState().pendingPermission).toBeNull();
-      expect(result.current.error).toContain("Step execution failed");
+      expect(orchestrationStoreFactory.getStore("issue-1").getState().error).toContain(
+        "Step execution failed",
+      );
     });
   });
 

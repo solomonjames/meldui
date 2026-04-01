@@ -81,7 +81,20 @@ export function WorkflowShell({
     (s) => s.listenersReady,
   );
 
-  const stepOutputs = streamingStoreFactory.useTicketStore(ticket.id, (s) => s.stepOutputs);
+  // Narrow selector: subscribe only to the current step's output, not the entire record.
+  // This prevents re-renders from chunks for other tickets/steps.
+  const stepOutputKey = (() => {
+    const history = workflowState?.step_history ?? [];
+    const currentStepId = workflowState?.current_step_id;
+    // If there's a current step, use it; otherwise use the last completed step
+    const stepId =
+      currentStepId ?? (history.length > 0 ? history[history.length - 1].step_id : null);
+    return stepId ? `${ticket.id}:${stepId}` : "";
+  })();
+  const currentStepOutput = streamingStoreFactory.useTicketStore(
+    ticket.id,
+    useCallback((s) => s.stepOutputs[stepOutputKey], [stepOutputKey]),
+  );
 
   const pendingPermission = permissionsStoreFactory.useTicketStore(
     ticket.id,
@@ -346,11 +359,6 @@ export function WorkflowShell({
     !workflowComplete &&
     typeof workflowState.step_status === "object" &&
     "failed" in workflowState.step_status;
-  const lastStepId = workflowComplete
-    ? completedStepIds[completedStepIds.length - 1]
-    : currentStep?.id;
-  const stepOutputKey = lastStepId && ticket.id ? `${ticket.id}:${lastStepId}` : undefined;
-  const currentStepOutput = stepOutputKey ? stepOutputs[stepOutputKey] : undefined;
   const responseText = lastResult?.response ?? currentStepOutput?.textContent ?? "";
   const reviewDisabled = !pendingReviewRequestId;
   const agentCommitMessage = lastResult?.response ?? currentStepOutput?.textContent ?? null;

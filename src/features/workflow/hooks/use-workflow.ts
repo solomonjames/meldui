@@ -408,20 +408,9 @@ export function useWorkflow(projectDir: string) {
 
   const respondToPermission = permissions.respondToPermission;
 
-  // ── Reactive convenience accessors for the active ticket ──
-  const EMPTY_TICKET = "__none__";
-  const storeId = activeTicketId ?? EMPTY_TICKET;
-  const currentState = orchestrationStoreFactory.useTicketStore(storeId, (s) => s.workflowState);
-  const loading = orchestrationStoreFactory.useTicketStore(storeId, (s) => s.loading);
-  const error = orchestrationStoreFactory.useTicketStore(storeId, (s) => s.error);
-
   return {
     workflows,
-    currentState,
-    loading,
-    error,
     listenersReady,
-    stepOutputs: streaming.stepOutputs,
     activeTicketId,
     setActiveTicketId,
     runningTicketIds: loadingTicketSet,

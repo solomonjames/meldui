@@ -32,11 +32,11 @@ async agentSetEffort(issueId: string, effort: string) : Promise<null> {
 async agentSetFastMode(issueId: string, enabled: boolean) : Promise<null> {
     return await TAURI_INVOKE("agent_set_fast_mode", { issueId, enabled });
 },
-async setAutoAdvance(projectDir: string, enabled: boolean) : Promise<null> {
-    return await TAURI_INVOKE("set_auto_advance", { projectDir, enabled });
+async setAutoAdvance(projectDir: string, issueId: string, enabled: boolean) : Promise<null> {
+    return await TAURI_INVOKE("set_auto_advance", { projectDir, issueId, enabled });
 },
-async getAutoAdvance(projectDir: string) : Promise<boolean> {
-    return await TAURI_INVOKE("get_auto_advance", { projectDir });
+async getAutoAdvance(projectDir: string, issueId: string) : Promise<boolean> {
+    return await TAURI_INVOKE("get_auto_advance", { projectDir, issueId });
 },
 async ticketList(projectDir: string, status: string | null, ticketType: string | null, showAll: boolean | null) : Promise<Ticket[]> {
     return await TAURI_INVOKE("ticket_list", { projectDir, status, ticketType, showAll });

@@ -5,9 +5,10 @@ import { WorkflowStartPanel } from "@/app/workflow-start-panel";
 import { commands } from "@/bindings";
 import { TicketDetailsPanel } from "@/features/tickets/components/ticket-details-panel";
 import { WorkflowShell } from "@/features/workflow/components/workflow-shell";
-import { useWorkflowContext } from "@/features/workflow/context";
+import { notificationsStoreFactory } from "@/features/workflow/stores/notifications-store";
+import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import { ticketKeys } from "@/shared/lib/query-keys";
-import type { Ticket, WorkflowDefinition, WorkflowState, WorkflowSuggestion } from "@/shared/types";
+import type { Ticket, WorkflowDefinition } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/shared/ui/resizable";
 
@@ -30,8 +31,6 @@ interface TicketPageProps {
   ) => Promise<void>;
   onShowTicket: (id: string) => Promise<Ticket | null>;
   onAddComment: (id: string, text: string) => Promise<void>;
-  onAssignWorkflow: (issueId: string, workflowId: string) => Promise<WorkflowState | null>;
-  onSuggestWorkflow: (issueId: string) => Promise<WorkflowSuggestion | null>;
   onUpdateSection: (ticketId: string, sectionId: string, content: unknown) => Promise<void>;
   onStartWorkflow: (ticket: Ticket) => Promise<void>;
   onRefreshTickets: () => Promise<void>;
@@ -48,8 +47,6 @@ export function TicketPage({
   onShowTicket,
   onAddComment,
   onUpdateSection,
-  onAssignWorkflow,
-  onSuggestWorkflow,
   onStartWorkflow,
   onRefreshTickets,
   onDeleteTicket,
@@ -69,9 +66,12 @@ export function TicketPage({
     enabled: !!projectDir && !!ticketId,
   });
 
-  // Workflow context (provided by WorkflowProvider in App.tsx)
-  const workflowCtx = useWorkflowContext();
-  const hasActiveWorkflow = !!workflowCtx.currentState;
+  const workflowState = orchestrationStoreFactory.useTicketStore(ticketId, (s) => s.workflowState);
+  const hasActiveWorkflow = !!workflowState;
+  const lastUpdatedSectionId = notificationsStoreFactory.useTicketStore(
+    ticketId,
+    (s) => s.lastUpdatedSectionId,
+  );
 
   const handleRefreshTicket = useCallback(async () => {
     await queryClient.invalidateQueries({
@@ -117,8 +117,8 @@ export function TicketPage({
   }
 
   // Get workflow definition for section defs
-  const workflowDef = workflowCtx.currentState?.workflow_id
-    ? workflows.find((w) => w.id === workflowCtx.currentState?.workflow_id)
+  const workflowDef = workflowState?.workflow_id
+    ? workflows.find((w) => w.id === workflowState?.workflow_id)
     : undefined;
 
   return (
@@ -151,6 +151,7 @@ export function TicketPage({
                 <WorkflowShell
                   ticket={ticket}
                   projectDir={projectDir}
+                  workflows={workflows}
                   onNavigateToBacklog={onNavigateToBacklog}
                   onRefreshTicket={handleRefreshTicket}
                   scrollToStepRef={scrollToStepRef}
@@ -159,8 +160,18 @@ export function TicketPage({
                 <WorkflowStartPanel
                   ticket={ticket}
                   workflows={workflows}
-                  onAssignWorkflow={onAssignWorkflow}
-                  onSuggestWorkflow={onSuggestWorkflow}
+                  onAssignWorkflow={async (issueId, workflowId) => {
+                    const { assignWorkflow } = await import(
+                      "@/features/workflow/actions/workflow-mutations"
+                    );
+                    return assignWorkflow(projectDir, issueId, workflowId);
+                  }}
+                  onSuggestWorkflow={async (issueId) => {
+                    const { suggestWorkflow } = await import(
+                      "@/features/workflow/actions/workflow-mutations"
+                    );
+                    return suggestWorkflow(projectDir, issueId);
+                  }}
                   onStartWorkflow={onStartWorkflow}
                   onRefreshTickets={onRefreshTickets}
                   onUpdateTicket={onUpdateTicket}
@@ -185,12 +196,12 @@ export function TicketPage({
               onUpdateSection={handleUpdateSection}
               onDeleteTicket={onDeleteTicket}
               sectionDefs={workflowDef?.ticket_sections}
-              lastUpdatedSectionId={workflowCtx.lastUpdatedSectionId}
+              lastUpdatedSectionId={lastUpdatedSectionId}
               isCollapsed={false}
               onToggleCollapse={() => setDetailsCollapsed(true)}
               workflowSteps={workflowDef?.steps}
-              currentStepId={workflowCtx.currentState?.current_step_id}
-              stepHistory={workflowCtx.currentState?.step_history}
+              currentStepId={workflowState?.current_step_id}
+              stepHistory={workflowState?.step_history}
               onStepClick={(stepId) => scrollToStepRef.current(stepId)}
             />
           </ResizablePanel>
@@ -209,12 +220,12 @@ export function TicketPage({
             onUpdateSection={handleUpdateSection}
             onDeleteTicket={onDeleteTicket}
             sectionDefs={workflowDef?.ticket_sections}
-            lastUpdatedSectionId={workflowCtx.lastUpdatedSectionId}
+            lastUpdatedSectionId={lastUpdatedSectionId}
             isCollapsed={true}
             onToggleCollapse={() => setDetailsCollapsed(false)}
             workflowSteps={workflowDef?.steps}
-            currentStepId={workflowCtx.currentState?.current_step_id}
-            stepHistory={workflowCtx.currentState?.step_history}
+            currentStepId={workflowState?.current_step_id}
+            stepHistory={workflowState?.step_history}
             onStepClick={() => {}}
           />
         </div>

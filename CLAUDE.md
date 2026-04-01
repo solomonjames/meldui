@@ -69,7 +69,7 @@ src/
         shared/           # Workflow-internal shared (ToolCard, ActivityBar, etc.)
         views/            # ChatView, ProgressView, ReviewView, etc.
       hooks/              # useWorkflow, useWorkflowStreaming, etc.
-      context.tsx         # WorkflowProvider + useWorkflowContext
+      stores/             # Per-ticket Zustand stores (streaming, orchestration, permissions, notifications, review)
     settings/             # Project-level settings
       components/         # SettingsPage
       hooks/              # useSettings
@@ -144,7 +144,7 @@ The sidecar is excluded from the frontend `tsc` build via `tsconfig.app.json` `"
 
 ### Frontend Stack
 
-- **React 19** with hooks-only state management (no Redux/Zustand)
+- **React 19** with **Zustand** for client state (per-ticket store factory + navigation singleton) and TanStack Query for server state
 - **Tailwind CSS v4** via `@tailwindcss/vite` plugin (no tailwind.config file — theme is in `src/index.css`)
 - **shadcn** components (base-nova style, neutral base color) in `src/shared/ui/`
 - **Lucide React** for icons

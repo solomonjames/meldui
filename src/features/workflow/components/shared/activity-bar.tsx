@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { TOOL_LABELS } from "@/features/workflow/components/shared/tool-labels";
 import type { StepOutputStream } from "@/shared/types";
 
@@ -7,24 +7,23 @@ interface ActivityBarProps {
   isExecuting: boolean;
   isWaitingForUser?: boolean;
   stepName?: string;
+  /** Timestamp (ms) when the current query started, null when idle. Store-based, per-ticket. */
+  queryStartedAt?: number | null;
 }
 
 function useElapsedTimer(startTime: number | null): number {
-  const computeElapsed = () => (startTime ? Math.floor((Date.now() - startTime) / 1000) : 0);
-  const [elapsed, setElapsed] = useState(computeElapsed);
+  const compute = () => (startTime ? Math.floor((Date.now() - startTime) / 1000) : 0);
+  const [elapsed, setElapsed] = useState(compute);
 
   useEffect(() => {
+    // Immediately sync elapsed when startTime changes
+    setElapsed(startTime ? Math.floor((Date.now() - startTime) / 1000) : 0);
     if (!startTime) return;
     const interval = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startTime) / 1000));
     }, 1000);
     return () => clearInterval(interval);
   }, [startTime]);
-
-  // Reset synchronously when startTime changes to null (no effect needed)
-  if (!startTime && elapsed !== 0) {
-    return 0;
-  }
 
   return elapsed;
 }
@@ -35,11 +34,12 @@ function formatTimer(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function ActivityBar({
+export const ActivityBar = memo(function ActivityBar({
   stepOutput,
   isExecuting,
   isWaitingForUser,
   stepName,
+  queryStartedAt,
 }: ActivityBarProps) {
   const activeToolName = stepOutput?.activeToolName ?? null;
   const activeToolStartTime = stepOutput?.activeToolStartTime ?? null;
@@ -54,14 +54,8 @@ export function ActivityBar({
   );
   const toolElapsed = useElapsedTimer(activeToolStartTime);
 
-  // Track total step elapsed time
-  const stepStartRef = useRef<number | null>(null);
-  if (isExecuting && !stepStartRef.current) {
-    stepStartRef.current = Date.now();
-  } else if (!isExecuting) {
-    stepStartRef.current = null;
-  }
-  const stepElapsed = useElapsedTimer(stepStartRef.current);
+  // Total query elapsed time — driven by store, not local refs
+  const stepElapsed = useElapsedTimer(queryStartedAt ?? null);
 
   const hasResult = stepOutput?.resultContent != null;
   if (!isExecuting || isWaitingForUser || hasResult) {
@@ -161,4 +155,23 @@ export function ActivityBar({
       </span>
     </div>
   );
+}, areActivityBarPropsEqual);
+
+function areActivityBarPropsEqual(prev: ActivityBarProps, next: ActivityBarProps): boolean {
+  if (prev.isExecuting !== next.isExecuting) return false;
+  if (prev.isWaitingForUser !== next.isWaitingForUser) return false;
+  if (prev.stepName !== next.stepName) return false;
+  if (prev.queryStartedAt !== next.queryStartedAt) return false;
+  const p = prev.stepOutput;
+  const n = next.stepOutput;
+  if (p === n) return true;
+  if (!p || !n) return false;
+  if (p.activeToolName !== n.activeToolName) return false;
+  if (p.activeToolStartTime !== n.activeToolStartTime) return false;
+  if (p.isCompacting !== n.isCompacting) return false;
+  if (p.resultContent !== n.resultContent) return false;
+  if (p.toolActivities.length !== n.toolActivities.length) return false;
+  if (p.subagentActivities.length !== n.subagentActivities.length) return false;
+  if (p.thinkingContent.length > 0 !== n.thinkingContent.length > 0) return false;
+  return true;
 }

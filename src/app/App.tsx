@@ -1,15 +1,22 @@
-import { QueryClientProvider } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Toaster } from "sonner";
 import { TicketPage } from "@/app/ticket-page";
 import { WelcomeScreen } from "@/app/welcome-screen";
+import { commands, events } from "@/bindings";
 import { SettingsPage } from "@/features/settings/components/settings-page";
 import { BacklogPage } from "@/features/tickets/components/backlog-page";
 import { CreateTicketDialog } from "@/features/tickets/components/create-ticket-dialog";
 import { useTickets } from "@/features/tickets/hooks/use-tickets";
-import { WorkflowProvider } from "@/features/workflow/context";
-import { useWorkflow } from "@/features/workflow/hooks/use-workflow";
+import {
+  runningTicketIds as runningTicketIdsSet,
+  setRunningTicketsListener,
+} from "@/features/workflow/actions/workflow-mutations";
+import { fetchWorkflowState } from "@/features/workflow/actions/workflow-queries";
+import { useWorkflowEventRouting } from "@/features/workflow/hooks/use-workflow-event-routing";
+import { disposeTicketStores } from "@/features/workflow/stores/dispose";
+import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import { ViewErrorFallback } from "@/shared/components/error/view-error-fallback";
 import { useProjectDir } from "@/shared/hooks/use-project-dir";
 import { useTheme } from "@/shared/hooks/use-theme";
@@ -19,20 +26,83 @@ import { AppSidebar } from "@/shared/layout/app-sidebar";
 import { StatusBar } from "@/shared/layout/status-bar";
 import { useTauriEventInvalidation } from "@/shared/lib/invalidation";
 import { queryClient } from "@/shared/lib/query-client";
-import type { Ticket } from "@/shared/types";
+import { navigationStore, useNavigationStore } from "@/shared/stores/navigation-store";
+import type { Ticket, WorkflowDefinition } from "@/shared/types";
 
 function AppContent() {
   useTheme();
   useUpdater();
   const { projectDir, folderName, loading: dirLoading, openFolderDialog } = useProjectDir();
   const ticketStore = useTickets(projectDir ?? "");
-  const workflow = useWorkflow(projectDir ?? "");
-  const [activePage, setActivePage] = useState<"backlog" | "ticket" | "settings">("backlog");
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [activeTicketId, setActiveTicketIdLocal] = useState<string | null>(null);
+  const activePage = useNavigationStore((s) => s.activePage);
+  const activeTicketId = useNavigationStore((s) => s.activeTicketId);
+  const createDialogOpen = useNavigationStore((s) => s.createDialogOpen);
 
   // Centralized event-driven query invalidation
   useTauriEventInvalidation(projectDir ?? "");
+
+  // ── Workflows query (was in useWorkflow) ──
+  const workflowsQuery = useQuery({
+    queryKey: ["workflows", "list", projectDir ?? ""],
+    queryFn: () => commands.workflowList(projectDir ?? ""),
+    enabled: !!projectDir,
+  });
+  const workflows: WorkflowDefinition[] = workflowsQuery.data ?? [];
+
+  // ── Running tickets state (driven by action module) ──
+  const [runningTicketIds, setRunningTicketIds] = useState<Set<string>>(
+    () => new Set(runningTicketIdsSet),
+  );
+  useEffect(() => {
+    setRunningTicketsListener(setRunningTicketIds);
+    return () => setRunningTicketsListener(() => {});
+  }, []);
+
+  // ── Event routing (was in useWorkflow → useWorkflowEventRouting) ──
+  const onRefreshTicketRef = useRef<(() => Promise<void>) | null>(null);
+  const { allListenersReady } = useWorkflowEventRouting(activeTicketId, onRefreshTicketRef);
+
+  // Update the active ticket's store when listeners are ready
+  useEffect(() => {
+    if (activeTicketId) {
+      orchestrationStoreFactory
+        .getStore(activeTicketId)
+        .getState()
+        .setListenersReady(allListenersReady);
+    }
+  }, [activeTicketId, allListenersReady]);
+
+  // ── Idle timeout: unload ticket stores 10 min after agent session ends ──
+  const unloadTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    events.agentSessionEnded
+      .listen((event) => {
+        if (cancelled) return;
+        const { issue_id } = event.payload;
+        unloadTimersRef.current[issue_id] = setTimeout(
+          () => {
+            disposeTicketStores(issue_id);
+            delete unloadTimersRef.current[issue_id];
+          },
+          10 * 60 * 1000,
+        );
+      })
+      .then((u) => {
+        if (cancelled) u();
+        else unlisten = u;
+      });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+      for (const timer of Object.values(unloadTimersRef.current)) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
 
   // C keyboard shortcut to open create dialog (suppressed on ticket page)
   useEffect(() => {
@@ -42,61 +112,55 @@ function AppContent() {
         !e.metaKey &&
         !e.ctrlKey &&
         !e.altKey &&
-        activePage !== "ticket" &&
+        navigationStore.getState().activePage !== "ticket" &&
         !(e.target instanceof HTMLInputElement) &&
         !(e.target instanceof HTMLTextAreaElement) &&
         !(e.target instanceof HTMLSelectElement)
       ) {
         e.preventDefault();
-        setCreateDialogOpen(true);
+        navigationStore.getState().setCreateDialogOpen(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activePage]);
-
-  const { getWorkflowState, setActiveTicketId: setWorkflowActiveTicketId } = workflow;
+  }, []);
 
   const navigateToTicket = useCallback(
     async (ticketId: string) => {
-      setActiveTicketIdLocal(ticketId);
-      setWorkflowActiveTicketId(ticketId);
-      setActivePage("ticket");
-      // Fetch workflow state so WorkflowShell renders if a workflow is active
-      await getWorkflowState(ticketId);
+      if (!projectDir) return;
+      navigationStore.getState().navigateToTicket(ticketId);
+      // Cancel any pending unload timer
+      if (unloadTimersRef.current[ticketId]) {
+        clearTimeout(unloadTimersRef.current[ticketId]);
+        delete unloadTimersRef.current[ticketId];
+      }
+      await fetchWorkflowState(projectDir, ticketId);
     },
-    [setWorkflowActiveTicketId, getWorkflowState],
+    [projectDir],
   );
 
   const handleStartWorkflow = useCallback(
     async (ticket: Ticket) => {
-      const state = await getWorkflowState(ticket.id);
+      if (!projectDir) return;
+      const state = await fetchWorkflowState(projectDir, ticket.id);
       if (state) {
         navigateToTicket(ticket.id);
       }
     },
-    [getWorkflowState, navigateToTicket],
+    [projectDir, navigateToTicket],
   );
 
-  // TicketPage handles its own refresh via TanStack Query — register a stable no-op
-  const noopRefresh = useCallback(async () => {}, []);
-  useEffect(() => {
-    workflow.setOnRefreshTicket(noopRefresh);
-  }, [workflow.setOnRefreshTicket, noopRefresh]);
-
   const handleNavigateToBacklog = useCallback(() => {
-    setActiveTicketIdLocal(null);
-    setWorkflowActiveTicketId(null);
-    setActivePage("backlog");
+    navigationStore.getState().navigateToBacklog();
     ticketStore.refreshTickets();
-  }, [ticketStore, setWorkflowActiveTicketId]);
+  }, [ticketStore]);
 
   const handleSidebarNavigate = useCallback(
     (page: string) => {
       if (page === "backlog") {
         handleNavigateToBacklog();
       } else if (page === "settings") {
-        setActivePage("settings");
+        navigationStore.getState().navigateToSettings();
       }
     },
     [handleNavigateToBacklog],
@@ -125,24 +189,20 @@ function AppContent() {
             console.error("[ErrorBoundary:ticket]", error, info.componentStack)
           }
         >
-          <WorkflowProvider workflow={workflow}>
-            <TicketPage
-              ticketId={activeTicketId}
-              projectDir={projectDir}
-              allTickets={ticketStore.tickets}
-              workflows={workflow.workflows}
-              onNavigateToBacklog={handleNavigateToBacklog}
-              onUpdateTicket={ticketStore.updateTicket}
-              onShowTicket={ticketStore.showTicket}
-              onAddComment={ticketStore.addComment}
-              onUpdateSection={ticketStore.updateSection}
-              onAssignWorkflow={workflow.assignWorkflow}
-              onSuggestWorkflow={workflow.suggestWorkflow}
-              onStartWorkflow={handleStartWorkflow}
-              onRefreshTickets={ticketStore.refreshTickets}
-              onDeleteTicket={ticketStore.deleteTicket}
-            />
-          </WorkflowProvider>
+          <TicketPage
+            ticketId={activeTicketId}
+            projectDir={projectDir}
+            allTickets={ticketStore.tickets}
+            workflows={workflows}
+            onNavigateToBacklog={handleNavigateToBacklog}
+            onUpdateTicket={ticketStore.updateTicket}
+            onShowTicket={ticketStore.showTicket}
+            onAddComment={ticketStore.addComment}
+            onUpdateSection={ticketStore.updateSection}
+            onStartWorkflow={handleStartWorkflow}
+            onRefreshTickets={ticketStore.refreshTickets}
+            onDeleteTicket={ticketStore.deleteTicket}
+          />
         </ErrorBoundary>
       );
     }
@@ -173,7 +233,7 @@ function AppContent() {
           tickets={ticketStore.tickets}
           loading={ticketStore.isLoading}
           error={ticketStore.error}
-          workflows={workflow.workflows}
+          workflows={workflows}
           onRefresh={ticketStore.refreshTickets}
           onCardClick={handleTicketClick}
         />
@@ -188,13 +248,13 @@ function AppContent() {
           activePage={activePage}
           onNavigate={handleSidebarNavigate}
           tickets={ticketStore.tickets}
-          workflows={workflow.workflows}
-          onCreateTicket={() => setCreateDialogOpen(true)}
+          workflows={workflows}
+          onCreateTicket={() => navigationStore.getState().setCreateDialogOpen(true)}
           folderName={folderName}
           onOpenFolder={openFolderDialog}
           onTicketClick={handleTicketClick}
           activeTicketId={activeTicketId}
-          runningTicketIds={workflow.runningTicketIds}
+          runningTicketIds={runningTicketIds}
         />
       }
       statusBar={<StatusBar branch="main" version="v0.1.0" />}
@@ -202,7 +262,7 @@ function AppContent() {
       {renderActivePage()}
       <CreateTicketDialog
         open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
+        onOpenChange={(open) => navigationStore.getState().setCreateDialogOpen(open)}
         onCreateTicket={ticketStore.createTicket}
       />
       <Toaster position="top-right" richColors />

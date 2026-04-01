@@ -1,6 +1,6 @@
+import { produce } from "immer";
 import { createTicketStoreFactory } from "@/shared/stores/create-ticket-store";
 import type {
-  ContentBlock,
   ContextUsage,
   StepOutputStream,
   StreamChunk,
@@ -42,20 +42,31 @@ export function emptyStepOutput(): StepOutputStream {
   };
 }
 
-/** Update a ToolActivity inside contentBlocks by tool_id */
-function updateToolInBlocks(
-  blocks: ContentBlock[],
+/** Mutate a tool activity in both toolActivities and contentBlocks by tool_id (immer draft) */
+function mutateToolById(
+  output: StepOutputStream,
   toolId: string,
-  updater: (a: ToolActivity) => ToolActivity,
-): ContentBlock[] {
-  return blocks.map((block) => {
-    if (block.type !== "tool_group") return block;
-    const idx = block.activities.findIndex((a) => a.tool_id === toolId);
-    if (idx < 0) return block;
-    const activities = [...block.activities];
-    activities[idx] = updater(activities[idx]);
-    return { ...block, activities };
-  });
+  updater: (a: ToolActivity) => void,
+): boolean {
+  const activity = output.toolActivities.find((a) => a.tool_id === toolId);
+  if (!activity) return false;
+  updater(activity);
+  for (const block of output.contentBlocks) {
+    if (block.type !== "tool_group") continue;
+    const blockActivity = block.activities.find((a) => a.tool_id === toolId);
+    if (blockActivity) updater(blockActivity);
+  }
+  return true;
+}
+
+/** Append to the last content block of a given type, or push a new one (immer draft) */
+function appendToLastBlock(output: StepOutputStream, type: "text" | "thinking", content: string) {
+  const last = output.contentBlocks[output.contentBlocks.length - 1];
+  if (last && last.type === type) {
+    last.content += content;
+  } else {
+    output.contentBlocks.push({ type, content });
+  }
 }
 
 export interface StreamingState {
@@ -65,339 +76,269 @@ export interface StreamingState {
   clearStepOutputs: () => void;
 }
 
-export const streamingStoreFactory = createTicketStoreFactory<StreamingState>((set, get) => ({
-  stepOutputs: {},
+export const streamingStoreFactory = createTicketStoreFactory<StreamingState>(
+  "streaming",
+  (set, get) => ({
+    stepOutputs: {},
 
-  handleChunk: (stepId: string, chunk: StreamChunk) => {
-    set((prev) => {
-      const outputKey = `${chunk.issue_id}:${stepId}`;
-      const current = prev.stepOutputs[outputKey] ?? emptyStepOutput();
-      const updated = { ...current };
-
-      // Clear supervisor evaluating flag when agent content arrives
-      if (current.supervisorEvaluating && !chunk.chunk_type.startsWith("supervisor_")) {
-        updated.supervisorEvaluating = false;
-      }
-
-      switch (chunk.chunk_type) {
-        case "text": {
-          if (current.textContent && current.lastChunkType !== "text") {
-            updated.textContent = `${current.textContent}\n\n${chunk.content}`;
-          } else {
-            updated.textContent = current.textContent + chunk.content;
+    handleChunk: (stepId: string, chunk: StreamChunk) => {
+      set(
+        produce((draft: StreamingState) => {
+          const outputKey = `${chunk.issue_id}:${stepId}`;
+          if (!draft.stepOutputs[outputKey]) {
+            draft.stepOutputs[outputKey] = emptyStepOutput();
           }
-          const blocks = [...current.contentBlocks];
-          const lastBlock = blocks[blocks.length - 1];
-          if (lastBlock && lastBlock.type === "text") {
-            blocks[blocks.length - 1] = {
-              ...lastBlock,
-              content: lastBlock.content + chunk.content,
-            };
-          } else {
-            blocks.push({ type: "text", content: chunk.content });
+          const output = draft.stepOutputs[outputKey];
+
+          // Clear supervisor evaluating flag when agent content arrives
+          if (output.supervisorEvaluating && !chunk.chunk_type.startsWith("supervisor_")) {
+            output.supervisorEvaluating = false;
           }
-          updated.contentBlocks = blocks;
-          updated.lastChunkType = "text";
-          break;
-        }
-        case "tool_start": {
-          try {
-            const { tool_name, tool_id } = JSON.parse(chunk.content);
-            const activity: ToolActivity = {
-              tool_id,
-              tool_name,
-              input: "",
-              status: "running",
-            };
-            updated.toolActivities = [...current.toolActivities, activity];
-            updated.activeToolName = tool_name;
-            updated.activeToolStartTime = Date.now();
-            const blocks = [...current.contentBlocks];
-            const lastBlock = blocks[blocks.length - 1];
-            if (lastBlock && lastBlock.type === "tool_group") {
-              blocks[blocks.length - 1] = {
-                ...lastBlock,
-                activities: [...lastBlock.activities, activity],
-              };
-            } else {
-              blocks.push({ type: "tool_group", activities: [activity] });
+
+          switch (chunk.chunk_type) {
+            case "text": {
+              if (output.textContent && output.lastChunkType !== "text") {
+                output.textContent += `\n\n${chunk.content}`;
+              } else {
+                output.textContent += chunk.content;
+              }
+              appendToLastBlock(output, "text", chunk.content);
+              output.lastChunkType = "text";
+              break;
             }
-            updated.contentBlocks = blocks;
-          } catch {
-            // ignore malformed tool_start
-          }
-          updated.lastChunkType = "tool_start";
-          break;
-        }
-        case "tool_input": {
-          try {
-            const { tool_id, content: inputContent } = JSON.parse(chunk.content);
-            if (tool_id) {
-              const activities = [...current.toolActivities];
-              const idx = activities.findIndex((a) => a.tool_id === tool_id);
-              if (idx >= 0) {
-                activities[idx] = {
-                  ...activities[idx],
-                  input: activities[idx].input + inputContent,
+            case "tool_start": {
+              try {
+                const { tool_name, tool_id } = JSON.parse(chunk.content);
+                const activity: ToolActivity = {
+                  tool_id,
+                  tool_name,
+                  input: "",
+                  status: "running",
                 };
-                updated.toolActivities = activities;
-                updated.contentBlocks = updateToolInBlocks(current.contentBlocks, tool_id, (a) => ({
-                  ...a,
-                  input: a.input + inputContent,
-                }));
+                output.toolActivities.push(activity);
+                output.activeToolName = tool_name;
+                output.activeToolStartTime = Date.now();
+                const last = output.contentBlocks[output.contentBlocks.length - 1];
+                if (last && last.type === "tool_group") {
+                  last.activities.push({ ...activity });
+                } else {
+                  output.contentBlocks.push({
+                    type: "tool_group",
+                    activities: [{ ...activity }],
+                  });
+                }
+              } catch {
+                // ignore malformed tool_start
               }
+              output.lastChunkType = "tool_start";
+              break;
             }
-          } catch {
-            if (current.toolActivities.length > 0) {
-              const activities = [...current.toolActivities];
-              const last = { ...activities[activities.length - 1] };
-              last.input = last.input + chunk.content;
-              activities[activities.length - 1] = last;
-              updated.toolActivities = activities;
-            }
-          }
-          break;
-        }
-        case "tool_end": {
-          let matched = false;
-          try {
-            const { tool_id } = JSON.parse(chunk.content);
-            if (tool_id) {
-              const activities = [...current.toolActivities];
-              const idx = activities.findIndex((a) => a.tool_id === tool_id);
-              if (idx >= 0) {
-                activities[idx] = { ...activities[idx], status: "complete" };
-                updated.toolActivities = activities;
-                updated.contentBlocks = updateToolInBlocks(current.contentBlocks, tool_id, (a) => ({
-                  ...a,
-                  status: "complete",
-                }));
-                matched = true;
+            case "tool_input": {
+              try {
+                const { tool_id, content: inputContent } = JSON.parse(chunk.content);
+                if (tool_id) {
+                  mutateToolById(output, tool_id, (a) => {
+                    a.input += inputContent;
+                  });
+                }
+              } catch {
+                const last = output.toolActivities[output.toolActivities.length - 1];
+                if (last) last.input += chunk.content;
               }
+              break;
             }
-          } catch {
-            // Fallback
-          }
-          if (!matched && current.toolActivities.length > 0) {
-            const activities = [...current.toolActivities];
-            const last = { ...activities[activities.length - 1] };
-            last.status = "complete";
-            activities[activities.length - 1] = last;
-            updated.toolActivities = activities;
-          }
-          updated.activeToolName = null;
-          updated.activeToolStartTime = null;
-          break;
-        }
-        case "tool_result": {
-          try {
-            const { tool_id, content, is_error } = JSON.parse(chunk.content);
-            const activities = [...current.toolActivities];
-            const idx = activities.findIndex((a) => a.tool_id === tool_id);
-            if (idx >= 0) {
-              activities[idx] = {
-                ...activities[idx],
-                result: content,
-                is_error,
-                status: "complete",
-              };
-              updated.toolActivities = activities;
-              updated.contentBlocks = updateToolInBlocks(current.contentBlocks, tool_id, (a) => ({
-                ...a,
-                result: content,
-                is_error,
-                status: "complete" as const,
-              }));
+            case "tool_end": {
+              let matched = false;
+              try {
+                const { tool_id } = JSON.parse(chunk.content);
+                if (tool_id) {
+                  matched = mutateToolById(output, tool_id, (a) => {
+                    a.status = "complete";
+                  });
+                }
+              } catch {
+                // Fallback
+              }
+              if (!matched) {
+                const last = output.toolActivities[output.toolActivities.length - 1];
+                if (last) last.status = "complete";
+              }
+              output.activeToolName = null;
+              output.activeToolStartTime = null;
+              break;
             }
-          } catch {
-            // ignore malformed tool_result
-          }
-          updated.lastChunkType = "tool_result";
-          break;
-        }
-        case "tool_progress": {
-          try {
-            const { tool_name, tool_use_id, elapsed_seconds } = JSON.parse(chunk.content);
-            updated.activeToolName = tool_name;
-            if (tool_use_id && elapsed_seconds !== undefined) {
-              updated.toolActivities = current.toolActivities.map((a) =>
-                a.tool_id === tool_use_id ? { ...a, elapsed_seconds } : a,
-              );
-              updated.contentBlocks = updateToolInBlocks(
-                current.contentBlocks,
-                tool_use_id,
-                (a) => ({ ...a, elapsed_seconds }),
-              );
+            case "tool_result": {
+              try {
+                const { tool_id, content, is_error } = JSON.parse(chunk.content);
+                mutateToolById(output, tool_id, (a) => {
+                  a.result = content;
+                  a.is_error = is_error;
+                  a.status = "complete";
+                });
+              } catch {
+                // ignore malformed tool_result
+              }
+              output.lastChunkType = "tool_result";
+              break;
             }
-          } catch {
-            // ignore
-          }
-          break;
-        }
-        case "subagent_start": {
-          try {
-            const { task_id, tool_use_id, description } = JSON.parse(chunk.content);
-            const subagent: SubagentActivity = {
-              task_id,
-              tool_use_id,
-              description,
-              status: "running",
-            };
-            updated.subagentActivities = [...current.subagentActivities, subagent];
-            const blocks = [...current.contentBlocks];
-            blocks.push({ type: "subagent", activity: subagent });
-            updated.contentBlocks = blocks;
-          } catch {
-            // ignore
-          }
-          break;
-        }
-        case "subagent_progress": {
-          try {
-            const { task_id, summary, last_tool_name, usage } = JSON.parse(chunk.content);
-            updated.subagentActivities = current.subagentActivities.map((s) =>
-              s.task_id === task_id ? { ...s, summary, last_tool_name, usage } : s,
-            );
-            updated.contentBlocks = current.contentBlocks.map((b) =>
-              b.type === "subagent" && b.activity.task_id === task_id
-                ? { ...b, activity: { ...b.activity, summary, last_tool_name, usage } }
-                : b,
-            );
-          } catch {
-            // ignore
-          }
-          break;
-        }
-        case "subagent_complete": {
-          try {
-            const { task_id, status, summary, usage } = JSON.parse(chunk.content);
-            updated.subagentActivities = current.subagentActivities.map((s) =>
-              s.task_id === task_id ? { ...s, status, summary, usage } : s,
-            );
-            updated.contentBlocks = current.contentBlocks.map((b) =>
-              b.type === "subagent" && b.activity.task_id === task_id
-                ? { ...b, activity: { ...b.activity, status, summary, usage } }
-                : b,
-            );
-          } catch {
-            // ignore
-          }
-          break;
-        }
-        case "files_changed": {
-          try {
-            const { files } = JSON.parse(chunk.content);
-            if (Array.isArray(files)) {
-              const existing = new Set(current.filesChanged.map((f) => f.filename));
-              const newFiles = files
-                .filter((f: { filename: string }) => !existing.has(f.filename))
-                .map((f: { filename: string }) => ({ filename: f.filename }));
-              updated.filesChanged = [...current.filesChanged, ...newFiles];
+            case "tool_progress": {
+              try {
+                const { tool_name, tool_use_id, elapsed_seconds } = JSON.parse(chunk.content);
+                output.activeToolName = tool_name;
+                if (tool_use_id && elapsed_seconds !== undefined) {
+                  mutateToolById(output, tool_use_id, (a) => {
+                    a.elapsed_seconds = elapsed_seconds;
+                  });
+                }
+              } catch {
+                // ignore
+              }
+              break;
             }
-          } catch {
-            // ignore
-          }
-          break;
-        }
-        case "tool_use_summary": {
-          try {
-            const { summary, tool_ids } = JSON.parse(chunk.content);
-            updated.toolUseSummaries = [
-              ...current.toolUseSummaries,
-              { summary, toolIds: tool_ids ?? [] },
-            ];
-            if (Array.isArray(tool_ids) && tool_ids.length > 0) {
-              updated.contentBlocks = current.contentBlocks.map((b) => {
-                if (b.type !== "tool_group") return b;
-                const hasMatch = b.activities.some((a) => tool_ids.includes(a.tool_id));
-                return hasMatch ? { ...b, summaryText: summary } : b;
-              });
+            case "subagent_start": {
+              try {
+                const { task_id, tool_use_id, description } = JSON.parse(chunk.content);
+                const subagent: SubagentActivity = {
+                  task_id,
+                  tool_use_id,
+                  description,
+                  status: "running",
+                };
+                output.subagentActivities.push(subagent);
+                output.contentBlocks.push({ type: "subagent", activity: { ...subagent } });
+              } catch {
+                // ignore
+              }
+              break;
             }
-          } catch {
-            // ignore
+            case "subagent_progress": {
+              try {
+                const { task_id, summary, last_tool_name, usage } = JSON.parse(chunk.content);
+                const sa = output.subagentActivities.find((s) => s.task_id === task_id);
+                if (sa) Object.assign(sa, { summary, last_tool_name, usage });
+                for (const b of output.contentBlocks) {
+                  if (b.type === "subagent" && b.activity.task_id === task_id) {
+                    Object.assign(b.activity, { summary, last_tool_name, usage });
+                  }
+                }
+              } catch {
+                // ignore
+              }
+              break;
+            }
+            case "subagent_complete": {
+              try {
+                const { task_id, status, summary, usage } = JSON.parse(chunk.content);
+                const sa = output.subagentActivities.find((s) => s.task_id === task_id);
+                if (sa) Object.assign(sa, { status, summary, usage });
+                for (const b of output.contentBlocks) {
+                  if (b.type === "subagent" && b.activity.task_id === task_id) {
+                    Object.assign(b.activity, { status, summary, usage });
+                  }
+                }
+              } catch {
+                // ignore
+              }
+              break;
+            }
+            case "files_changed": {
+              try {
+                const { files } = JSON.parse(chunk.content);
+                if (Array.isArray(files)) {
+                  const existing = new Set(output.filesChanged.map((f) => f.filename));
+                  for (const f of files as { filename: string }[]) {
+                    if (!existing.has(f.filename)) {
+                      output.filesChanged.push({ filename: f.filename });
+                    }
+                  }
+                }
+              } catch {
+                // ignore
+              }
+              break;
+            }
+            case "tool_use_summary": {
+              try {
+                const { summary, tool_ids } = JSON.parse(chunk.content);
+                output.toolUseSummaries.push({ summary, toolIds: tool_ids ?? [] });
+                if (Array.isArray(tool_ids) && tool_ids.length > 0) {
+                  for (const b of output.contentBlocks) {
+                    if (
+                      b.type === "tool_group" &&
+                      b.activities.some((a) => tool_ids.includes(a.tool_id))
+                    ) {
+                      b.summaryText = summary;
+                    }
+                  }
+                }
+              } catch {
+                // ignore
+              }
+              break;
+            }
+            case "compact_boundary": {
+              try {
+                const { pre_tokens } = JSON.parse(chunk.content);
+                output.contextUsage = {
+                  ...(output.contextUsage ?? defaultContextUsage()),
+                  tokensUsed: pre_tokens,
+                };
+              } catch {
+                /* ignore */
+              }
+              break;
+            }
+            case "rate_limit": {
+              try {
+                const { utilization, status } = JSON.parse(chunk.content);
+                output.contextUsage = {
+                  ...(output.contextUsage ?? defaultContextUsage()),
+                  rateLimitUtilization: utilization,
+                  rateLimitStatus: status,
+                };
+              } catch {
+                /* ignore */
+              }
+              break;
+            }
+            case "compacting": {
+              output.isCompacting = chunk.content === "true";
+              break;
+            }
+            case "thinking": {
+              output.thinkingContent += chunk.content;
+              appendToLastBlock(output, "thinking", chunk.content);
+              output.lastChunkType = "thinking";
+              break;
+            }
+            case "stderr":
+              output.stderrLines.push(chunk.content);
+              break;
+            case "result":
+              output.resultContent = chunk.content;
+              break;
+            case "supervisor_evaluating":
+              output.supervisorEvaluating = true;
+              break;
+            case "supervisor_reply":
+              output.contentBlocks.push({ type: "supervisor_reply", content: chunk.content });
+              output.lastChunkType = "supervisor_reply";
+              break;
+            case "error":
+              output.stderrLines.push(`[error] ${chunk.content}`);
+              break;
+            // Unknown chunk types — no-op (produce returns unchanged draft)
           }
-          break;
-        }
-        case "compact_boundary": {
-          try {
-            const { pre_tokens } = JSON.parse(chunk.content);
-            updated.contextUsage = {
-              ...(current.contextUsage ?? defaultContextUsage()),
-              tokensUsed: pre_tokens,
-            };
-          } catch {
-            /* ignore */
-          }
-          break;
-        }
-        case "rate_limit": {
-          try {
-            const { utilization, status } = JSON.parse(chunk.content);
-            updated.contextUsage = {
-              ...(current.contextUsage ?? defaultContextUsage()),
-              rateLimitUtilization: utilization,
-              rateLimitStatus: status,
-            };
-          } catch {
-            /* ignore */
-          }
-          break;
-        }
-        case "compacting": {
-          updated.isCompacting = chunk.content === "true";
-          break;
-        }
-        case "thinking": {
-          updated.thinkingContent = current.thinkingContent + chunk.content;
-          const blocks = [...current.contentBlocks];
-          const lastBlock = blocks[blocks.length - 1];
-          if (lastBlock && lastBlock.type === "thinking") {
-            blocks[blocks.length - 1] = {
-              ...lastBlock,
-              content: lastBlock.content + chunk.content,
-            };
-          } else {
-            blocks.push({ type: "thinking", content: chunk.content });
-          }
-          updated.contentBlocks = blocks;
-          updated.lastChunkType = "thinking";
-          break;
-        }
-        case "stderr":
-          updated.stderrLines = [...current.stderrLines, chunk.content];
-          break;
-        case "result":
-          updated.resultContent = chunk.content;
-          break;
-        case "supervisor_evaluating":
-          updated.supervisorEvaluating = true;
-          break;
-        case "supervisor_reply": {
-          const blocks = [...current.contentBlocks];
-          blocks.push({ type: "supervisor_reply", content: chunk.content });
-          updated.contentBlocks = blocks;
-          updated.lastChunkType = "supervisor_reply";
-          break;
-        }
-        case "error":
-          updated.stderrLines = [...current.stderrLines, `[error] ${chunk.content}`];
-          break;
-        default:
-          return prev;
-      }
+        }),
+      );
+    },
 
-      return {
-        ...prev,
-        stepOutputs: { ...prev.stepOutputs, [outputKey]: updated },
-      };
-    });
-  },
+    getStepOutput: (issueId: string, stepId: string) => {
+      return get().stepOutputs[`${issueId}:${stepId}`];
+    },
 
-  getStepOutput: (issueId: string, stepId: string) => {
-    return get().stepOutputs[`${issueId}:${stepId}`];
-  },
-
-  clearStepOutputs: () => {
-    set({ stepOutputs: {} });
-  },
-}));
+    clearStepOutputs: () => {
+      set({ stepOutputs: {} });
+    },
+  }),
+);

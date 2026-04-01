@@ -13,14 +13,17 @@ export interface OrchestrationState {
   clearState: () => void;
 }
 
-export const orchestrationStoreFactory = createTicketStoreFactory<OrchestrationState>((set) => ({
-  workflowState: null,
-  loading: false,
-  error: null,
-  listenersReady: false,
-  setWorkflowState: (state) => set({ workflowState: state }),
-  setLoading: (loading) => set({ loading }),
-  setError: (error) => set({ error }),
-  setListenersReady: (ready) => set({ listenersReady: ready }),
-  clearState: () => set({ workflowState: null, loading: false, error: null }),
-}));
+export const orchestrationStoreFactory = createTicketStoreFactory<OrchestrationState>(
+  "orchestration",
+  (set) => ({
+    workflowState: null,
+    loading: false,
+    error: null,
+    listenersReady: false,
+    setWorkflowState: (state) => set({ workflowState: state }),
+    setLoading: (loading) => set({ loading }),
+    setError: (error) => set({ error }),
+    setListenersReady: (ready) => set({ listenersReady: ready }),
+    clearState: () => set({ workflowState: null, loading: false, error: null }),
+  }),
+);

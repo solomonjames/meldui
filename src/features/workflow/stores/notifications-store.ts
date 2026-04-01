@@ -11,14 +11,17 @@ export interface NotificationsState {
   setLastUpdatedSectionId: (sectionId: string) => void;
 }
 
-export const notificationsStoreFactory = createTicketStoreFactory<NotificationsState>((set) => ({
-  notifications: [],
-  statusText: null,
-  lastUpdatedSectionId: null,
-  addNotification: (notification) =>
-    set((s) => ({ notifications: [...s.notifications, notification] })),
-  clearNotification: (index) =>
-    set((s) => ({ notifications: s.notifications.filter((_, i) => i !== index) })),
-  setStatusText: (text) => set({ statusText: text }),
-  setLastUpdatedSectionId: (sectionId) => set({ lastUpdatedSectionId: sectionId }),
-}));
+export const notificationsStoreFactory = createTicketStoreFactory<NotificationsState>(
+  "notifications",
+  (set) => ({
+    notifications: [],
+    statusText: null,
+    lastUpdatedSectionId: null,
+    addNotification: (notification) =>
+      set((s) => ({ notifications: [...s.notifications, notification] })),
+    clearNotification: (index) =>
+      set((s) => ({ notifications: s.notifications.filter((_, i) => i !== index) })),
+    setStatusText: (text) => set({ statusText: text }),
+    setLastUpdatedSectionId: (sectionId) => set({ lastUpdatedSectionId: sectionId }),
+  }),
+);

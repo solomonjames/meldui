@@ -13,7 +13,7 @@ export interface ReviewState {
   clearAfterRequestChanges: () => void;
 }
 
-export const reviewStoreFactory = createTicketStoreFactory<ReviewState>((set) => ({
+export const reviewStoreFactory = createTicketStoreFactory<ReviewState>("review", (set) => ({
   findings: [],
   comments: [],
   pendingRequestId: null,

@@ -7,7 +7,7 @@ interface TestState {
 }
 
 function createTestFactory() {
-  return createTicketStoreFactory<TestState>((set) => ({
+  return createTicketStoreFactory<TestState>("test", (set) => ({
     count: 0,
     increment: () => set((s) => ({ count: s.count + 1 })),
   }));

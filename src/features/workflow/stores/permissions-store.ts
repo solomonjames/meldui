@@ -7,8 +7,11 @@ export interface PermissionsState {
   clearPendingPermission: () => void;
 }
 
-export const permissionsStoreFactory = createTicketStoreFactory<PermissionsState>((set) => ({
-  pendingPermission: null,
-  setPendingPermission: (permission) => set({ pendingPermission: permission }),
-  clearPendingPermission: () => set({ pendingPermission: null }),
-}));
+export const permissionsStoreFactory = createTicketStoreFactory<PermissionsState>(
+  "permissions",
+  (set) => ({
+    pendingPermission: null,
+    setPendingPermission: (permission) => set({ pendingPermission: permission }),
+    clearPendingPermission: () => set({ pendingPermission: null }),
+  }),
+);

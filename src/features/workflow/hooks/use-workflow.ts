@@ -1,16 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { commands, events } from "@/bindings";
-import { useWorkflowNotifications } from "@/features/workflow/hooks/use-workflow-notifications";
-import { useWorkflowPermissions } from "@/features/workflow/hooks/use-workflow-permissions";
-import { useWorkflowReview } from "@/features/workflow/hooks/use-workflow-review";
+import { useWorkflowEventRouting } from "@/features/workflow/hooks/use-workflow-event-routing";
 import { useWorkflowStreaming } from "@/features/workflow/hooks/use-workflow-streaming";
 import { disposeTicketStores } from "@/features/workflow/stores/dispose";
 import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
+import { permissionsStoreFactory } from "@/features/workflow/stores/permissions-store";
+import { reviewStoreFactory } from "@/features/workflow/stores/review-store";
 import type {
   BranchInfo,
   CommitActionResult,
   DiffFile,
+  ReviewSubmission,
   StepExecutionResult,
   WorkflowSuggestion,
 } from "@/shared/types";
@@ -19,17 +20,11 @@ const workflowKeys = {
   list: (projectDir: string) => ["workflows", "list", projectDir] as const,
   detail: (projectDir: string, workflowId: string) =>
     ["workflows", "detail", projectDir, workflowId] as const,
-  state: (projectDir: string, issueId: string) =>
-    ["workflows", "state", projectDir, issueId] as const,
-  diff: (dir: string, baseCommit?: string | null) =>
-    ["workflows", "diff", dir, baseCommit ?? null] as const,
-  branchInfo: (dir: string) => ["workflows", "branchInfo", dir] as const,
 };
 
 export function useWorkflow(projectDir: string) {
   const queryClient = useQueryClient();
 
-  // ── Per-ticket state now in orchestration store ──
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const [loadingTicketSet, setLoadingTicketSet] = useState<Set<string>>(new Set());
 
@@ -37,23 +32,19 @@ export function useWorkflow(projectDir: string) {
   const autoAdvanceQuery = useQuery({
     queryKey: ["autoAdvance", projectDir],
     queryFn: () => commands.getAutoAdvance(projectDir),
-    staleTime: Infinity, // Only changes via mutation
+    staleTime: Infinity,
   });
-
   const autoAdvance = autoAdvanceQuery.data ?? false;
-
   const setAutoAdvanceMutation = useMutation({
     mutationFn: (enabled: boolean) => commands.setAutoAdvance(projectDir, enabled),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["autoAdvance", projectDir] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["autoAdvance", projectDir] }),
   });
-
   const setAutoAdvance = useCallback(
     (enabled: boolean) => setAutoAdvanceMutation.mutate(enabled),
     [setAutoAdvanceMutation],
   );
 
+  // ── Refs for cross-hook coordination ──
   const currentStepsRef = useRef<Record<string, string | null>>({});
   const executingStepsRef = useRef<Record<string, string | null>>({});
   const unloadTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -62,23 +53,12 @@ export function useWorkflow(projectDir: string) {
     ReturnType<typeof useWorkflowStreaming>["createStreamChannel"]
   >(null!);
 
-  // Keyed error setter for sub-hooks
-  const setErrorKeyed = useCallback((issueId: string, msg: string) => {
-    orchestrationStoreFactory.getStore(issueId).getState().setError(msg);
-  }, []);
-
-  // Compose sub-hooks
+  // ── Event routing (replaces sub-hooks) ──
   const streaming = useWorkflowStreaming(activeTicketId, executingStepsRef);
   createStreamChannelRef.current = streaming.createStreamChannel;
-  const permissions = useWorkflowPermissions(activeTicketId, setErrorKeyed);
-  const review = useWorkflowReview(activeTicketId, setErrorKeyed);
-  const notifications = useWorkflowNotifications(activeTicketId, onRefreshTicketRef);
 
-  const listenersReady =
-    streaming.streamingReady &&
-    permissions.permissionsReady &&
-    review.reviewReady &&
-    notifications.notificationsReady;
+  const { allListenersReady } = useWorkflowEventRouting(activeTicketId, onRefreshTicketRef);
+  const listenersReady = streaming.streamingReady && allListenersReady;
 
   // Update the active ticket's store when listenersReady changes
   useEffect(() => {
@@ -99,14 +79,12 @@ export function useWorkflow(projectDir: string) {
       .listen((event) => {
         if (cancelled) return;
         const { issue_id } = event.payload;
-
-        // Start 10-minute unload timer
         unloadTimersRef.current[issue_id] = setTimeout(
           () => {
             disposeTicketStores(issue_id);
             delete unloadTimersRef.current[issue_id];
           },
-          10 * 60 * 1000, // 10 minutes
+          10 * 60 * 1000,
         );
       })
       .then((u) => {
@@ -130,16 +108,7 @@ export function useWorkflow(projectDir: string) {
     queryFn: () => commands.workflowList(projectDir),
     enabled: !!projectDir,
   });
-
   const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data]);
-
-  const listWorkflows = useCallback(async () => {
-    const result = await queryClient.fetchQuery({
-      queryKey: workflowKeys.list(projectDir),
-      queryFn: () => commands.workflowList(projectDir),
-    });
-    return result ?? [];
-  }, [projectDir, queryClient]);
 
   const getWorkflow = useCallback(
     async (workflowId: string) => {
@@ -182,42 +151,6 @@ export function useWorkflow(projectDir: string) {
     [projectDir],
   );
 
-  // getDiff — imperative, called by views with variable params
-  const getDiff = useCallback(
-    async (dirOverride?: string, baseCommit?: string) => {
-      try {
-        return await commands.workflowGetDiff(dirOverride ?? projectDir, baseCommit ?? null);
-      } catch (err) {
-        if (activeTicketId) {
-          orchestrationStoreFactory
-            .getStore(activeTicketId)
-            .getState()
-            .setError(`Failed to get diff: ${err}`);
-        }
-        return [] as DiffFile[];
-      }
-    },
-    [projectDir, activeTicketId],
-  );
-
-  // getBranchInfo — imperative
-  const getBranchInfo = useCallback(
-    async (dirOverride?: string) => {
-      try {
-        return await commands.workflowGetBranchInfo(dirOverride ?? projectDir);
-      } catch (err) {
-        if (activeTicketId) {
-          orchestrationStoreFactory
-            .getStore(activeTicketId)
-            .getState()
-            .setError(`Failed to get branch info: ${err}`);
-        }
-        return null as BranchInfo | null;
-      }
-    },
-    [projectDir, activeTicketId],
-  );
-
   // ── Mutations ──
 
   const assignWorkflow = useCallback(
@@ -237,8 +170,6 @@ export function useWorkflow(projectDir: string) {
     },
     [projectDir],
   );
-
-  const { clearPending: clearPermissionPending } = permissions;
 
   const executeStep = useCallback(
     async (issueId: string, userMessage?: string) => {
@@ -289,7 +220,7 @@ export function useWorkflow(projectDir: string) {
         return result as StepExecutionResult;
       } catch (err) {
         executingStepsRef.current[issueId] = null;
-        clearPermissionPending(issueId);
+        permissionsStoreFactory.getStore(issueId).getState().clearPendingPermission();
         store.getState().setError(`Step execution failed: ${err}`);
         await getWorkflowState(issueId);
         return null;
@@ -302,7 +233,7 @@ export function useWorkflow(projectDir: string) {
         });
       }
     },
-    [projectDir, getWorkflowState, workflows, clearPermissionPending],
+    [projectDir, getWorkflowState, workflows],
   );
 
   const suggestWorkflow = useCallback(
@@ -388,7 +319,6 @@ export function useWorkflow(projectDir: string) {
         const newState = await commands.workflowAdvance(projectDir, issueId);
         orchestrationStoreFactory.getStore(issueId).getState().setWorkflowState(newState);
         currentStepsRef.current[issueId] = newState.current_step_id ?? null;
-        // Invalidate conversation cache so the next step sees prior step history
         queryClient.invalidateQueries({
           queryKey: ["conversations", projectDir, issueId],
         });
@@ -402,45 +332,155 @@ export function useWorkflow(projectDir: string) {
     [projectDir, queryClient],
   );
 
+  const getDiff = useCallback(
+    async (dirOverride?: string, baseCommit?: string) => {
+      try {
+        return await commands.workflowGetDiff(dirOverride ?? projectDir, baseCommit ?? null);
+      } catch (err) {
+        if (activeTicketId) {
+          orchestrationStoreFactory
+            .getStore(activeTicketId)
+            .getState()
+            .setError(`Failed to get diff: ${err}`);
+        }
+        return [] as DiffFile[];
+      }
+    },
+    [projectDir, activeTicketId],
+  );
+
+  const getBranchInfo = useCallback(
+    async (dirOverride?: string) => {
+      try {
+        return await commands.workflowGetBranchInfo(dirOverride ?? projectDir);
+      } catch (err) {
+        if (activeTicketId) {
+          orchestrationStoreFactory
+            .getStore(activeTicketId)
+            .getState()
+            .setError(`Failed to get branch info: ${err}`);
+        }
+        return null as BranchInfo | null;
+      }
+    },
+    [projectDir, activeTicketId],
+  );
+
+  const respondToPermission = useCallback(
+    async (requestId: string, allowed: boolean) => {
+      if (!activeTicketId) return;
+      const store = permissionsStoreFactory.getStore(activeTicketId);
+      const pending = store.getState().pendingPermission;
+      if (!pending || pending.request_id !== requestId) return;
+      try {
+        await commands.agentPermissionRespond(activeTicketId, requestId, allowed);
+        store.getState().clearPendingPermission();
+      } catch (err) {
+        store.getState().clearPendingPermission();
+        const errStr = String(err);
+        if (errStr.includes("Broken pipe") || errStr.includes("not available")) {
+          orchestrationStoreFactory
+            .getStore(activeTicketId)
+            .getState()
+            .setError("Agent session expired. Click Resume to continue where you left off.");
+        } else {
+          orchestrationStoreFactory
+            .getStore(activeTicketId)
+            .getState()
+            .setError(`Failed to respond to permission: ${err}`);
+        }
+      }
+    },
+    [activeTicketId],
+  );
+
+  const addReviewComment = useCallback(
+    (filePath: string, lineNumber: number, content: string, suggestion?: string) => {
+      if (!activeTicketId) return;
+      reviewStoreFactory
+        .getStore(activeTicketId)
+        .getState()
+        .addComment(filePath, lineNumber, content, suggestion);
+    },
+    [activeTicketId],
+  );
+
+  const deleteReviewComment = useCallback(
+    (commentId: string) => {
+      if (!activeTicketId) return;
+      reviewStoreFactory.getStore(activeTicketId).getState().deleteComment(commentId);
+    },
+    [activeTicketId],
+  );
+
+  const submitReview = useCallback(
+    async (submission: ReviewSubmission) => {
+      const store = activeTicketId ? reviewStoreFactory.getStore(activeTicketId) : null;
+      if (!store || !activeTicketId) return;
+      const requestId = store.getState().pendingRequestId;
+      if (!requestId) return;
+      try {
+        await commands.agentReviewRespond(
+          activeTicketId,
+          requestId,
+          submission as import("@/bindings").JsonValue,
+        );
+        if (submission.action === "request_changes") {
+          store.getState().clearAfterRequestChanges();
+        } else {
+          store.getState().clearAfterApproval();
+        }
+      } catch (err) {
+        store.getState().clearAfterApproval();
+        const errStr = String(err);
+        if (errStr.includes("Broken pipe") || errStr.includes("not available")) {
+          orchestrationStoreFactory
+            .getStore(activeTicketId)
+            .getState()
+            .setError("Agent session expired. Click Resume to continue where you left off.");
+        } else {
+          orchestrationStoreFactory
+            .getStore(activeTicketId)
+            .getState()
+            .setError(`Failed to submit review: ${err}`);
+        }
+      }
+    },
+    [activeTicketId],
+  );
+
   const setOnRefreshTicket = useCallback((fn: () => Promise<void>) => {
     onRefreshTicketRef.current = fn;
   }, []);
 
-  const respondToPermission = permissions.respondToPermission;
-
   return {
-    workflows,
+    // Readiness
     listenersReady,
-    activeTicketId,
-    setActiveTicketId,
-    runningTicketIds: loadingTicketSet,
-    pendingPermission: permissions.pendingPermission,
-    respondToPermission,
-    notifications: notifications.notifications,
-    clearNotification: notifications.clearNotification,
-    lastUpdatedSectionId: notifications.lastUpdatedSectionId,
-    statusText: notifications.statusText,
-    autoAdvance,
-    setAutoAdvance,
-    advanceStep,
-    setOnRefreshTicket,
-    listWorkflows,
+    // Queries
+    workflows,
     getWorkflow,
-    assignWorkflow,
     getWorkflowState,
+    // Mutations
+    assignWorkflow,
     executeStep,
     suggestWorkflow,
+    advanceStep,
     getDiff,
     getBranchInfo,
     executeCommitAction,
     cleanupWorktree,
-    getStepOutput: streaming.getStepOutput,
-    reviewFindings: review.reviewFindings,
-    reviewComments: review.reviewComments,
-    addReviewComment: review.addReviewComment,
-    deleteReviewComment: review.deleteReviewComment,
-    submitReview: review.submitReview,
-    pendingReviewRequestId: review.pendingReviewRequestId,
-    reviewRoundKey: review.reviewRoundKey,
+    respondToPermission,
+    addReviewComment,
+    deleteReviewComment,
+    submitReview,
+    // Settings
+    autoAdvance,
+    setAutoAdvance,
+    // Navigation
+    activeTicketId,
+    setActiveTicketId,
+    runningTicketIds: loadingTicketSet,
+    // Lifecycle
+    setOnRefreshTicket,
   };
 }

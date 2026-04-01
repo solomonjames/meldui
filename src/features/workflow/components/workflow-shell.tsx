@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
+import { commands } from "@/bindings";
+import {
+  advanceStep,
+  cleanupWorktree,
+  executeCommitAction,
+  executeStep,
+  respondToPermission,
+  submitReview,
+} from "@/features/workflow/actions/workflow-mutations";
+import { fetchBranchInfo, fetchDiff } from "@/features/workflow/actions/workflow-queries";
 import { ChangesTab } from "@/features/workflow/components/changes-tab";
 import { CommitTab } from "@/features/workflow/components/commit-tab";
 import { CompactWorkflowIndicator } from "@/features/workflow/components/compact-workflow-indicator";
@@ -12,66 +22,29 @@ import { permissionsStoreFactory } from "@/features/workflow/stores/permissions-
 import { reviewStoreFactory } from "@/features/workflow/stores/review-store";
 import { streamingStoreFactory } from "@/features/workflow/stores/streaming-store";
 import { useDebugLog } from "@/shared/hooks/use-debug-log";
-import type {
-  BranchInfo,
-  CommitActionResult,
-  DiffFile,
-  ReviewSubmission,
-  StepExecutionResult,
-  Ticket,
-  WorkflowDefinition,
-} from "@/shared/types";
+import type { Ticket, WorkflowDefinition } from "@/shared/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
 interface WorkflowShellProps {
   ticket: Ticket;
   projectDir: string;
+  workflows: WorkflowDefinition[];
+  autoAdvance: boolean;
+  onSetAutoAdvance: (enabled: boolean) => void;
   onNavigateToBacklog: () => void;
   onRefreshTicket: () => Promise<void>;
   scrollToStepRef?: React.MutableRefObject<(stepId: string) => void>;
-  onExecuteStep: (issueId: string, userMessage?: string) => Promise<StepExecutionResult | null>;
-  onGetDiff: (dirOverride?: string, baseCommit?: string) => Promise<DiffFile[]>;
-  onAdvanceStep: (issueId: string) => Promise<void>;
-  onGetBranchInfo: (dirOverride?: string) => Promise<BranchInfo | null>;
-  onExecuteCommitAction: (
-    issueId: string,
-    action: "commit" | "commit_and_pr",
-    commitMessage: string,
-  ) => Promise<CommitActionResult | null>;
-  onCleanupWorktree: (issueId: string) => Promise<void>;
-  onRespondToPermission: (requestId: string, allowed: boolean) => Promise<void>;
-  autoAdvance: boolean;
-  onSetAutoAdvance: (enabled: boolean) => void;
-  onAddReviewComment: (
-    filePath: string,
-    lineNumber: number,
-    content: string,
-    suggestion?: string,
-  ) => void;
-  onDeleteReviewComment: (commentId: string) => void;
-  onSubmitReview: (submission: ReviewSubmission) => Promise<void>;
-  onGetWorkflow: (workflowId: string) => Promise<WorkflowDefinition | null>;
 }
 
 export function WorkflowShell({
   ticket,
   projectDir,
+  workflows,
+  autoAdvance,
+  onSetAutoAdvance,
   onNavigateToBacklog,
   onRefreshTicket,
   scrollToStepRef,
-  onExecuteStep,
-  onGetDiff,
-  onAdvanceStep,
-  onGetBranchInfo,
-  onExecuteCommitAction,
-  onCleanupWorktree,
-  onRespondToPermission,
-  autoAdvance,
-  onSetAutoAdvance,
-  onAddReviewComment,
-  onDeleteReviewComment,
-  onSubmitReview,
-  onGetWorkflow,
 }: WorkflowShellProps) {
   const workflowState = orchestrationStoreFactory.useTicketStore(ticket.id, (s) => s.workflowState);
   const loading = orchestrationStoreFactory.useTicketStore(ticket.id, (s) => s.loading);
@@ -82,11 +55,9 @@ export function WorkflowShell({
   );
 
   // Narrow selector: subscribe only to the current step's output, not the entire record.
-  // This prevents re-renders from chunks for other tickets/steps.
   const stepOutputKey = (() => {
     const history = workflowState?.step_history ?? [];
     const currentStepId = workflowState?.current_step_id;
-    // If there's a current step, use it; otherwise use the last completed step
     const stepId =
       currentStepId ?? (history.length > 0 ? history[history.length - 1].step_id : null);
     return stepId ? `${ticket.id}:${stepId}` : "";
@@ -117,9 +88,10 @@ export function WorkflowShell({
   );
   const reviewRoundKey = reviewStoreFactory.useTicketStore(ticket.id, (s) => s.roundKey);
 
-  const workflowDef = useWorkflowDefinition(workflowState?.workflow_id, onGetWorkflow);
-  const [lastResult, setLastResult] = useState<StepExecutionResult | null>(null);
-  // Use a ref with a monotonic counter to prevent StrictMode double-fire
+  const workflowDef = useWorkflowDefinition(workflowState?.workflow_id, projectDir);
+  const [lastResult, setLastResult] = useState<{
+    response?: string;
+  } | null>(null);
   const executingRef = useRef<{ stepId: string | null; generation: number }>({
     stepId: null,
     generation: 0,
@@ -151,7 +123,6 @@ export function WorkflowShell({
   }, [scrollToStepRef, scrollToStep]);
 
   // Reset executing guard and clear stale result when step changes.
-  // Render-time ref check is the React-recommended pattern for responding to prop changes.
   /* eslint-disable react-hooks/refs */
   const prevStepIdRef = useRef(workflowState?.current_step_id);
   if (prevStepIdRef.current !== workflowState?.current_step_id) {
@@ -195,15 +166,70 @@ export function WorkflowShell({
     }
   }, [notifications, onClearNotification]);
 
+  // ── Action callbacks (import-based, no prop drilling) ──
+
   const handleExecute = useCallback(
     async (message?: string) => {
-      const result = await onExecuteStep(ticket.id, message);
+      const result = await executeStep(projectDir, ticket.id, workflows, message);
       if (result) {
         setLastResult(result);
         await onRefreshTicket();
       }
     },
-    [ticket.id, onExecuteStep, onRefreshTicket],
+    [projectDir, ticket.id, workflows, onRefreshTicket],
+  );
+
+  const handleAdvanceStep = useCallback(async () => {
+    await advanceStep(projectDir, ticket.id);
+    await onRefreshTicket();
+  }, [projectDir, ticket.id, onRefreshTicket]);
+
+  const handleRespondToPermission = useCallback(
+    (requestId: string, allowed: boolean) => respondToPermission(ticket.id, requestId, allowed),
+    [ticket.id],
+  );
+
+  const handleGetDiff = useCallback(
+    (dirOverride?: string, baseCommit?: string) => fetchDiff(projectDir, dirOverride, baseCommit),
+    [projectDir],
+  );
+
+  const handleGetBranchInfo = useCallback(
+    (dirOverride?: string) => fetchBranchInfo(projectDir, dirOverride),
+    [projectDir],
+  );
+
+  const handleExecuteCommitAction = useCallback(
+    (issueId: string, action: "commit" | "commit_and_pr", commitMessage: string) =>
+      executeCommitAction(projectDir, issueId, action, commitMessage),
+    [projectDir],
+  );
+
+  const handleCleanupWorktree = useCallback(
+    (issueId: string) => cleanupWorktree(projectDir, issueId),
+    [projectDir],
+  );
+
+  const handleAddReviewComment = useCallback(
+    (filePath: string, lineNumber: number, content: string, suggestion?: string) => {
+      reviewStoreFactory
+        .getStore(ticket.id)
+        .getState()
+        .addComment(filePath, lineNumber, content, suggestion);
+    },
+    [ticket.id],
+  );
+
+  const handleDeleteReviewComment = useCallback(
+    (commentId: string) => {
+      reviewStoreFactory.getStore(ticket.id).getState().deleteComment(commentId);
+    },
+    [ticket.id],
+  );
+
+  const handleSubmitReview = useCallback(
+    (submission: Parameters<typeof submitReview>[1]) => submitReview(ticket.id, submission),
+    [ticket.id],
   );
 
   // Auto-execute on pending steps
@@ -220,7 +246,6 @@ export function WorkflowShell({
       return;
     }
 
-    // Prevent double execution — generation counter survives StrictMode remounts
     const gen = ++executingRef.current.generation;
     if (executingRef.current.stepId === currentStep.id) {
       debug.log("lifecycle", `auto-execute skipped: already executing ${currentStep.id}`);
@@ -231,7 +256,7 @@ export function WorkflowShell({
     debug.log("lifecycle", `auto-execute fired for step ${currentStep.id} (gen=${gen})`);
 
     let cancelled = false;
-    onExecuteStep(ticket.id)
+    executeStep(projectDir, ticket.id, workflows)
       .then(async (result) => {
         if (!cancelled && result) {
           debug.log("lifecycle", `auto-execute completed for step ${currentStep.id}`);
@@ -241,7 +266,6 @@ export function WorkflowShell({
       })
       .catch((err) => {
         debug.log("error", `auto-execute failed: ${err}`);
-        // Reset so retry is possible
         executingRef.current.stepId = null;
       });
 
@@ -253,9 +277,10 @@ export function WorkflowShell({
     loading,
     listenersReady,
     currentStep,
-    onExecuteStep,
-    onRefreshTicket,
+    projectDir,
     ticket.id,
+    workflows,
+    onRefreshTicket,
     debug,
   ]);
 
@@ -269,7 +294,6 @@ export function WorkflowShell({
     const isResumable = failReason.includes("timed out") || failReason.includes("interrupted");
     if (!isResumable) return;
 
-    // Only attempt auto-resume once per step
     const resumeKey = `${currentStep.id}-${failReason}`;
     if (autoResumeAttemptRef.current === resumeKey) return;
     autoResumeAttemptRef.current = resumeKey;
@@ -278,7 +302,7 @@ export function WorkflowShell({
     setAutoResuming(true);
 
     let cancelled = false;
-    onExecuteStep(ticket.id)
+    executeStep(projectDir, ticket.id, workflows)
       .then(async (result) => {
         if (!cancelled && result) {
           debug.log("lifecycle", `auto-resume completed for step ${currentStep.id}`);
@@ -303,9 +327,10 @@ export function WorkflowShell({
     loading,
     listenersReady,
     currentStep,
-    onExecuteStep,
-    onRefreshTicket,
+    projectDir,
     ticket.id,
+    workflows,
+    onRefreshTicket,
     debug,
   ]);
 
@@ -314,12 +339,12 @@ export function WorkflowShell({
   useEffect(() => {
     if (!autoAdvance) return;
     if (workflowState?.step_status !== "completed") return;
-    if (!workflowState.current_step_id) return; // workflow done
+    if (!workflowState.current_step_id) return;
     if (autoAdvancingRef.current) return;
 
     const timer = setTimeout(() => {
       autoAdvancingRef.current = true;
-      onAdvanceStep(ticket.id)
+      advanceStep(projectDir, ticket.id)
         .then(() => onRefreshTicket())
         .finally(() => {
           autoAdvancingRef.current = false;
@@ -331,7 +356,7 @@ export function WorkflowShell({
     autoAdvance,
     workflowState?.step_status,
     workflowState?.current_step_id,
-    onAdvanceStep,
+    projectDir,
     ticket.id,
     onRefreshTicket,
   ]);
@@ -348,7 +373,6 @@ export function WorkflowShell({
     return null;
   }
 
-  // Derive completed step IDs from step history
   const completedStepIds = (workflowState?.step_history ?? []).map((r) => r.step_id);
   const workflowComplete = !currentStep && completedStepIds.length > 0;
 
@@ -448,18 +472,14 @@ export function WorkflowShell({
               stepStatus={workflowComplete ? "completed" : workflowState.step_status}
               stepOutput={currentStepOutput}
               onExecute={handleExecute}
-              onAdvanceStep={
-                !workflowComplete
-                  ? () => onAdvanceStep(ticket.id).then(() => onRefreshTicket())
-                  : undefined
-              }
+              onAdvanceStep={!workflowComplete ? handleAdvanceStep : undefined}
               projectDir={projectDir}
               ticketId={ticket.id}
               isInteractive={
                 workflowComplete || currentStep?.view === "chat" || currentStep?.view === "review"
               }
               pendingPermission={pendingPermission}
-              onRespondToPermission={onRespondToPermission}
+              onRespondToPermission={handleRespondToPermission}
               workflowComplete={workflowComplete}
               onMarkComplete={onNavigateToBacklog}
             />
@@ -468,12 +488,12 @@ export function WorkflowShell({
         <TabsContent value="changes" className="flex flex-1 flex-col overflow-hidden">
           <ChangesTab
             ticket={ticket}
-            onGetDiff={onGetDiff}
+            onGetDiff={handleGetDiff}
             reviewFindings={reviewFindings}
             reviewComments={reviewComments}
-            onAddComment={onAddReviewComment}
-            onDeleteComment={onDeleteReviewComment}
-            onSubmitReview={onSubmitReview}
+            onAddComment={handleAddReviewComment}
+            onDeleteComment={handleDeleteReviewComment}
+            onSubmitReview={handleSubmitReview}
             reviewDisabled={reviewDisabled}
             reviewRoundKey={reviewRoundKey}
           />
@@ -483,10 +503,10 @@ export function WorkflowShell({
             ticket={ticket}
             agentCommitMessage={agentCommitMessage}
             onNavigateToBacklog={onNavigateToBacklog}
-            onGetDiff={onGetDiff}
-            onGetBranchInfo={onGetBranchInfo}
-            onExecuteCommitAction={onExecuteCommitAction}
-            onCleanupWorktree={onCleanupWorktree}
+            onGetDiff={handleGetDiff}
+            onGetBranchInfo={handleGetBranchInfo}
+            onExecuteCommitAction={handleExecuteCommitAction}
+            onCleanupWorktree={handleCleanupWorktree}
             onRefreshTicket={onRefreshTicket}
           />
         </TabsContent>
@@ -507,11 +527,8 @@ export function WorkflowShell({
   );
 }
 
-/** Internal hook to load workflow definition */
-function useWorkflowDefinition(
-  workflowId: string | null | undefined,
-  getWorkflow: (id: string) => Promise<WorkflowDefinition | null>,
-) {
+/** Internal hook to load workflow definition via Tauri command */
+function useWorkflowDefinition(workflowId: string | null | undefined, projectDir: string) {
   const [def, setDef] = useState<WorkflowDefinition | null>(null);
   const prevWorkflowId = useRef<string | null>(null);
 
@@ -519,8 +536,8 @@ function useWorkflowDefinition(
     if (!workflowId) return;
     if (prevWorkflowId.current === workflowId) return;
     prevWorkflowId.current = workflowId;
-    getWorkflow(workflowId).then(setDef);
-  }, [workflowId, getWorkflow]);
+    commands.workflowGet(projectDir, workflowId).then(setDef);
+  }, [workflowId, projectDir]);
 
   return def;
 }

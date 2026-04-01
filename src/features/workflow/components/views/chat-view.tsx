@@ -435,7 +435,6 @@ export function ChatView({
 
         {/* Activity indicator — between chat and input */}
         <ActivityBar
-          key={ticketId}
           stepOutput={stepOutput}
           isExecuting={isExecuting}
           isWaitingForUser={false}

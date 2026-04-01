@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import "@/shared/test/mocks/tauri";
+import { clearTauriMocks, mockInvoke } from "@/shared/test/mocks/tauri";
 import { WorkflowShell } from "@/features/workflow/components/workflow-shell";
 import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import type { Ticket, WorkflowDefinition } from "@/shared/types";
@@ -37,21 +37,11 @@ function renderWithProviders() {
       <WorkflowShell
         ticket={mockTicket}
         projectDir="/test"
-        onNavigateToBacklog={vi.fn()}
-        onRefreshTicket={vi.fn().mockResolvedValue(undefined)}
-        onExecuteStep={vi.fn().mockResolvedValue(null)}
-        onGetDiff={vi.fn().mockResolvedValue([])}
-        onAdvanceStep={vi.fn().mockResolvedValue(undefined)}
-        onGetBranchInfo={vi.fn().mockResolvedValue(null)}
-        onExecuteCommitAction={vi.fn().mockResolvedValue(null)}
-        onCleanupWorktree={vi.fn().mockResolvedValue(undefined)}
-        onRespondToPermission={vi.fn().mockResolvedValue(undefined)}
+        workflows={[mockWorkflowDef]}
         autoAdvance={false}
         onSetAutoAdvance={vi.fn()}
-        onAddReviewComment={vi.fn()}
-        onDeleteReviewComment={vi.fn()}
-        onSubmitReview={vi.fn().mockResolvedValue(undefined)}
-        onGetWorkflow={vi.fn().mockResolvedValue(mockWorkflowDef)}
+        onNavigateToBacklog={vi.fn()}
+        onRefreshTicket={vi.fn().mockResolvedValue(undefined)}
       />
     </QueryClientProvider>,
   );
@@ -59,7 +49,13 @@ function renderWithProviders() {
 
 describe("WorkflowShell tabs", () => {
   beforeEach(() => {
+    clearTauriMocks();
     orchestrationStoreFactory.disposeStore("t1");
+    // Mock workflow_get invoke to return the workflow definition
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "workflow_get") return mockWorkflowDef;
+      return null;
+    });
     // Populate orchestration store so WorkflowShell reads state from store
     const store = orchestrationStoreFactory.getStore("t1");
     store.getState().setWorkflowState({

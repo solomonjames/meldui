@@ -299,7 +299,6 @@ pub async fn execute_step(
                     .await;
                 let _ = w.flush().await;
             }
-            let _ = crate::conversation::snapshot_conversation(project_dir, ticket_id, None);
             let _ = update_step_status(project_dir, ticket_id, StepStatus::Failed(e.clone()));
             return Err(e);
         }
@@ -321,13 +320,25 @@ pub async fn execute_step(
         }
         let _ = w.flush().await;
     }
-    // Snapshot the conversation
-    if let Err(e) = crate::conversation::snapshot_conversation(
-        project_dir,
-        ticket_id,
-        Some(new_session_id.as_str()).filter(|s| !s.is_empty()),
-    ) {
-        log::error!("conversation: failed to snapshot: {e}");
+    // Persist session_id to conversation DB for restore
+    if !new_session_id.is_empty() {
+        if let Some(manager) =
+            app_handle.try_state::<crate::conversation_db::ConversationDbManager>()
+        {
+            match manager.inner().get_connection(project_dir).await {
+                Ok(conn) => {
+                    if let Err(e) =
+                        crate::conversation::update_session_id(&conn, ticket_id, &new_session_id)
+                            .await
+                    {
+                        log::error!("conversation: failed to update session_id: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("conversation: failed to get connection for session_id: {e}");
+                }
+            }
+        }
     }
 
     // 8. Store session_id back into metadata for next step

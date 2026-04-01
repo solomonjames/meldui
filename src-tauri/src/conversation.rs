@@ -13,7 +13,10 @@ use thiserror::Error;
 use crate::conversation_db::ConversationDbError;
 
 const SCHEMA_VERSION: u32 = 2;
-const BATCH_SIZE: usize = 10;
+/// Batch size for event writes. Set to 1 (write-through) to prevent data loss
+/// on crash — no events are buffered in memory. Increase once a proper
+/// Drop-based flush or flush-on-error strategy is implemented.
+const BATCH_SIZE: usize = 1;
 const BATCH_FLUSH_MS: u64 = 50;
 
 /// Structured error type for conversation operations.
@@ -41,7 +44,6 @@ pub enum TurnTrigger {
     StepStart,
     UserMessage,
     SupervisorReply,
-    ToolComplete,
 }
 
 // ── Event types ──
@@ -335,9 +337,6 @@ impl ConversationWriter {
             }
             "supervisor_reply" => {
                 self.new_turn(TurnTrigger::SupervisorReply);
-            }
-            "tool_complete" => {
-                self.new_turn(TurnTrigger::ToolComplete);
             }
             _ => {}
         }
@@ -887,14 +886,18 @@ async fn delete_conversation_cascade(
     Ok(event_count)
 }
 
-/// No-op stub -- snapshots are no longer needed with libSQL.
-/// Kept temporarily so workflow/mod.rs compiles before Task 8 updates it.
-pub fn snapshot_conversation(
-    _project_dir: &str,
-    _ticket_id: &str,
-    _session_id: Option<&str>,
-) -> Result<(), String> {
-    // No-op: libSQL persistence makes snapshots unnecessary
+/// Update the session_id for a conversation in the database.
+pub async fn update_session_id(
+    conn: &libsql::Connection,
+    ticket_id: &str,
+    session_id: &str,
+) -> Result<(), ConversationError> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE conversations SET session_id = ?1, updated_at = ?2 WHERE ticket_id = ?3",
+        params![session_id, now, ticket_id],
+    )
+    .await?;
     Ok(())
 }
 
@@ -1458,7 +1461,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Write BATCH_SIZE events -- should auto-flush
+        // Write BATCH_SIZE events -- each auto-flushes (write-through with BATCH_SIZE=1)
         for i in 0..BATCH_SIZE {
             let p = serde_json::json!({"i": i});
             writer.append_raw("event", &p, "step-1").await.unwrap();
@@ -1651,8 +1654,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_snapshot_conversation_noop() {
-        assert!(snapshot_conversation("/tmp/fake", "TICKET-X", None).is_ok());
+    async fn test_update_session_id() {
+        let tdb = test_db().await;
+        let _writer = ConversationWriter::open_async(tdb.conn(), "TICKET-SID")
+            .await
+            .unwrap();
+
+        update_session_id(&tdb.conn(), "TICKET-SID", "session-abc")
+            .await
+            .unwrap();
+
+        let snapshot = restore_conversation(&tdb.conn(), "TICKET-SID")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.session_id, Some("session-abc".to_string()));
     }
 
     #[tokio::test]

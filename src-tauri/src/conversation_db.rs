@@ -35,6 +35,7 @@ pub(crate) struct ConversationDb {
     pub(crate) db: libsql::Database,
     #[allow(dead_code)]
     pub(crate) conn: libsql::Connection,
+    encryption_key: Option<String>,
 }
 
 impl std::fmt::Debug for ConversationDb {
@@ -70,7 +71,20 @@ impl ConversationDb {
 
         ensure_schema(&conn).await?;
 
-        Ok(Self { db, conn })
+        Ok(Self {
+            db,
+            conn,
+            encryption_key: encryption_key.map(|k| k.to_string()),
+        })
+    }
+
+    /// Create a new connection that inherits the encryption key (if any).
+    pub(crate) async fn new_connection(&self) -> Result<libsql::Connection, ConversationDbError> {
+        let conn = self.db.connect()?;
+        if let Some(ref key) = self.encryption_key {
+            conn.execute("PRAGMA key = ?", params![key.clone()]).await?;
+        }
+        Ok(conn)
     }
 }
 
@@ -229,7 +243,7 @@ impl ConversationDbManager {
         }
 
         let db = guard.get(project_dir).expect("just inserted");
-        Ok(db.db.connect()?)
+        db.new_connection().await
     }
 }
 

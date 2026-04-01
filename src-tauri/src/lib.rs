@@ -231,7 +231,9 @@ async fn ticket_initialize_sections(
 #[tauri::command]
 #[specta::specta]
 async fn settings_get(project_dir: String) -> Result<settings::ProjectSettings, String> {
-    settings::get_settings(&project_dir)
+    let mut s = settings::get_settings(&project_dir)?;
+    s.encryption_key = None; // Never expose to frontend
+    Ok(s)
 }
 
 #[tauri::command]

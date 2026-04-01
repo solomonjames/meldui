@@ -64,6 +64,109 @@ describe("executeStep", () => {
     expect(store.getState().error).toContain("Step execution failed");
   });
 
+  // ── autoAdvance → Rust sync ──
+
+  it("syncs autoAdvance=true to Rust before execution", async () => {
+    const store = orchestrationStoreFactory.getStore("ticket-1");
+    store.getState().setWorkflowState({
+      workflow_id: "wf-1",
+      current_step_id: "step-1",
+      step_status: "pending",
+      step_history: [],
+    });
+    store.getState().setAutoAdvance(true);
+
+    const calls: Array<{ cmd: string; args: Record<string, unknown> }> = [];
+    mockInvoke.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
+      calls.push({ cmd, args });
+      if (cmd === "workflow_execute_step") return { response: "done" };
+      if (cmd === "workflow_state") return store.getState().workflowState;
+      return null;
+    });
+
+    await executeStep("/test", "ticket-1", []);
+
+    const autoAdvanceCall = calls.find((c) => c.cmd === "set_auto_advance");
+    expect(autoAdvanceCall).toBeDefined();
+    expect(autoAdvanceCall!.args.enabled).toBe(true);
+
+    // set_auto_advance must happen before workflow_execute_step
+    const syncIdx = calls.findIndex((c) => c.cmd === "set_auto_advance");
+    const execIdx = calls.findIndex((c) => c.cmd === "workflow_execute_step");
+    expect(syncIdx).toBeLessThan(execIdx);
+  });
+
+  it("syncs autoAdvance=false to Rust before execution", async () => {
+    const store = orchestrationStoreFactory.getStore("ticket-1");
+    store.getState().setWorkflowState({
+      workflow_id: "wf-1",
+      current_step_id: "step-1",
+      step_status: "pending",
+      step_history: [],
+    });
+    // autoAdvance defaults to false — don't set it
+
+    const calls: Array<{ cmd: string; args: Record<string, unknown> }> = [];
+    mockInvoke.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
+      calls.push({ cmd, args });
+      if (cmd === "workflow_execute_step") return { response: "done" };
+      if (cmd === "workflow_state") return store.getState().workflowState;
+      return null;
+    });
+
+    await executeStep("/test", "ticket-1", []);
+
+    const autoAdvanceCall = calls.find((c) => c.cmd === "set_auto_advance");
+    expect(autoAdvanceCall).toBeDefined();
+    expect(autoAdvanceCall!.args.enabled).toBe(false);
+  });
+
+  it("concurrent tickets each sync their own autoAdvance to Rust", async () => {
+    const storeA = orchestrationStoreFactory.getStore("ticket-1");
+    const storeB = orchestrationStoreFactory.getStore("ticket-2");
+
+    storeA.getState().setWorkflowState({
+      workflow_id: "wf-1",
+      current_step_id: "step-1",
+      step_status: "pending",
+      step_history: [],
+    });
+    storeB.getState().setWorkflowState({
+      workflow_id: "wf-1",
+      current_step_id: "step-1",
+      step_status: "pending",
+      step_history: [],
+    });
+
+    storeA.getState().setAutoAdvance(true);
+    // storeB.autoAdvance stays false
+
+    const autoAdvanceCalls: Array<{ projectDir: string; enabled: boolean }> = [];
+    mockInvoke.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
+      if (cmd === "set_auto_advance") {
+        autoAdvanceCalls.push({
+          projectDir: args.projectDir as string,
+          enabled: args.enabled as boolean,
+        });
+        return null;
+      }
+      if (cmd === "workflow_execute_step") return { response: "done" };
+      if (cmd === "workflow_state") return storeA.getState().workflowState;
+      return null;
+    });
+
+    // Execute ticket A (autoAdvance=true), then ticket B (autoAdvance=false)
+    await executeStep("/test", "ticket-1", []);
+    await executeStep("/test", "ticket-2", []);
+
+    // Should have two set_auto_advance calls with different values
+    expect(autoAdvanceCalls).toHaveLength(2);
+    expect(autoAdvanceCalls[0].enabled).toBe(true);
+    expect(autoAdvanceCalls[1].enabled).toBe(false);
+  });
+
+  // ── queryStartedAt lifecycle ──
+
   it("maintains independent queryStartedAt for concurrent tickets", async () => {
     const storeA = orchestrationStoreFactory.getStore("ticket-1");
     const storeB = orchestrationStoreFactory.getStore("ticket-2");

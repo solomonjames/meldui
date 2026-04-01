@@ -39,7 +39,7 @@ specta-typescript = "=0.0.9"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["typescript", "derive"] }
 
 # Database
-libsql = "0.6"
+libsql = "0.9.30"
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }

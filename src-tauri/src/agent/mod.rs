@@ -924,7 +924,12 @@ pub async fn execute_step(
                 // Persist to conversation NDJSON
                 if let Some(writer) = conversation_writer {
                     let step = current_step_id.unwrap_or(issue_id);
-                    if let Err(e) = writer.lock().await.append_raw(msg_type, &params, step) {
+                    if let Err(e) = writer
+                        .lock()
+                        .await
+                        .append_raw(msg_type, &params, step)
+                        .await
+                    {
                         log::error!("conversation: failed to append: {e}");
                     }
                 }
@@ -1315,6 +1320,10 @@ pub(crate) fn dispatch_message_to_tauri(
             }
         }
         "result" => {
+            // TODO(Task 24): Capture context data (token counts, cost, cache stats) from the
+            // agent result and call conversation::record_context() to persist usage metrics.
+            // This requires extracting usage fields from the sidecar's result payload and
+            // having access to the ConversationDbManager + ticket/turn/step IDs at this scope.
             if let Some(content) = params.get("content").and_then(|c| c.as_str()) {
                 on_chunk
                     .send(StreamChunk {

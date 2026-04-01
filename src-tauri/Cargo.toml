@@ -38,6 +38,9 @@ specta = { version = "=2.0.0-rc.22", features = ["chrono", "uuid", "serde_json"]
 specta-typescript = "=0.0.9"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["typescript", "derive"] }
 
+# Database
+libsql = "0.6"
+
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
@@ -46,6 +49,15 @@ libc = "0.2"
 log = "0.4"
 unidiff = "0.4.0"
 uuid = { version = "1", features = ["v4"] }
+
+# Optional: ONNX Runtime for local embedding models
+ort = { version = "2.0.0-rc.12", features = ["download-binaries"], optional = true }
+
+[features]
+embeddings = ["ort"]
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints.rust]
 unsafe_code = "warn"

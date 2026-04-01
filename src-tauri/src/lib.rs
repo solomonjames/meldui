@@ -9,6 +9,8 @@ mod agent;
 mod claude;
 mod constants;
 mod conversation;
+pub mod conversation_db;
+pub(crate) mod embeddings;
 mod menu;
 mod preferences;
 mod settings;
@@ -16,6 +18,9 @@ mod tickets;
 mod workflow;
 
 use agent::AgentState;
+use conversation_db::ConversationDbManager;
+use embeddings::Embedder;
+use tauri::Manager;
 use tickets::Ticket;
 use workflow::{
     BranchInfo, CommitActionResult, DiffFile, StepExecutionResult, WorkflowDefinition,
@@ -238,6 +243,30 @@ async fn settings_update(
     settings::update_settings(&project_dir, &settings)
 }
 
+// ── Conversation encryption commands ──
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_set_encryption(
+    project_dir: String,
+    key: Option<String>,
+) -> Result<(), String> {
+    // Store the encryption key in project settings.
+    // TODO: Actually re-encrypting an existing DB requires export/reimport.
+    // For now we only persist the key so new databases (or after manual re-creation)
+    // will use it.
+    let mut s = settings::get_settings(&project_dir)?;
+    s.encryption_key = key;
+    settings::update_settings(&project_dir, &s)
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_encryption_status(project_dir: String) -> Result<bool, String> {
+    let s = settings::get_settings(&project_dir)?;
+    Ok(s.encryption_key.is_some())
+}
+
 // ── Conversation commands ──
 
 #[tauri::command]
@@ -245,16 +274,258 @@ async fn settings_update(
 async fn conversation_restore(
     project_dir: String,
     ticket_id: String,
+    db_manager: tauri::State<'_, ConversationDbManager>,
 ) -> Result<Option<conversation::ConversationSnapshot>, String> {
-    conversation::restore_conversation(&project_dir, &ticket_id)
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    conversation::restore_conversation(&conn, &ticket_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 #[specta::specta]
 async fn conversation_list(
     project_dir: String,
+    db_manager: tauri::State<'_, ConversationDbManager>,
 ) -> Result<Vec<conversation::ConversationSummary>, String> {
-    conversation::list_conversations(&project_dir)
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    conversation::list_conversations(&conn)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_search(
+    project_dir: String,
+    query: String,
+    ticket_id: Option<String>,
+    limit: Option<u32>,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<Vec<conversation::SearchResult>, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    conversation::search_conversations(&conn, &query, ticket_id.as_deref(), limit.unwrap_or(50))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ── Semantic / hybrid search commands ──
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_semantic_search(
+    project_dir: String,
+    query: String,
+    ticket_id: Option<String>,
+    limit: Option<u32>,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<Vec<conversation::SemanticSearchResult>, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Use MockEmbedder for now; will switch to LocalEmbedder when ONNX is ready
+    let embedder = embeddings::MockEmbedder;
+    let query_embedding = embedder.embed(&query)?;
+
+    conversation::semantic_search(
+        &conn,
+        &query_embedding,
+        ticket_id.as_deref(),
+        limit.unwrap_or(20),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_hybrid_search(
+    project_dir: String,
+    query: String,
+    ticket_id: Option<String>,
+    limit: Option<u32>,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<Vec<conversation::HybridSearchResult>, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let embedder = embeddings::MockEmbedder;
+    let query_embedding = embedder.embed(&query)?;
+
+    conversation::hybrid_search(
+        &conn,
+        &query,
+        &query_embedding,
+        ticket_id.as_deref(),
+        limit.unwrap_or(20),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+// ── RAG context commands ──
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_rag_context(
+    project_dir: String,
+    task_description: String,
+    max_tokens: Option<u32>,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<Vec<conversation::ContextChunk>, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let embedder = embeddings::MockEmbedder;
+    let query_embedding = embedder.embed(&task_description)?;
+
+    conversation::get_rag_context(&conn, &query_embedding, max_tokens.unwrap_or(4000))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_related(
+    project_dir: String,
+    ticket_id: String,
+    limit: Option<u32>,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<Vec<conversation::RelatedConversation>, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    conversation::get_related_conversations(&conn, &ticket_id, limit.unwrap_or(5))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ── Conversation stats command ──
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_stats(
+    project_dir: String,
+    ticket_id: String,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<conversation::ConversationStats, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    conversation::get_conversation_stats(&conn, &ticket_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ── Turn query commands ──
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_load_turn(
+    project_dir: String,
+    ticket_id: String,
+    turn_id: String,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<Vec<conversation::ConversationEventRecord>, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    conversation::load_turn(&conn, &ticket_id, &turn_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_list_turns(
+    project_dir: String,
+    ticket_id: String,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<Vec<conversation::TurnSummary>, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    conversation::list_turns(&conn, &ticket_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ── Conversation cleanup command ──
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_cleanup(
+    project_dir: String,
+    max_age_days: Option<u32>,
+    max_conversations: Option<u32>,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<conversation::CleanupResult, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    conversation::cleanup_old_conversations(
+        &conn,
+        max_age_days.unwrap_or(90),
+        max_conversations.unwrap_or(500),
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+// ── Checkpoint commands ──
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_checkpoints(
+    project_dir: String,
+    ticket_id: String,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<Vec<conversation::CheckpointRecord>, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    conversation::get_checkpoints(&conn, &ticket_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn conversation_checkpoint_for_turn(
+    project_dir: String,
+    ticket_id: String,
+    turn_id: String,
+    db_manager: tauri::State<'_, ConversationDbManager>,
+) -> Result<Option<conversation::CheckpointRecord>, String> {
+    let conn = db_manager
+        .get_connection(&project_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    conversation::get_checkpoint_for_turn(&conn, &ticket_id, &turn_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ── Project file commands ──
@@ -328,6 +599,7 @@ async fn workflow_state(
     project_dir: String,
     issue_id: String,
     state: tauri::State<'_, AgentState>,
+    app: tauri::AppHandle,
 ) -> Result<Option<WorkflowState>, String> {
     let wf_state = workflow::get_workflow_state(&project_dir, &issue_id)?;
 
@@ -347,6 +619,34 @@ async fn workflow_state(
                             .to_string(),
                     ),
                 )?;
+
+                // Best-effort: also mark conversation DB as interrupted
+                if let Some(db_manager) = app.try_state::<ConversationDbManager>() {
+                    if let Ok(conn) = db_manager.get_connection(&project_dir).await {
+                        let now = chrono::Utc::now().to_rfc3339();
+                        if let Some(ref step_id) = ws.current_step_id {
+                            if let Err(e) = conn
+                                .execute(
+                                    "UPDATE conversation_steps SET status = 'interrupted', completed_at = ?1 WHERE ticket_id = ?2 AND step_id = ?3 AND status = 'in_progress'",
+                                    libsql::params![now.clone(), issue_id.clone(), step_id.clone()],
+                                )
+                                .await
+                            {
+                                log::warn!("Failed to mark conversation step as interrupted: {e}");
+                            }
+                        }
+                        if let Err(e) = conn
+                            .execute(
+                                "UPDATE conversations SET status = 'interrupted' WHERE ticket_id = ?1",
+                                libsql::params![issue_id.clone()],
+                            )
+                            .await
+                        {
+                            log::warn!("Failed to mark conversation as interrupted: {e}");
+                        }
+                    }
+                }
+
                 return Ok(Some(failed_state));
             }
         }
@@ -456,8 +756,21 @@ pub fn run() {
             ticket_initialize_sections,
             settings_get,
             settings_update,
+            conversation_set_encryption,
+            conversation_encryption_status,
             conversation_restore,
             conversation_list,
+            conversation_search,
+            conversation_stats,
+            conversation_load_turn,
+            conversation_list_turns,
+            conversation_checkpoints,
+            conversation_checkpoint_for_turn,
+            conversation_cleanup,
+            conversation_semantic_search,
+            conversation_hybrid_search,
+            conversation_rag_context,
+            conversation_related,
             list_project_files,
             workflow_list,
             workflow_get,
@@ -506,6 +819,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(AgentState::new())
+        .manage(ConversationDbManager::new())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);

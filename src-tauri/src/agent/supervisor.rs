@@ -184,11 +184,11 @@ pub(crate) async fn run_supervisor_loop(
                         "content": message,
                         "turn_number": turn + 1,
                     });
-                    if let Err(e) =
-                        writer
-                            .lock()
-                            .await
-                            .append_raw("supervisor_reply", &supervisor_msg, step)
+                    if let Err(e) = writer
+                        .lock()
+                        .await
+                        .append_raw("supervisor_reply", &supervisor_msg, step)
+                        .await
                     {
                         log::error!("conversation: failed to append supervisor reply: {e}");
                     }
@@ -336,7 +336,12 @@ async fn read_until_query_complete(
                 // Persist to conversation log
                 if let Some(writer) = conversation_writer {
                     let step = current_step_id.unwrap_or(issue_id);
-                    if let Err(e) = writer.lock().await.append_raw(msg_type, &params, step) {
+                    if let Err(e) = writer
+                        .lock()
+                        .await
+                        .append_raw(msg_type, &params, step)
+                        .await
+                    {
                         log::error!("conversation: failed to append: {e}");
                     }
                 }

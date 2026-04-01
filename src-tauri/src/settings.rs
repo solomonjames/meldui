@@ -64,6 +64,10 @@ pub struct ProjectSettings {
     pub worktree: Option<WorktreeSettings>,
     #[serde(default)]
     pub supervisor: Option<SupervisorSettings>,
+    /// Optional encryption key for the conversation database.
+    /// Future: move to OS keychain for better security.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encryption_key: Option<String>,
 }
 
 fn settings_path(project_dir: &str) -> PathBuf {
@@ -104,4 +108,11 @@ pub fn get_settings(project_dir: &str) -> Result<ProjectSettings, String> {
 
 pub fn update_settings(project_dir: &str, settings: &ProjectSettings) -> Result<(), String> {
     update_settings_inner(project_dir, settings).map_err(|e| e.to_string())
+}
+
+/// Read the conversation database encryption key from project settings, if configured.
+pub fn get_encryption_key(project_dir: &str) -> Option<String> {
+    get_settings_inner(project_dir)
+        .ok()
+        .and_then(|s| s.encryption_key)
 }

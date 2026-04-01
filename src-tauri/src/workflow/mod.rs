@@ -13,6 +13,7 @@ pub use worktree::*;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 use crate::constants::{MELDUI_DIR, TICKETS_DIR};
 
@@ -197,33 +198,53 @@ pub async fn execute_step(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    // 7b. Open conversation writer for persistence
-    let conversation_writer =
-        match crate::conversation::ConversationWriter::open(project_dir, ticket_id) {
-            Ok(mut w) => {
-                // Write step_start marker
-                if let Err(e) = w.write_step_marker(
-                    &current_step_id,
-                    &crate::conversation::StepMarker::Start {
-                        label: step.name.clone(),
-                    },
-                ) {
-                    log::error!("conversation: failed to write step_start: {e}");
+    // 7b. Open conversation writer for persistence (libSQL via ConversationDbManager)
+    let conversation_writer = if let Some(manager) =
+        app_handle.try_state::<crate::conversation_db::ConversationDbManager>()
+    {
+        match manager.inner().get_connection(project_dir).await {
+            Ok(conn) => {
+                match crate::conversation::ConversationWriter::open_async(conn, ticket_id).await {
+                    Ok(mut w) => {
+                        // Write step_start marker
+                        if let Err(e) = w
+                            .write_step_marker(
+                                &current_step_id,
+                                &crate::conversation::StepMarker::Start {
+                                    label: step.name.clone(),
+                                },
+                            )
+                            .await
+                        {
+                            log::error!("conversation: failed to write step_start: {e}");
+                        }
+                        Some(tokio::sync::Mutex::new(w))
+                    }
+                    Err(e) => {
+                        log::error!("conversation: failed to open writer: {e}");
+                        None
+                    }
                 }
-                Some(tokio::sync::Mutex::new(w))
             }
             Err(e) => {
-                log::error!("conversation: failed to open writer: {e}");
+                log::error!("conversation: failed to get db connection: {e}");
                 None
             }
-        };
+        }
+    } else {
+        log::error!("conversation: ConversationDbManager not in app state");
+        None
+    };
 
     // 7c. Persist user message to conversation log (if provided)
     if let Some(ref msg) = user_message {
         if let Some(ref writer) = conversation_writer {
             let mut w = writer.lock().await;
             let params = serde_json::json!({ "content": msg });
-            if let Err(e) = w.append_raw("user_message", &params, &current_step_id) {
+            if let Err(e) = w
+                .append_raw("user_message", &params, &current_step_id)
+                .await
+            {
                 log::error!("conversation: failed to write user_message: {e}");
             }
         }
@@ -268,13 +289,15 @@ pub async fn execute_step(
         Err(e) => {
             if let Some(ref writer) = conversation_writer {
                 let mut w = writer.lock().await;
-                let _ = w.write_step_marker(
-                    &current_step_id,
-                    &crate::conversation::StepMarker::End {
-                        status: "failed".to_string(),
-                    },
-                );
-                let _ = w.flush();
+                let _ = w
+                    .write_step_marker(
+                        &current_step_id,
+                        &crate::conversation::StepMarker::End {
+                            status: "failed".to_string(),
+                        },
+                    )
+                    .await;
+                let _ = w.flush().await;
             }
             let _ = crate::conversation::snapshot_conversation(project_dir, ticket_id, None);
             let _ = update_step_status(project_dir, ticket_id, StepStatus::Failed(e.clone()));
@@ -285,15 +308,18 @@ pub async fn execute_step(
     // Write step_end marker and snapshot
     if let Some(ref writer) = conversation_writer {
         let mut w = writer.lock().await;
-        if let Err(e) = w.write_step_marker(
-            &current_step_id,
-            &crate::conversation::StepMarker::End {
-                status: "completed".to_string(),
-            },
-        ) {
+        if let Err(e) = w
+            .write_step_marker(
+                &current_step_id,
+                &crate::conversation::StepMarker::End {
+                    status: "completed".to_string(),
+                },
+            )
+            .await
+        {
             log::error!("conversation: failed to write step_end: {e}");
         }
-        let _ = w.flush();
+        let _ = w.flush().await;
     }
     // Snapshot the conversation
     if let Err(e) = crate::conversation::snapshot_conversation(
@@ -324,6 +350,11 @@ pub async fn execute_step(
             Some(&meta_str),
         )?;
     }
+
+    // TODO(Task 49): Hook checkpoint recording into workflow step completion.
+    // After the step completes, call conversation::record_checkpoint() with the
+    // current git HEAD commit hash and branch name so the conversation timeline
+    // links to the exact code state at each step boundary.
 
     // 9. Only mark step completed if the agent didn't already advance the workflow.
     // When the agent calls meldui_step_complete, advance_step() moves current_step_id

@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS conversation_events (
     role TEXT,
     content TEXT,
     timestamp TEXT NOT NULL,
-    embedding BLOB
+    embedding F32_BLOB(384)
 );
 
 CREATE TABLE IF NOT EXISTS conversation_steps (

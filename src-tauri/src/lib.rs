@@ -13,6 +13,7 @@ pub mod conversation_db;
 pub(crate) mod embeddings;
 mod menu;
 mod preferences;
+pub(crate) mod schema;
 mod settings;
 mod tickets;
 mod workflow;

@@ -71,11 +71,50 @@ async settingsGet(projectDir: string) : Promise<ProjectSettings> {
 async settingsUpdate(projectDir: string, settings: ProjectSettings) : Promise<null> {
     return await TAURI_INVOKE("settings_update", { projectDir, settings });
 },
+async conversationSetEncryption(projectDir: string, key: string | null) : Promise<null> {
+    return await TAURI_INVOKE("conversation_set_encryption", { projectDir, key });
+},
+async conversationEncryptionStatus(projectDir: string) : Promise<boolean> {
+    return await TAURI_INVOKE("conversation_encryption_status", { projectDir });
+},
 async conversationRestore(projectDir: string, ticketId: string) : Promise<ConversationSnapshot | null> {
     return await TAURI_INVOKE("conversation_restore", { projectDir, ticketId });
 },
 async conversationList(projectDir: string) : Promise<ConversationSummary[]> {
     return await TAURI_INVOKE("conversation_list", { projectDir });
+},
+async conversationSearch(projectDir: string, query: string, ticketId: string | null, limit: number | null) : Promise<SearchResult[]> {
+    return await TAURI_INVOKE("conversation_search", { projectDir, query, ticketId, limit });
+},
+async conversationStats(projectDir: string, ticketId: string) : Promise<ConversationStats> {
+    return await TAURI_INVOKE("conversation_stats", { projectDir, ticketId });
+},
+async conversationLoadTurn(projectDir: string, ticketId: string, turnId: string) : Promise<ConversationEventRecord[]> {
+    return await TAURI_INVOKE("conversation_load_turn", { projectDir, ticketId, turnId });
+},
+async conversationListTurns(projectDir: string, ticketId: string) : Promise<TurnSummary[]> {
+    return await TAURI_INVOKE("conversation_list_turns", { projectDir, ticketId });
+},
+async conversationCheckpoints(projectDir: string, ticketId: string) : Promise<CheckpointRecord[]> {
+    return await TAURI_INVOKE("conversation_checkpoints", { projectDir, ticketId });
+},
+async conversationCheckpointForTurn(projectDir: string, ticketId: string, turnId: string) : Promise<CheckpointRecord | null> {
+    return await TAURI_INVOKE("conversation_checkpoint_for_turn", { projectDir, ticketId, turnId });
+},
+async conversationCleanup(projectDir: string, maxAgeDays: number | null, maxConversations: number | null) : Promise<CleanupResult> {
+    return await TAURI_INVOKE("conversation_cleanup", { projectDir, maxAgeDays, maxConversations });
+},
+async conversationSemanticSearch(projectDir: string, query: string, ticketId: string | null, limit: number | null) : Promise<SemanticSearchResult[]> {
+    return await TAURI_INVOKE("conversation_semantic_search", { projectDir, query, ticketId, limit });
+},
+async conversationHybridSearch(projectDir: string, query: string, ticketId: string | null, limit: number | null) : Promise<HybridSearchResult[]> {
+    return await TAURI_INVOKE("conversation_hybrid_search", { projectDir, query, ticketId, limit });
+},
+async conversationRagContext(projectDir: string, taskDescription: string, maxTokens: number | null) : Promise<ContextChunk[]> {
+    return await TAURI_INVOKE("conversation_rag_context", { projectDir, taskDescription, maxTokens });
+},
+async conversationRelated(projectDir: string, ticketId: string, limit: number | null) : Promise<RelatedConversation[]> {
+    return await TAURI_INVOKE("conversation_related", { projectDir, ticketId, limit });
 },
 async listProjectFiles(projectDir: string) : Promise<string[]> {
     return await TAURI_INVOKE("list_project_files", { projectDir });
@@ -187,21 +226,41 @@ export type AppPreferences = { theme?: string; context_indicator_visibility?: st
  */
 export type BranchInfo = { branch: string; remote_tracking?: string | null }
 /**
+ * A recorded git checkpoint associated with a conversation turn.
+ */
+export type CheckpointRecord = { ticket_id: string; turn_id: string; step_id: string; commit_hash: string; branch: string; timestamp: string }
+/**
  * Status of the Claude Code CLI installation and authentication.
  */
 export type ClaudeStatus = { installed: boolean; authenticated: boolean; path?: string | null; message: string }
 /**
+ * Result of a cleanup operation.
+ */
+export type CleanupResult = { deleted_count: number; freed_events: number }
+/**
  * Result of a commit action executed via the agent sidecar.
  */
 export type CommitActionResult = { success: boolean; message: string; commit_hash?: string | null; pr_url?: string | null }
+/**
+ * A chunk of context retrieved via RAG.
+ */
+export type ContextChunk = { ticket_id: string; step_id: string; step_label: string | null; content: string; timestamp: string; relevance: number }
 export type ConversationEventRecord = { timestamp: string; sequence: number; step_id: string; event_type: string; content: string }
 export type ConversationSnapshot = { schema_version: number; ticket_id: string; session_id: string | null; created_at: string; updated_at: string; status: string; events: ConversationEventRecord[]; steps: ConversationStepRecord[]; event_count: number }
+/**
+ * Aggregated conversation statistics exposed to the frontend via IPC.
+ */
+export type ConversationStats = { total_input_tokens: number; total_output_tokens: number; total_cache_reads: number; total_cache_writes: number; total_cost_usd: number; turn_count: number; model: string | null }
 export type ConversationStepRecord = { step_id: string; label: string | null; started_at: string; completed_at: string | null; status: string; first_sequence: number }
 export type ConversationSummary = { ticket_id: string; status: string; event_count: number; updated_at: string }
 export type DiffFile = { path: string; status: string; additions: number; deletions: number; hunks: DiffHunk[] }
 export type DiffHunk = { header: string; old_start: number; old_count: number; new_start: number; new_count: number; lines: DiffLine[] }
 export type DiffLine = { line_type: DiffLineType; content: string; old_line_no?: number | null; new_line_no?: number | null }
 export type DiffLineType = "added" | "removed" | "context"
+/**
+ * A result from hybrid (FTS5 + vector) search.
+ */
+export type HybridSearchResult = { ticket_id: string; step_id: string; content: string; timestamp: string; fts_rank: number | null; vector_distance: number | null; combined_score: number }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type McpServerInfo = { name: string; status: string }
 /**
@@ -212,11 +271,25 @@ export type NotificationEvent = { title: string; message: string; level: string 
  * Emitted when the agent reports a pull request URL.
  */
 export type PrUrlReportedEvent = { ticket_id: string; url: string }
-export type ProjectSettings = { worktree?: WorktreeSettings | null; supervisor?: SupervisorSettings | null }
+export type ProjectSettings = { worktree?: WorktreeSettings | null; supervisor?: SupervisorSettings | null; 
+/**
+ * Optional encryption key for the conversation database.
+ * Future: move to OS keychain for better security.
+ */
+encryption_key?: string | null }
+/**
+ * A related conversation found via embedding similarity.
+ */
+export type RelatedConversation = { ticket_id: string; similarity: number; event_count: number; updated_at: string }
+export type SearchResult = { ticket_id: string; step_id: string; event_type: string; content: string; timestamp: string; rank: number }
 /**
  * Emitted when a ticket section is updated by the agent.
  */
 export type SectionUpdateEvent = { ticket_id: string; section: string; section_id?: string | null; content: string }
+/**
+ * A result from semantic (vector) search.
+ */
+export type SemanticSearchResult = { ticket_id: string; step_id: string; content: string; timestamp: string; distance: number }
 /**
  * Emitted when the agent provides a status update.
  */
@@ -267,6 +340,7 @@ export type TicketSection = { id: string; label: string; type: string; content: 
  * Definition for initializing a ticket section from a workflow.
  */
 export type TicketSectionDef = { id: string; label: string; type: string; collapsed?: boolean }
+export type TurnSummary = { turn_id: string; start_sequence: number; end_sequence: number; event_count: number; first_event_type: string; timestamp: string }
 export type WorkflowDefinition = { id: string; name: string; description: string; version: string; steps: WorkflowStep[]; ticket_sections?: WorkflowSectionDef[] }
 export type WorkflowPhase = "research" | "plan" | "implementation" | "review"
 export type WorkflowSectionDef = { id: string; label: string; type: string; collapsed?: boolean }

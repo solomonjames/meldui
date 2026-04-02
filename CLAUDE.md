@@ -105,6 +105,29 @@ React hooks in `src/features/*/hooks/` and `src/shared/hooks/` call Tauri comman
 
 The `claude` CLI is discovered at runtime by searching common install paths (homebrew, ~/.local/bin, etc.).
 
+### Database Migrations
+
+Schema changes use a migration system in `src-tauri/src/schema.rs`. Migrations are SQL files organized per-database under `src-tauri/migrations/`:
+
+```
+src-tauri/migrations/
+  conversations/                              # One folder per database
+    20260401000000_initial_schema.sql          # Timestamp-named migrations
+    20260401000001_vector_index.optional.sql   # .optional.sql = allow failure
+```
+
+**Adding a new migration**: create a file named `YYYYMMDDHHMMSS_description.sql` in the appropriate database folder. `build.rs` auto-discovers and embeds all migration files at compile time — no Rust code changes needed.
+
+**Naming convention**: `YYYYMMDDHHMMSS_description.sql`. Append `.optional.sql` instead of `.sql` for migrations that may fail (e.g., features depending on specific libSQL builds). Optional migration failures are logged and skipped.
+
+**How it works**: `build.rs` scans `migrations/` subdirectories, parses filenames, and generates `src/schema/{db_name}.rs` with a `MIGRATIONS` const array using `include_str!`. The `schema::run_migrations()` function tracks applied versions in a `schema_migrations` table and runs pending migrations in order.
+
+**Key files**:
+- `src-tauri/src/schema.rs` — generic migration runner (reusable for any database)
+- `src-tauri/src/schema/codegen.rs` — filename parsing shared between build.rs and lib
+- `src-tauri/src/schema/conversations.rs` — auto-generated, do not edit
+- `src-tauri/build.rs` — scans migrations and generates schema modules
+
 ### Agent Sidecar Architecture
 
 The agent sidecar (`src/agent/`) is a separate TypeScript package compiled to a native binary via `bun build --compile`. It wraps the Claude Agent SDK and communicates with Rust via JSON-RPC 2.0 over a Unix domain socket:

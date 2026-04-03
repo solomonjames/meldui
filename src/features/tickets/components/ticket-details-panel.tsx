@@ -404,7 +404,7 @@ export function TicketDetailsPanel({
                           value={ticket.status}
                           onValueChange={(v) => handleDropdownChange("status", v)}
                         >
-                          <SelectTrigger className="w-[130px] h-7 text-xs">
+                          <SelectTrigger className="w-[130px] min-w-0 h-7 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -427,7 +427,7 @@ export function TicketDetailsPanel({
                           value={String(ticket.priority)}
                           onValueChange={(v) => handleDropdownChange("priority", v)}
                         >
-                          <SelectTrigger className="w-[130px] h-7 text-xs">
+                          <SelectTrigger className="w-[130px] min-w-0 h-7 text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

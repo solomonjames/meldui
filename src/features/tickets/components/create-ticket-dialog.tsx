@@ -68,7 +68,7 @@ export function CreateTicketDialog({
         />
       )}
       <div
-        className={`fixed top-0 right-0 h-full w-[380px] bg-background border-l border-border z-50 flex flex-col transition-transform duration-200 ease-out ${
+        className={`fixed top-0 right-0 h-full w-full max-w-[380px] bg-background border-l border-border z-50 flex flex-col transition-transform duration-200 ease-out ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >

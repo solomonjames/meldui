@@ -10,7 +10,7 @@ interface DiffFileTreeProps {
 
 export function DiffFileTree({ files, selectedFile, onSelectFile }: DiffFileTreeProps) {
   return (
-    <div className="w-64 border-r bg-white dark:bg-zinc-900 flex flex-col">
+    <div className="w-64 shrink-0 border-r bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b flex items-center justify-between">
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Changed Files ({files.length})

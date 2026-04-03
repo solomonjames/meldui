@@ -185,7 +185,7 @@ export function BacklogPage({
             {COLUMNS.map((col) => {
               const columnTickets = ticketsByPhase[col.key];
               return (
-                <div key={col.key} className="min-w-[280px] w-[280px] shrink-0 h-full">
+                <div key={col.key} className="min-w-[220px] flex-1 h-full">
                   <KanbanColumn
                     title={col.title}
                     variant={col.key}

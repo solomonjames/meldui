@@ -81,7 +81,7 @@ function BashRenderer({ activity, expanded }: RendererProps) {
   return (
     <>
       {command && (
-        <code className="text-xs text-muted-foreground font-mono truncate max-w-[300px] inline-block">
+        <code className="text-xs text-muted-foreground font-mono truncate max-w-full inline-block">
           {command.length > 80 ? `${command.slice(0, 80)}...` : command}
         </code>
       )}

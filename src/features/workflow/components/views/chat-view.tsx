@@ -24,7 +24,7 @@ function UserMessageBubble({ content }: { content: string }) {
     <div className="flex justify-end my-2">
       <div className="flex items-start gap-2 max-w-[80%]">
         <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2">
-          <p className="text-sm whitespace-pre-wrap">{content}</p>
+          <p className="text-sm whitespace-pre-wrap break-words">{content}</p>
         </div>
         <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 shrink-0 mt-0.5">
           <User className="w-3.5 h-3.5 text-primary" />
@@ -71,13 +71,13 @@ function SupervisorReplyBubble({ content }: { content: string }) {
   return (
     <div className="flex justify-end my-2">
       <div className="flex items-start gap-2 max-w-[80%]">
-        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 break-words">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">
               Auto-reply
             </span>
           </div>
-          <p className="text-sm whitespace-pre-wrap">{content}</p>
+          <p className="text-sm whitespace-pre-wrap break-words">{content}</p>
         </div>
         <div className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/10 shrink-0 mt-0.5">
           <Play className="w-3.5 h-3.5 text-amber-500" />

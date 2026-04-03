@@ -26,14 +26,14 @@ export function SubtaskProgress({
       {/* Progress bar */}
       <div className="h-1 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-300 ${
+          className={`h-full w-full rounded-full transition-transform duration-300 origin-left ${
             closed === total && total > 0
               ? "bg-emerald-500"
               : closed > 0
                 ? "bg-emerald-500"
                 : "bg-zinc-200 dark:bg-zinc-800"
           }`}
-          style={{ width: `${pct}%` }}
+          style={{ transform: `scaleX(${pct / 100})` }}
         />
       </div>
 
@@ -61,7 +61,7 @@ export function SubtaskProgress({
                     e.stopPropagation();
                     onRemoveSubTicket(sub.id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 shrink-0 p-0.5 rounded text-muted-foreground hover:text-red-500 transition-all"
+                  className="opacity-0 group-hover:opacity-100 shrink-0 p-0.5 rounded text-muted-foreground hover:text-red-500 transition-[opacity,color]"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>

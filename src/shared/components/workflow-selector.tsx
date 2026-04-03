@@ -66,6 +66,7 @@ export function WorkflowSelector({
           </span>
           <button
             type="button"
+            aria-label="Dismiss suggestion"
             onClick={() => setSuggestion(null)}
             className="shrink-0 p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
           >

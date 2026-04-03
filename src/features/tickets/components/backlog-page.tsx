@@ -96,6 +96,7 @@ export function BacklogPage({
           <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 rounded-lg p-0.5 shadow-sm border">
             <button
               type="button"
+              aria-pressed={sortMode === "priority"}
               onClick={() => setSortMode("priority")}
               className={`px-3 py-1 text-xs rounded-md transition-colors ${
                 sortMode === "priority"
@@ -107,6 +108,7 @@ export function BacklogPage({
             </button>
             <button
               type="button"
+              aria-pressed={sortMode === "date"}
               onClick={() => setSortMode("date")}
               className={`px-3 py-1 text-xs rounded-md transition-colors ${
                 sortMode === "date"
@@ -123,6 +125,7 @@ export function BacklogPage({
           {/* Type filters */}
           <button
             type="button"
+            aria-pressed={typeFilter === null}
             onClick={() => setTypeFilter(null)}
             className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
               typeFilter === null
@@ -136,6 +139,7 @@ export function BacklogPage({
             <button
               type="button"
               key={type}
+              aria-pressed={typeFilter === type}
               onClick={() => setTypeFilter(typeFilter === type ? null : type)}
               className={`px-2.5 py-1 text-xs rounded-full capitalize transition-colors border ${
                 typeFilter === type

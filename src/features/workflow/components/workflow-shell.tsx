@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { commands } from "@/bindings";
@@ -11,11 +11,7 @@ import {
   submitReview,
 } from "@/features/workflow/actions/workflow-mutations";
 import { fetchBranchInfo, fetchDiff } from "@/features/workflow/actions/workflow-queries";
-import { ChangesTab } from "@/features/workflow/components/changes-tab";
-import { CommitTab } from "@/features/workflow/components/commit-tab";
 import { CompactWorkflowIndicator } from "@/features/workflow/components/compact-workflow-indicator";
-import { DebugPanel } from "@/features/workflow/components/debug-panel";
-import { ChatView } from "@/features/workflow/components/views/chat-view";
 import { notificationsStoreFactory } from "@/features/workflow/stores/notifications-store";
 import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
 import { permissionsStoreFactory } from "@/features/workflow/stores/permissions-store";
@@ -24,6 +20,19 @@ import { streamingStoreFactory } from "@/features/workflow/stores/streaming-stor
 import { useDebugLog } from "@/shared/hooks/use-debug-log";
 import type { Ticket, WorkflowDefinition } from "@/shared/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+
+const ChatView = lazy(() =>
+  import("@/features/workflow/components/views/chat-view").then((m) => ({ default: m.ChatView })),
+);
+const ChangesTab = lazy(() =>
+  import("@/features/workflow/components/changes-tab").then((m) => ({ default: m.ChangesTab })),
+);
+const CommitTab = lazy(() =>
+  import("@/features/workflow/components/commit-tab").then((m) => ({ default: m.CommitTab })),
+);
+const DebugPanel = lazy(() =>
+  import("@/features/workflow/components/debug-panel").then((m) => ({ default: m.DebugPanel })),
+);
 
 interface WorkflowShellProps {
   ticket: Ticket;
@@ -482,65 +491,73 @@ export function WorkflowShell({
             </div>
           </div>
           <div className="flex flex-1 flex-col overflow-hidden">
-            <ChatView
-              stepName={currentStep?.name ?? "Complete"}
-              response={responseText}
-              isExecuting={isExecuting}
-              stepStatus={workflowComplete ? "completed" : workflowState.step_status}
-              stepOutput={currentStepOutput}
-              queryStartedAt={queryStartedAt}
-              onExecute={handleExecute}
-              onAdvanceStep={!workflowComplete ? handleAdvanceStep : undefined}
-              projectDir={projectDir}
-              ticketId={ticket.id}
-              isInteractive={
-                workflowComplete || currentStep?.view === "chat" || currentStep?.view === "review"
-              }
-              pendingPermission={pendingPermission}
-              onRespondToPermission={handleRespondToPermission}
-              workflowComplete={workflowComplete}
-              onMarkComplete={onNavigateToBacklog}
-            />
+            <Suspense fallback={null}>
+              <ChatView
+                stepName={currentStep?.name ?? "Complete"}
+                response={responseText}
+                isExecuting={isExecuting}
+                stepStatus={workflowComplete ? "completed" : workflowState.step_status}
+                stepOutput={currentStepOutput}
+                queryStartedAt={queryStartedAt}
+                onExecute={handleExecute}
+                onAdvanceStep={!workflowComplete ? handleAdvanceStep : undefined}
+                projectDir={projectDir}
+                ticketId={ticket.id}
+                isInteractive={
+                  workflowComplete || currentStep?.view === "chat" || currentStep?.view === "review"
+                }
+                pendingPermission={pendingPermission}
+                onRespondToPermission={handleRespondToPermission}
+                workflowComplete={workflowComplete}
+                onMarkComplete={onNavigateToBacklog}
+              />
+            </Suspense>
           </div>
         </TabsContent>
         <TabsContent value="changes" className="flex flex-1 flex-col overflow-hidden">
-          <ChangesTab
-            ticket={ticket}
-            onGetDiff={handleGetDiff}
-            reviewFindings={reviewFindings}
-            reviewComments={reviewComments}
-            onAddComment={handleAddReviewComment}
-            onDeleteComment={handleDeleteReviewComment}
-            onSubmitReview={handleSubmitReview}
-            reviewDisabled={reviewDisabled}
-            reviewRoundKey={reviewRoundKey}
-          />
+          <Suspense fallback={null}>
+            <ChangesTab
+              ticket={ticket}
+              onGetDiff={handleGetDiff}
+              reviewFindings={reviewFindings}
+              reviewComments={reviewComments}
+              onAddComment={handleAddReviewComment}
+              onDeleteComment={handleDeleteReviewComment}
+              onSubmitReview={handleSubmitReview}
+              reviewDisabled={reviewDisabled}
+              reviewRoundKey={reviewRoundKey}
+            />
+          </Suspense>
         </TabsContent>
         <TabsContent value="commit" className="flex flex-1 flex-col overflow-hidden">
-          <CommitTab
-            ticket={ticket}
-            agentCommitMessage={agentCommitMessage}
-            onNavigateToBacklog={onNavigateToBacklog}
-            onGetDiff={handleGetDiff}
-            onGetBranchInfo={handleGetBranchInfo}
-            onExecuteCommitAction={handleExecuteCommitAction}
-            onCleanupWorktree={handleCleanupWorktree}
-            onRefreshTicket={onRefreshTicket}
-          />
+          <Suspense fallback={null}>
+            <CommitTab
+              ticket={ticket}
+              agentCommitMessage={agentCommitMessage}
+              onNavigateToBacklog={onNavigateToBacklog}
+              onGetDiff={handleGetDiff}
+              onGetBranchInfo={handleGetBranchInfo}
+              onExecuteCommitAction={handleExecuteCommitAction}
+              onCleanupWorktree={handleCleanupWorktree}
+              onRefreshTicket={onRefreshTicket}
+            />
+          </Suspense>
         </TabsContent>
       </Tabs>
-      <DebugPanel
-        entries={debug.getEntries()}
-        stateSnapshot={{
-          step_status: workflowState.step_status,
-          loading,
-          error,
-          listenersReady,
-          currentStepId: workflowState.current_step_id,
-        }}
-        onClear={debug.clear}
-        onRefresh={debug.refresh}
-      />
+      <Suspense fallback={null}>
+        <DebugPanel
+          entries={debug.getEntries()}
+          stateSnapshot={{
+            step_status: workflowState.step_status,
+            loading,
+            error,
+            listenersReady,
+            currentStepId: workflowState.current_step_id,
+          }}
+          onClear={debug.clear}
+          onRefresh={debug.refresh}
+        />
+      </Suspense>
     </div>
   );
 }

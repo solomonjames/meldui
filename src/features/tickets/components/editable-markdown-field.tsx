@@ -90,6 +90,7 @@ export function EditableMarkdownField({
     <div
       role="button"
       tabIndex={0}
+      aria-label="Click to edit"
       className="cursor-pointer rounded-lg p-3 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
       onClick={enterEditing}
       onKeyDown={(e) => {

@@ -59,7 +59,7 @@ export const ActivityBar = memo(function ActivityBar({
 
   const hasResult = stepOutput?.resultContent != null;
   if (!isExecuting || isWaitingForUser || hasResult) {
-    return <div className="h-0 opacity-0 transition-all duration-300" />;
+    return <div className="h-0 opacity-0 transition-[opacity] duration-300" />;
   }
 
   // Determine current activity detail
@@ -120,7 +120,7 @@ export const ActivityBar = memo(function ActivityBar({
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-1.5 text-[11px] text-muted-foreground transition-all duration-300">
+    <div className="flex items-center gap-3 px-4 py-1.5 text-[11px] text-muted-foreground transition-[opacity] duration-300">
       {/* Left: step indicator */}
       <div className="flex items-center gap-2 min-w-0">
         <div className="flex gap-0.5">

@@ -52,7 +52,7 @@ export function AppSidebar({
   }, [tickets, workflows]);
 
   return (
-    <div className="w-60 shrink-0 bg-zinc-50 dark:bg-zinc-900 border-r flex flex-col">
+    <div className="w-52 shrink-0 bg-zinc-50 dark:bg-zinc-900 border-r flex flex-col">
       {/* Logo */}
       <div className="p-6 pb-0">
         <div className="flex items-center gap-2">

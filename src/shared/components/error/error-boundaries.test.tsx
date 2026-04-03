@@ -13,6 +13,7 @@ afterEach(() => {
   console.error = originalError;
 });
 
+// biome-ignore lint/style/useComponentExportOnlyModules: test helper
 function ThrowingComponent({ message }: { message: string }) {
   throw new Error(message);
 }
@@ -21,9 +22,15 @@ describe("AppCrashFallback", () => {
   it("renders error message and reload button", () => {
     render(<AppCrashFallback error={new Error("Fatal crash")} />);
 
-    expect(screen.getByText("Something went wrong")).toBeInTheDocument();
-    expect(screen.getByText("Fatal crash")).toBeInTheDocument();
+    expect(screen.getByText("Meld hit an unexpected error")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+  });
+
+  it("shows error details when expanded", () => {
+    render(<AppCrashFallback error={new Error("Fatal crash")} />);
+
+    fireEvent.click(screen.getByText("Show details"));
+    expect(screen.getByText(/Fatal crash/)).toBeInTheDocument();
   });
 
   it("calls window.location.reload on reload button click", () => {
@@ -44,9 +51,15 @@ describe("ViewErrorFallback", () => {
   it("renders error message and retry button", () => {
     render(<ViewErrorFallback error={new Error("View failed")} resetErrorBoundary={vi.fn()} />);
 
-    expect(screen.getByText("This view encountered an error")).toBeInTheDocument();
-    expect(screen.getByText("View failed")).toBeInTheDocument();
+    expect(screen.getByText("This view couldn't load")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("shows error details when expanded", () => {
+    render(<ViewErrorFallback error={new Error("View failed")} resetErrorBoundary={vi.fn()} />);
+
+    fireEvent.click(screen.getByText("Show details"));
+    expect(screen.getByText(/View failed/)).toBeInTheDocument();
   });
 
   it("calls resetErrorBoundary on retry click", () => {
@@ -66,8 +79,7 @@ describe("ErrorBoundary integration", () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText("This view encountered an error")).toBeInTheDocument();
-    expect(screen.getByText("render boom")).toBeInTheDocument();
+    expect(screen.getByText("This view couldn't load")).toBeInTheDocument();
   });
 
   it("catches rendering errors and shows AppCrashFallback", () => {
@@ -77,8 +89,7 @@ describe("ErrorBoundary integration", () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText("Something went wrong")).toBeInTheDocument();
-    expect(screen.getByText("app boom")).toBeInTheDocument();
+    expect(screen.getByText("Meld hit an unexpected error")).toBeInTheDocument();
   });
 
   it("calls onError with boundary label when error is caught", () => {
@@ -116,7 +127,7 @@ describe("ErrorBoundary integration", () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText("This view encountered an error")).toBeInTheDocument();
+    expect(screen.getByText("This view couldn't load")).toBeInTheDocument();
 
     // Stop throwing and change resetKeys to trigger reset
     shouldThrow = false;
@@ -140,11 +151,10 @@ describe("ErrorBoundary integration", () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText("This view encountered an error")).toBeInTheDocument();
+    expect(screen.getByText("This view couldn't load")).toBeInTheDocument();
 
     // Clicking retry re-renders AlwaysThrow which throws again
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(screen.getByText("This view encountered an error")).toBeInTheDocument();
-    expect(screen.getByText("persistent error")).toBeInTheDocument();
+    expect(screen.getByText("This view couldn't load")).toBeInTheDocument();
   });
 });

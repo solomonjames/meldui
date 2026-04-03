@@ -14,9 +14,13 @@ export function WelcomeScreen({ onOpenFolder }: WelcomeScreenProps) {
         </div>
         <h1 className="text-xl font-semibold">Welcome to Meld</h1>
         <p className="text-sm text-muted-foreground">
-          Open a project folder to get started. Meld will discover and manage beads tickets stored
-          in your project.
+          AI-powered development that ships your tickets.
         </p>
+        <ul className="text-sm text-muted-foreground space-y-1.5 text-left">
+          <li>Create tickets and let AI research, plan, and implement</li>
+          <li>Review AI-generated specs and code changes</li>
+          <li>Track progress across your development workflow</li>
+        </ul>
         <Button onClick={onOpenFolder} className="bg-emerald hover:bg-emerald/90 text-white mt-2">
           <FolderOpen className="w-4 h-4 mr-2" />
           Open Project Folder

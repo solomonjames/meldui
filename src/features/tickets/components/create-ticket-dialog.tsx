@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { PRIORITY_CONFIG, TYPE_CONFIG } from "@/features/tickets/constants";
 import { Button } from "@/shared/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
@@ -28,6 +28,23 @@ export function CreateTicketDialog({
   const [description, setDescription] = useState("");
   const [ticketType, setTicketType] = useState("task");
   const [priority, setPriority] = useState("2");
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => titleRef.current?.focus(), 100);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && open) {
+        onOpenChange(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onOpenChange]);
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
@@ -40,13 +57,30 @@ export function CreateTicketDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New Ticket</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
+    <>
+      {open && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismiss
+        <div
+          className="fixed inset-0 bg-black/20 z-40 transition-opacity"
+          onClick={() => onOpenChange(false)}
+          onKeyDown={() => {}}
+          role="presentation"
+        />
+      )}
+      <div
+        className={`fixed top-0 right-0 h-full w-[380px] bg-background border-l border-border z-50 flex flex-col transition-transform duration-200 ease-out ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-sm font-semibold">New Ticket</h2>
+          <Button variant="ghost" size="icon-sm" onClick={() => onOpenChange(false)}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+        <div className="flex-1 px-6 py-5 space-y-4 overflow-y-auto">
           <Input
+            ref={titleRef}
             placeholder="Ticket title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -56,10 +90,11 @@ export function CreateTicketDialog({
             placeholder="Description (optional)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            className="min-h-[100px]"
           />
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <span className="text-sm font-medium mb-1 block">Type</span>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Type</span>
               <Select
                 value={ticketType}
                 onValueChange={(v) => v && setTicketType(v)}
@@ -86,8 +121,8 @@ export function CreateTicketDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1">
-              <span className="text-sm font-medium mb-1 block">Priority</span>
+            <div className="space-y-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Priority</span>
               <Select
                 value={priority}
                 onValueChange={(v) => v && setPriority(v)}
@@ -114,6 +149,8 @@ export function CreateTicketDialog({
               </Select>
             </div>
           </div>
+        </div>
+        <div className="px-6 py-4 border-t">
           <Button
             onClick={handleSubmit}
             className="w-full bg-emerald hover:bg-emerald/90 text-white"
@@ -122,7 +159,7 @@ export function CreateTicketDialog({
             Create Ticket
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </>
   );
 }

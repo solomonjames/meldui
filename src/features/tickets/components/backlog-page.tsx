@@ -1,9 +1,27 @@
-import { LayoutGrid } from "lucide-react";
+import { LayoutGrid, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { KanbanColumn } from "@/features/tickets/components/kanban-column";
 import type { Ticket, TicketPhase, WorkflowDefinition } from "@/shared/types";
 import { getTicketPhase } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
+
+const TYPE_FILTER_COLORS: Record<string, { active: string }> = {
+  feature: {
+    active:
+      "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium",
+  },
+  task: {
+    active: "bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400 font-medium",
+  },
+  bug: { active: "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400 font-medium" },
+  chore: {
+    active: "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-medium",
+  },
+  epic: {
+    active:
+      "bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-400 font-medium",
+  },
+};
 
 interface BacklogPageProps {
   tickets: Ticket[];
@@ -12,6 +30,7 @@ interface BacklogPageProps {
   workflows: WorkflowDefinition[];
   onRefresh: () => Promise<void>;
   onCardClick: (ticket: Ticket) => void;
+  onCreateTicket?: () => void;
 }
 
 type SortMode = "priority" | "date";
@@ -35,6 +54,7 @@ export function BacklogPage({
   workflows,
   onRefresh,
   onCardClick,
+  onCreateTicket,
 }: BacklogPageProps) {
   const [sortMode, setSortMode] = useState<SortMode>("priority");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(null);
@@ -129,41 +149,62 @@ export function BacklogPage({
           >
             All
           </button>
-          {TICKET_TYPES.map((type) => (
-            <button
-              type="button"
-              key={type}
-              onClick={() => setTypeFilter(typeFilter === type ? null : type)}
-              className={`px-2.5 py-1 text-xs rounded-full capitalize transition-colors ${
-                typeFilter === type
-                  ? "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 font-medium"
-                  : "bg-white dark:bg-zinc-800 text-muted-foreground hover:text-foreground border"
-              }`}
-            >
-              {type}
-            </button>
-          ))}
+          {TICKET_TYPES.map((type) => {
+            const colors = TYPE_FILTER_COLORS[type];
+            return (
+              <button
+                type="button"
+                key={type}
+                onClick={() => setTypeFilter(typeFilter === type ? null : type)}
+                className={`px-2.5 py-1 text-xs rounded-full capitalize transition-colors border ${
+                  typeFilter === type
+                    ? (colors?.active ??
+                      "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 font-medium")
+                    : "border-transparent bg-white dark:bg-zinc-800 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {type}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Kanban Board */}
       <div className="flex-1 overflow-hidden px-8 py-5">
-        <div className="flex gap-5 h-full overflow-x-auto">
-          {COLUMNS.map((col) => {
-            const columnTickets = ticketsByPhase[col.key];
-            return (
-              <div key={col.key} className="min-w-[280px] w-[280px] shrink-0 h-full">
-                <KanbanColumn
-                  title={col.title}
-                  variant={col.key}
-                  count={columnTickets.length}
-                  tickets={columnTickets}
-                  onCardClick={onCardClick}
-                />
-              </div>
-            );
-          })}
-        </div>
+        {filteredTickets.length === 0 && !loading ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <p className="text-sm font-medium text-muted-foreground">No tickets yet</p>
+            <p className="text-xs text-muted-foreground">Create your first ticket to get started</p>
+            {onCreateTicket && (
+              <Button
+                onClick={onCreateTicket}
+                className="bg-emerald hover:bg-emerald/90 text-white mt-2"
+                size="sm"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Create Ticket
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="flex gap-5 h-full overflow-x-auto">
+            {COLUMNS.map((col) => {
+              const columnTickets = ticketsByPhase[col.key];
+              return (
+                <div key={col.key} className="min-w-[280px] w-[280px] shrink-0 h-full">
+                  <KanbanColumn
+                    title={col.title}
+                    variant={col.key}
+                    count={columnTickets.length}
+                    tickets={columnTickets}
+                    onCardClick={onCardClick}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,0 +1,75 @@
+id: superpowers-quick
+name: Superpowers Quick Flow
+description: "Skip planning — implement directly with TDD, code review, and verification"
+version: "1.0"
+ticket_sections:
+  - id: description
+    label: Description
+    type: markdown
+    collapsed: false
+  - id: notes
+    label: Notes
+    type: markdown
+    collapsed: true
+steps:
+  - id: implement
+    name: Implement
+    description: TDD implementation from the ticket description
+    view: progress
+    phase: implementation
+    instructions:
+      prompt: |
+        You are an expert developer. Implement the feature described in the ticket.
+
+        Load skill "superpowers:test-driven-development" and follow its methodology.
+
+        Analyze the ticket description to understand what needs to be built
+
+        When implementation is complete:
+        1. Use meldui_write_typed_section with section_id "notes" and content {text: "## Implementation Report\n..."} to write your report
+        2. When complete, finish your response.
+
+  - id: code-review
+    name: Code Review
+    description: Request and process a code review of the implementation
+    view: chat
+    phase: review
+    instructions:
+      prompt: |
+        You are requesting a code review of the implementation just completed.
+
+        Load skill "superpowers:requesting-code-review" and follow its methodology.
+
+        When the review is complete:
+        1. Append review findings to the notes section using meldui_write_typed_section with section_id "notes"
+        2. When complete, finish your response. The user will advance to the next step when ready.
+
+  - id: verify
+    name: Verify
+    description: Run verification gate — fresh evidence for all completion claims
+    view: review
+    phase: review
+    instructions:
+      prompt: |
+        You are a verification engineer. Verify the implementation is complete and correct.
+
+        Load skill "superpowers:verification-before-completion" and follow its methodology.
+
+        Format your response as:
+        ## Verification Report
+
+        ### Test Suite
+        Result: PASS/FAIL
+        Details: ...
+
+        ### Build
+        Result: PASS/FAIL
+
+        ### Linter
+        Result: PASS/FAIL
+
+        ### Overall: PASS/FAIL
+
+        When verification is complete:
+        1. Use meldui_write_typed_section with section_id "notes" and content {text: "## Verification Report\n..."} to write the report
+        2. When complete, finish your response.

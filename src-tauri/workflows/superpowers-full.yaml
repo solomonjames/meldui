@@ -1,0 +1,116 @@
+id: superpowers-full
+name: Superpowers Full Flow
+description: "Brainstorm design, write implementation plan, then implement with code review and verification"
+version: "1.0"
+ticket_sections:
+  - id: design
+    label: Design
+    type: markdown
+    collapsed: false
+  - id: plan
+    label: Implementation Plan
+    type: markdown
+    collapsed: false
+  - id: notes
+    label: Notes
+    type: markdown
+    collapsed: true
+steps:
+  - id: brainstorm
+    name: Brainstorm
+    description: Explore the idea, ask clarifying questions, propose approaches, and produce an approved design
+    view: chat
+    phase: plan
+    instructions:
+      prompt: |
+        You are a design partner helping the user turn an idea into a fully-formed design.
+
+        Load skill "superpowers:brainstorming" and follow its methodology.
+
+        When you have an approved design:
+        1. Use meldui_write_typed_section with section_id "design" and content {text: "..."} to write the final design
+        2. When complete, finish your response. The user will advance to the next step when ready.
+
+  - id: write-plan
+    name: Write Plan
+    description: Create a detailed implementation plan with bite-sized TDD tasks
+    view: chat
+    phase: plan
+    instructions:
+      prompt: |
+        You are an implementation planner. Create a detailed, step-by-step implementation plan.
+
+        Load skill "superpowers:writing-plans" and follow its methodology.
+
+        The approved design is in the ticket's Design section — read it first with meldui_read_typed_section.
+
+        When the plan is complete:
+        1. Use meldui_write_typed_section with section_id "plan" and content {text: "..."} to write the plan
+        2. When complete, finish your response. The user will advance to the next step when ready.
+
+  - id: implement
+    name: Implement
+    description: Execute the implementation plan using strict TDD
+    view: progress
+    phase: implementation
+    instructions:
+      prompt: |
+        You are an expert developer. Implement the feature following the plan.
+
+        Load skill "superpowers:test-driven-development" and follow its methodology.
+
+        Read the Implementation Plan section from the ticket first with meldui_read_typed_section.
+
+        When implementation is complete:
+        1. Use meldui_write_typed_section with section_id "notes" and content {text: "## Implementation Report\n..."} to write your report
+        2. When complete, finish your response.
+
+  - id: code-review
+    name: Code Review
+    description: Request and process a code review of the implementation
+    view: chat
+    phase: review
+    instructions:
+      prompt: |
+        You are requesting a code review of the implementation just completed.
+
+        Load skill "superpowers:requesting-code-review" and follow its methodology.
+
+        When the review is complete:
+        1. Append review findings to the notes section using meldui_write_typed_section with section_id "notes"
+        2. When complete, finish your response. The user will advance to the next step when ready.
+
+  - id: verify
+    name: Verify
+    description: Run verification gate — fresh evidence for all completion claims
+    view: review
+    phase: review
+    instructions:
+      prompt: |
+        You are a verification engineer. Verify the implementation is complete and correct.
+
+        Load skill "superpowers:verification-before-completion" and follow its methodology.
+
+        The Iron Law: NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE.
+
+        Format your response as:
+        ## Verification Report
+
+        ### Test Suite
+        Command: `...`
+        Result: PASS/FAIL
+        Details: ...
+
+        ### Build
+        Command: `...`
+        Result: PASS/FAIL
+
+        ### Linter
+        Command: `...`
+        Result: PASS/FAIL
+
+        ### Overall: PASS/FAIL
+
+        When verification is complete:
+        1. Use meldui_write_typed_section with section_id "notes" and content {text: "## Verification Report\n..."} to append the report
+        2. When complete, finish your response.

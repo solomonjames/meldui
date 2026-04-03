@@ -74,12 +74,7 @@ pub enum StepInstructions {
 pub fn load_bundled_workflows() -> Vec<WorkflowDefinition> {
     let mut workflows = Vec::new();
 
-    let bundled_yamls: &[&str] = &[
-        include_str!("../../workflows/meld-full.yaml"),
-        include_str!("../../workflows/meld-quick.yaml"),
-    ];
-
-    for yaml_str in bundled_yamls {
+    for yaml_str in super::bundled::BUNDLED_WORKFLOWS {
         match serde_yaml::from_str::<WorkflowDefinition>(yaml_str) {
             Ok(wf) => workflows.push(wf),
             Err(e) => eprintln!("Failed to parse bundled workflow: {e}"),

@@ -1,5 +1,6 @@
 //! Workflow orchestration — step execution, prompt building, and suggestions.
 
+mod bundled;
 mod definition;
 mod diff;
 mod state;

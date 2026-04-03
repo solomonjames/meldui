@@ -1,0 +1,109 @@
+id: superpowers-debug
+name: Superpowers Debug Flow
+description: "Systematic root cause investigation, then TDD fix with code review and verification"
+version: "1.0"
+ticket_sections:
+  - id: investigation
+    label: Investigation
+    type: markdown
+    collapsed: false
+  - id: notes
+    label: Notes
+    type: markdown
+    collapsed: true
+steps:
+  - id: investigate
+    name: Investigate
+    description: Systematic root cause investigation — find the cause before attempting any fix
+    view: chat
+    phase: plan
+    instructions:
+      prompt: |
+        You are a debugging specialist. Investigate the bug described in the ticket.
+
+        Load skill "superpowers:systematic-debugging" and follow its methodology.
+
+        Present your findings:
+        ## Investigation Report
+
+        ### Symptom
+        What is happening?
+
+        ### Root Cause
+        Why is it happening?
+
+        ### Evidence
+        What proves this is the root cause?
+
+        ### Proposed Fix
+        What minimal change will fix the root cause?
+
+        When investigation is complete:
+        1. Use meldui_write_typed_section with section_id "investigation" and content {text: "..."} to write the report
+        2. When complete, finish your response. The user will advance to the next step when ready.
+
+  - id: fix
+    name: Fix
+    description: TDD fix — write a failing test that reproduces the bug, then fix it
+    view: progress
+    phase: implementation
+    instructions:
+      prompt: |
+        You are an expert developer fixing a bug. The root cause has been identified.
+
+        Load skill "superpowers:test-driven-development" and follow its methodology.
+
+        Read the Investigation section from the ticket first with meldui_read_typed_section.
+
+        When the fix is complete:
+        1. Use meldui_write_typed_section with section_id "notes" and content {text: "## Fix Report\n..."} to write your report
+        2. When complete, finish your response.
+
+  - id: code-review
+    name: Code Review
+    description: Request and process a code review of the fix
+    view: chat
+    phase: review
+    instructions:
+      prompt: |
+        You are requesting a code review of the bug fix just completed.
+
+        Load skill "superpowers:requesting-code-review" and follow its methodology.
+
+        When the review is complete:
+        1. Append review findings to the notes section using meldui_write_typed_section with section_id "notes"
+        2. When complete, finish your response. The user will advance to the next step when ready.
+
+  - id: verify
+    name: Verify
+    description: Run verification gate — fresh evidence the bug is fixed
+    view: review
+    phase: review
+    instructions:
+      prompt: |
+        You are a verification engineer. Verify the bug fix is complete and correct.
+
+        Load skill "superpowers:verification-before-completion" and follow its methodology.
+
+        Format your response as:
+        ## Verification Report
+
+        ### Regression Test
+        Command: `...`
+        Result: PASS/FAIL
+
+        ### Full Test Suite
+        Result: PASS/FAIL
+        Details: ...
+
+        ### Build
+        Result: PASS/FAIL
+
+        ### Linter
+        Result: PASS/FAIL
+
+        ### Overall: PASS/FAIL
+
+        When verification is complete:
+        1. Use meldui_write_typed_section with section_id "notes" and content {text: "## Verification Report\n..."} to write the report
+        2. When complete, finish your response.

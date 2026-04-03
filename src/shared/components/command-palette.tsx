@@ -1,7 +1,7 @@
-import { LayoutGrid, Plus, RefreshCw, Search, Settings } from "lucide-react";
+import { Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface Command {
+export interface Command {
   id: string;
   label: string;
   icon: typeof Search;
@@ -122,34 +122,4 @@ export function CommandPalette({ open, onClose, commands }: CommandPaletteProps)
       </div>
     </div>
   );
-}
-
-// biome-ignore lint/style/useComponentExportOnlyModules: hook tightly coupled to component
-export function useCommandPaletteCommands({
-  onCreateTicket,
-  onNavigate,
-  onRefresh,
-}: {
-  onCreateTicket: () => void;
-  onNavigate: (page: string) => void;
-  onRefresh: () => void;
-}): Command[] {
-  return [
-    { id: "create", label: "Create Ticket", icon: Plus, shortcut: "C", action: onCreateTicket },
-    {
-      id: "dashboard",
-      label: "Go to Dashboard",
-      icon: LayoutGrid,
-      shortcut: "G D",
-      action: () => onNavigate("backlog"),
-    },
-    {
-      id: "settings",
-      label: "Go to Settings",
-      icon: Settings,
-      shortcut: "G S",
-      action: () => onNavigate("settings"),
-    },
-    { id: "refresh", label: "Refresh Tickets", icon: RefreshCw, action: onRefresh },
-  ];
 }

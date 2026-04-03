@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 interface KeyboardShortcutsProps {
   open: boolean;
   onClose: () => void;
@@ -36,6 +38,18 @@ const SHORTCUT_GROUPS = [
 ];
 
 export function KeyboardShortcuts({ open, onClose }: KeyboardShortcutsProps) {
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (

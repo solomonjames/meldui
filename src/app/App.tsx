@@ -17,9 +17,10 @@ import { fetchWorkflowState } from "@/features/workflow/actions/workflow-queries
 import { useWorkflowEventRouting } from "@/features/workflow/hooks/use-workflow-event-routing";
 import { disposeTicketStores } from "@/features/workflow/stores/dispose";
 import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
-import { CommandPalette, useCommandPaletteCommands } from "@/shared/components/command-palette";
+import { CommandPalette } from "@/shared/components/command-palette";
 import { ViewErrorFallback } from "@/shared/components/error/view-error-fallback";
 import { KeyboardShortcuts } from "@/shared/components/keyboard-shortcuts";
+import { useCommandPaletteCommands } from "@/shared/hooks/use-command-palette-commands";
 import { useProjectDir } from "@/shared/hooks/use-project-dir";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { useUpdater } from "@/shared/hooks/use-updater";
@@ -154,13 +155,13 @@ function AppContent() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTyping()) return;
+
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setCommandPaletteOpen((v) => !v);
         return;
       }
-
-      if (isTyping()) return;
 
       if (gPendingRef.current) {
         gPendingRef.current = false;
@@ -178,6 +179,7 @@ function AppContent() {
       }
 
       if (e.key === "g" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (gChordRef.current) clearTimeout(gChordRef.current);
         gPendingRef.current = true;
         gChordRef.current = setTimeout(() => {
           gPendingRef.current = false;

@@ -1,27 +1,10 @@
 import { LayoutGrid, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { KanbanColumn } from "@/features/tickets/components/kanban-column";
+import { TYPE_CONFIG } from "@/features/tickets/constants";
 import type { Ticket, TicketPhase, WorkflowDefinition } from "@/shared/types";
 import { getTicketPhase } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
-
-const TYPE_FILTER_COLORS: Record<string, { active: string }> = {
-  feature: {
-    active:
-      "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium",
-  },
-  task: {
-    active: "bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400 font-medium",
-  },
-  bug: { active: "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400 font-medium" },
-  chore: {
-    active: "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-medium",
-  },
-  epic: {
-    active:
-      "bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-400 font-medium",
-  },
-};
 
 interface BacklogPageProps {
   tickets: Ticket[];
@@ -149,24 +132,21 @@ export function BacklogPage({
           >
             All
           </button>
-          {TICKET_TYPES.map((type) => {
-            const colors = TYPE_FILTER_COLORS[type];
-            return (
-              <button
-                type="button"
-                key={type}
-                onClick={() => setTypeFilter(typeFilter === type ? null : type)}
-                className={`px-2.5 py-1 text-xs rounded-full capitalize transition-colors border ${
-                  typeFilter === type
-                    ? (colors?.active ??
-                      "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 font-medium")
-                    : "border-transparent bg-white dark:bg-zinc-800 text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {type}
-              </button>
-            );
-          })}
+          {TICKET_TYPES.map((type) => (
+            <button
+              type="button"
+              key={type}
+              onClick={() => setTypeFilter(typeFilter === type ? null : type)}
+              className={`px-2.5 py-1 text-xs rounded-full capitalize transition-colors border ${
+                typeFilter === type
+                  ? (TYPE_CONFIG[type]?.filterActive ??
+                    "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 font-medium")
+                  : "border-transparent bg-white dark:bg-zinc-800 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {type}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -174,17 +154,30 @@ export function BacklogPage({
       <div className="flex-1 overflow-hidden px-8 py-5">
         {filteredTickets.length === 0 && !loading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
-            <p className="text-sm font-medium text-muted-foreground">No tickets yet</p>
-            <p className="text-xs text-muted-foreground">Create your first ticket to get started</p>
-            {onCreateTicket && (
-              <Button
-                onClick={onCreateTicket}
-                className="bg-emerald hover:bg-emerald/90 text-white mt-2"
-                size="sm"
-              >
-                <Plus className="w-4 h-4 mr-1.5" />
-                Create Ticket
-              </Button>
+            {typeFilter ? (
+              <>
+                <p className="text-sm font-medium text-muted-foreground">No {typeFilter} tickets</p>
+                <p className="text-xs text-muted-foreground">
+                  Try a different filter or create a new ticket
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-muted-foreground">No tickets yet</p>
+                <p className="text-xs text-muted-foreground">
+                  Create your first ticket to get started
+                </p>
+                {onCreateTicket && (
+                  <Button
+                    onClick={onCreateTicket}
+                    className="bg-emerald hover:bg-emerald/90 text-white mt-2"
+                    size="sm"
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Create Ticket
+                  </Button>
+                )}
+              </>
             )}
           </div>
         ) : (

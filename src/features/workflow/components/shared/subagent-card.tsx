@@ -42,7 +42,7 @@ export function SubagentCard({ activity }: SubagentCardProps) {
               </svg>
             </div>
           ) : (
-            <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center shrink-0">
+            <div className="w-4 h-4 rounded-full bg-red-500/90 dark:bg-red-400 flex items-center justify-center shrink-0">
               <svg
                 aria-hidden="true"
                 className="w-2.5 h-2.5 text-white"

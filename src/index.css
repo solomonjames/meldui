@@ -30,7 +30,7 @@
   --chart-3: oklch(0.546 0.245 262.881);
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
-  --emerald: #10b981;
+  --emerald: oklch(0.696 0.17 162.48);
   --emerald-muted: oklch(0.765 0.177 163 / 10%);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
@@ -134,8 +134,8 @@
 }
 
 @keyframes section-glow {
-  0% { background-color: rgb(16 185 129 / 0.12); }
-  70% { background-color: rgb(16 185 129 / 0.06); }
+  0% { background-color: oklch(0.696 0.17 162.48 / 0.12); }
+  70% { background-color: oklch(0.696 0.17 162.48 / 0.06); }
   100% { background-color: transparent; }
 }
 

@@ -1,5 +1,5 @@
 import { FolderOpen, LayoutGrid, Settings } from "lucide-react";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { MeldLogo } from "@/shared/components/meld-logo";
 import type { Ticket, TicketPhase, WorkflowDefinition } from "@/shared/types";
 import { getTicketPhase, PHASE_CONFIG } from "@/shared/types";
@@ -123,48 +123,68 @@ export function AppSidebar({
           {activeTickets.length === 0 ? (
             <p className="px-3 text-xs text-muted-foreground">No active tickets</p>
           ) : (
-            activeTickets.map(({ ticket, phase }) => {
-              const isSelected = activeTicketId === ticket.id;
-              const phaseConfig = PHASE_CONFIG[phase];
-              return (
-                <button
-                  type="button"
-                  key={ticket.id}
-                  onClick={() => onTicketClick?.(ticket)}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
-                    isSelected
-                      ? "bg-zinc-100 dark:bg-zinc-800 border-l-2 border-emerald"
-                      : "hover:bg-white/50 dark:hover:bg-zinc-800/50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[10px] font-mono shrink-0 ${isSelected ? "text-foreground font-medium" : "text-muted-foreground"}`}
-                    >
-                      {ticket.id.slice(0, 12)}
-                    </span>
-                    {runningTicketIds?.has(ticket.id) ? (
-                      <span className="relative flex h-2 w-2 shrink-0">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald" />
-                      </span>
-                    ) : (
-                      <span
-                        className={`inline-flex items-center rounded-full text-[10px] px-1.5 py-0.5 font-medium ${phaseConfig.badgeBg}`}
-                      >
-                        {phaseConfig.label}
-                      </span>
-                    )}
-                  </div>
-                  <p className={`text-xs mt-0.5 truncate ${isSelected ? "text-foreground" : ""}`}>
-                    {ticket.title}
-                  </p>
-                </button>
-              );
-            })
+            activeTickets.map(({ ticket, phase }) => (
+              <SidebarTicketItem
+                key={ticket.id}
+                ticket={ticket}
+                phase={phase}
+                isSelected={activeTicketId === ticket.id}
+                isRunning={runningTicketIds?.has(ticket.id) ?? false}
+                onTicketClick={onTicketClick}
+              />
+            ))
           )}
         </ScrollArea>
       </div>
     </div>
   );
 }
+
+interface SidebarTicketItemProps {
+  ticket: Ticket;
+  phase: TicketPhase;
+  isSelected: boolean;
+  isRunning: boolean;
+  onTicketClick?: (ticket: Ticket) => void;
+}
+
+const SidebarTicketItem = memo(function SidebarTicketItem({
+  ticket,
+  phase,
+  isSelected,
+  isRunning,
+  onTicketClick,
+}: SidebarTicketItemProps) {
+  const phaseConfig = PHASE_CONFIG[phase];
+  return (
+    <button
+      type="button"
+      onClick={() => onTicketClick?.(ticket)}
+      className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
+        isSelected
+          ? "bg-zinc-100 dark:bg-zinc-800 border-l-2 border-emerald"
+          : "hover:bg-white/50 dark:hover:bg-zinc-800/50"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={`text-[10px] font-mono shrink-0 ${isSelected ? "text-foreground font-medium" : "text-muted-foreground"}`}
+        >
+          {ticket.id.slice(0, 12)}
+        </span>
+        {isRunning ? (
+          <span className="inline-flex rounded-full h-2 w-2 shrink-0 bg-emerald animate-pulse" />
+        ) : (
+          <span
+            className={`inline-flex items-center rounded-full text-[10px] px-1.5 py-0.5 font-medium ${phaseConfig.badgeBg}`}
+          >
+            {phaseConfig.label}
+          </span>
+        )}
+      </div>
+      <p className={`text-xs mt-0.5 truncate ${isSelected ? "text-foreground" : ""}`}>
+        {ticket.title}
+      </p>
+    </button>
+  );
+});

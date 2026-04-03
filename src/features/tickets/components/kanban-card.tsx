@@ -23,7 +23,7 @@ export function KanbanCard({ ticket, variant, onClick }: KanbanCardProps) {
       onKeyDown={(e) => {
         if ((e.key === "Enter" || e.key === " ") && onClick) onClick(ticket);
       }}
-      className={`rounded-[10px] border p-3.5 shadow-sm transition-colors cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-600 ${
+      className={`rounded-lg border p-3.5 shadow-sm transition-colors cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-600 ${
         isDone ? "bg-zinc-50 dark:bg-zinc-800/50 opacity-85" : "bg-white dark:bg-zinc-800"
       }`}
     >

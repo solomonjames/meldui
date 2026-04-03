@@ -136,11 +136,10 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
                 className="font-mono text-sm min-h-[80px]"
               />
               <p className="text-[11px] text-muted-foreground">
-                Shell command to run after creating a worktree. Use this to install dependencies
-                (e.g.,{" "}
+                Runs in each new worktree after creation. Use this to install dependencies (e.g.,{" "}
                 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">bun install</code>,{" "}
                 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">composer install</code>)
-                or set up the environment. Runs in the worktree directory.
+                or set up the environment.
               </p>
             </div>
           </section>
@@ -177,7 +176,8 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
                   className="text-sm w-24"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Maximum supervisor replies before falling back to manual input (default: 5)
+                  Higher values give the AI more autonomy per step. Falls back to manual input at
+                  the limit (default: 5).
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -199,7 +199,7 @@ export function SettingsPage({ projectDir }: SettingsPageProps) {
                   className="font-mono text-sm min-h-[120px]"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Customize how the supervisor evaluates agent responses. Empty = use default
+                  Customize how the AI supervisor evaluates each step. Empty = use default
                   guidelines.
                 </p>
               </div>

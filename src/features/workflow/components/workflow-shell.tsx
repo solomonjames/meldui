@@ -409,19 +409,29 @@ export function WorkflowShell({
           const failReason = (workflowState.step_status as { failed: string }).failed;
           const isResumable =
             failReason.includes("timed out") || failReason.includes("interrupted");
+          const friendlyMessage = isResumable
+            ? "Session interrupted — your progress is saved."
+            : /permission|denied/i.test(failReason)
+              ? "The agent needs permission to continue. Check the permission request below."
+              : /timeout|timed out/i.test(failReason)
+                ? "The operation timed out. This usually resolves on retry."
+                : /network|connection|socket/i.test(failReason)
+                  ? "Connection to the agent was lost. Try resuming the step."
+                  : "The workflow step encountered an error.";
           return (
             <div className="px-6 py-2 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800 flex items-center gap-3">
               <div className="flex-1">
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {isResumable
-                    ? "Session interrupted — your progress is saved."
-                    : `Step failed: ${failReason}`}
-                </p>
+                <p className="text-sm text-red-600 dark:text-red-400">{friendlyMessage}</p>
+                {!isResumable && friendlyMessage !== failReason && (
+                  <p className="text-xs font-mono text-red-500/70 dark:text-red-400/50 mt-0.5 truncate">
+                    {failReason}
+                  </p>
+                )}
               </div>
               <button
                 type="button"
                 onClick={handleExecute}
-                className="px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors"
+                className="px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors shrink-0"
               >
                 {isResumable ? "Resume" : "Retry"}
               </button>

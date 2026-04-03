@@ -17,7 +17,10 @@ import { fetchWorkflowState } from "@/features/workflow/actions/workflow-queries
 import { useWorkflowEventRouting } from "@/features/workflow/hooks/use-workflow-event-routing";
 import { disposeTicketStores } from "@/features/workflow/stores/dispose";
 import { orchestrationStoreFactory } from "@/features/workflow/stores/orchestration-store";
+import { CommandPalette } from "@/shared/components/command-palette";
 import { ViewErrorFallback } from "@/shared/components/error/view-error-fallback";
+import { KeyboardShortcuts } from "@/shared/components/keyboard-shortcuts";
+import { useCommandPaletteCommands } from "@/shared/hooks/use-command-palette-commands";
 import { useProjectDir } from "@/shared/hooks/use-project-dir";
 import { useTheme } from "@/shared/hooks/use-theme";
 import { useUpdater } from "@/shared/hooks/use-updater";
@@ -37,6 +40,8 @@ function AppContent() {
   const activePage = useNavigationStore((s) => s.activePage);
   const activeTicketId = useNavigationStore((s) => s.activeTicketId);
   const createDialogOpen = useNavigationStore((s) => s.createDialogOpen);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Centralized event-driven query invalidation
   useTauriEventInvalidation(projectDir ?? "");
@@ -104,26 +109,8 @@ function AppContent() {
     };
   }, []);
 
-  // C keyboard shortcut to open create dialog (suppressed on ticket page)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.key === "c" &&
-        !e.metaKey &&
-        !e.ctrlKey &&
-        !e.altKey &&
-        navigationStore.getState().activePage !== "ticket" &&
-        !(e.target instanceof HTMLInputElement) &&
-        !(e.target instanceof HTMLTextAreaElement) &&
-        !(e.target instanceof HTMLSelectElement)
-      ) {
-        e.preventDefault();
-        navigationStore.getState().setCreateDialogOpen(true);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  const gChordRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gPendingRef = useRef(false);
 
   const navigateToTicket = useCallback(
     async (ticketId: string) => {
@@ -155,6 +142,75 @@ function AppContent() {
     ticketStore.refreshTickets();
   }, [ticketStore]);
 
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const isTyping = () => {
+      const el = document.activeElement;
+      return (
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        el instanceof HTMLSelectElement ||
+        (el as HTMLElement)?.isContentEditable
+      );
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTyping()) return;
+
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setCommandPaletteOpen((v) => !v);
+        return;
+      }
+
+      if (gPendingRef.current) {
+        gPendingRef.current = false;
+        if (gChordRef.current) clearTimeout(gChordRef.current);
+        if (e.key === "d") {
+          e.preventDefault();
+          handleNavigateToBacklog();
+          return;
+        }
+        if (e.key === "s") {
+          e.preventDefault();
+          navigationStore.getState().navigateToSettings();
+          return;
+        }
+      }
+
+      if (e.key === "g" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (gChordRef.current) clearTimeout(gChordRef.current);
+        gPendingRef.current = true;
+        gChordRef.current = setTimeout(() => {
+          gPendingRef.current = false;
+        }, 500);
+        return;
+      }
+
+      if (
+        e.key === "c" &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        navigationStore.getState().activePage !== "ticket"
+      ) {
+        e.preventDefault();
+        navigationStore.getState().setCreateDialogOpen(true);
+        return;
+      }
+
+      if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
+        e.preventDefault();
+        setShortcutsOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (gChordRef.current) clearTimeout(gChordRef.current);
+    };
+  }, [handleNavigateToBacklog]);
+
   const handleSidebarNavigate = useCallback(
     (page: string) => {
       if (page === "backlog") {
@@ -172,6 +228,14 @@ function AppContent() {
     },
     [navigateToTicket],
   );
+
+  const paletteCommands = useCommandPaletteCommands({
+    onCreateTicket: () => navigationStore.getState().setCreateDialogOpen(true),
+    onNavigate: handleSidebarNavigate,
+    onRefresh: () => {
+      ticketStore.refreshTickets();
+    },
+  });
 
   if (dirLoading) return null;
 
@@ -236,6 +300,7 @@ function AppContent() {
           workflows={workflows}
           onRefresh={ticketStore.refreshTickets}
           onCardClick={handleTicketClick}
+          onCreateTicket={() => navigationStore.getState().setCreateDialogOpen(true)}
         />
       </ErrorBoundary>
     );
@@ -265,6 +330,12 @@ function AppContent() {
         onOpenChange={(open) => navigationStore.getState().setCreateDialogOpen(open)}
         onCreateTicket={ticketStore.createTicket}
       />
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        commands={paletteCommands}
+      />
+      <KeyboardShortcuts open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <Toaster position="top-right" richColors />
     </AppLayout>
   );

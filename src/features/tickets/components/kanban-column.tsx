@@ -15,10 +15,15 @@ interface KanbanColumnProps {
 export function KanbanColumn({ title, variant, count, tickets, onCardClick }: KanbanColumnProps) {
   const config = PHASE_CONFIG[variant] ?? PHASE_CONFIG.backlog;
   const Icon = config.icon;
+  const isDone = variant === "done";
 
   return (
-    <div className="flex flex-col min-w-0 min-h-0 h-full rounded-lg">
-      <div className="flex items-center gap-2 pb-3">
+    <div
+      className={`flex flex-col min-w-0 min-h-0 h-full rounded-lg ${isDone ? "opacity-60" : ""}`}
+    >
+      <div
+        className={`flex items-center gap-2 pb-3 border-t-2 pt-2 ${config.borderColor ?? "border-transparent"}`}
+      >
         <Icon className={`w-4 h-4 ${config.iconColor}`} />
         <span className="text-sm font-medium">{title}</span>
         <Badge variant="secondary" className={`text-[11px] px-1.5 py-0 ${config.badgeBg}`}>

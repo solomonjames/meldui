@@ -14,7 +14,7 @@ export function FindingsPanel({ findings, findingActions, onFindingAction }: Fin
   const infos = findings.filter((f) => f.severity === "info");
 
   return (
-    <div className="w-80 border-l bg-white dark:bg-zinc-900 flex flex-col">
+    <div className="w-80 shrink-0 border-l bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b">
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Review Findings ({findings.length})

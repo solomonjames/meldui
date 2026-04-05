@@ -48,6 +48,7 @@ export function CollapsibleSection({
         <button
           type="button"
           className="flex items-center gap-1.5 group"
+          aria-expanded={isOpen}
           onClick={() => setIsOpen(!isOpen)}
         >
           <ChevronRight

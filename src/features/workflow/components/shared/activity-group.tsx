@@ -46,8 +46,9 @@ export function ActivityGroup({ activities, summaryText, isActive }: ActivityGro
     >
       <button
         type="button"
+        aria-expanded={expanded}
         onClick={() => setUserExpanded(!expanded)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded-r-lg"
+        className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 focus-visible:bg-accent focus-visible:ring-1 focus-visible:ring-ring rounded-r-lg"
       >
         <span
           className={`w-2 h-2 rounded-full shrink-0 ${

@@ -48,7 +48,7 @@ function RadialProgress({ percentage, color }: { percentage: number; color: stri
 
 function getColor(percentage: number): string {
   if (percentage >= 90) return "var(--destructive)";
-  if (percentage >= 70) return "var(--amber-500, #f59e0b)";
+  if (percentage >= 70) return "oklch(0.769 0.188 70.08)";
   return "var(--muted-foreground)";
 }
 

@@ -60,6 +60,7 @@ export function ChecklistSection({ section, onChange }: SectionProps) {
       <div className="flex gap-2 items-center">
         <input
           className="flex-1 rounded border bg-zinc-50 dark:bg-zinc-900 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500/40"
+          aria-label="Add checklist item"
           placeholder="Add item..."
           value={newItemText}
           onChange={(e) => setNewItemText(e.target.value)}

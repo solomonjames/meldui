@@ -8,6 +8,16 @@ import { Textarea } from "@/shared/ui/textarea";
 
 const SEVERITY_NAMES = ["Critical", "High", "Medium", "Low", "Minimal"] as const;
 
+const TYPE_SELECT_ITEMS = Object.keys(TYPE_CONFIG).map((key) => ({
+  value: key,
+  label: key.charAt(0).toUpperCase() + key.slice(1),
+}));
+
+const PRIORITY_SELECT_ITEMS = Object.entries(PRIORITY_CONFIG).map(([key, config]) => ({
+  value: key,
+  label: `${config.label} ${SEVERITY_NAMES[Number(key)]}`,
+}));
+
 interface CreateTicketDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -68,13 +78,18 @@ export function CreateTicketDialog({
         />
       )}
       <div
-        className={`fixed top-0 right-0 h-full w-[380px] bg-background border-l border-border z-50 flex flex-col transition-transform duration-200 ease-out ${
+        className={`fixed top-0 right-0 h-full w-full max-w-[380px] bg-background border-l border-border z-50 flex flex-col transition-transform duration-200 ease-out ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-sm font-semibold">New Ticket</h2>
-          <Button variant="ghost" size="icon-sm" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Close"
+            onClick={() => onOpenChange(false)}
+          >
             <X className="w-4 h-4" />
           </Button>
         </div>
@@ -82,12 +97,14 @@ export function CreateTicketDialog({
           <Input
             ref={titleRef}
             placeholder="Ticket title"
+            aria-label="Ticket title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
           />
           <Textarea
             placeholder="Description (optional)"
+            aria-label="Description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="min-h-[100px]"
@@ -98,10 +115,7 @@ export function CreateTicketDialog({
               <Select
                 value={ticketType}
                 onValueChange={(v) => v && setTicketType(v)}
-                items={Object.keys(TYPE_CONFIG).map((key) => ({
-                  value: key,
-                  label: key.charAt(0).toUpperCase() + key.slice(1),
-                }))}
+                items={TYPE_SELECT_ITEMS}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -126,10 +140,7 @@ export function CreateTicketDialog({
               <Select
                 value={priority}
                 onValueChange={(v) => v && setPriority(v)}
-                items={Object.entries(PRIORITY_CONFIG).map(([key, config]) => ({
-                  value: key,
-                  label: `${config.label} ${SEVERITY_NAMES[Number(key)]}`,
-                }))}
+                items={PRIORITY_SELECT_ITEMS}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />

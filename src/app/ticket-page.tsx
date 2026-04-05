@@ -133,6 +133,7 @@ export function TicketPage({
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                aria-label="Back to backlog"
                 onClick={onNavigateToBacklog}
               >
                 <ArrowLeft className="w-3.5 h-3.5" />

@@ -29,7 +29,7 @@ export function DiffContent({
     <div className="flex-1 flex flex-col">
       {/* File header */}
       <div className="px-6 py-2 border-b bg-white dark:bg-zinc-900 flex items-center justify-between">
-        <h3 className="text-sm font-medium font-mono">{file.path}</h3>
+        <h3 className="text-sm font-medium font-mono truncate">{file.path}</h3>
         <span className="flex gap-2 text-xs">
           {file.additions > 0 && (
             <span className="text-emerald-600 dark:text-emerald-400 font-medium">

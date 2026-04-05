@@ -58,8 +58,9 @@ export function ToolCard({ activity }: ToolCardProps) {
     >
       <button
         type="button"
+        aria-expanded={expanded}
         onClick={() => hasInput && setExpanded(!expanded)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm"
+        className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-accent"
       >
         {/* Tool icon */}
         <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />

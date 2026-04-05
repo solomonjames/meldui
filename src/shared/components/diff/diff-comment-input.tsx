@@ -36,6 +36,7 @@ export function DiffCommentInput({
         value={content}
         onChange={(e) => setContent(e.target.value)}
         placeholder="Write a comment..."
+        aria-label="Write a comment"
         className="min-h-[60px] text-xs bg-white dark:bg-zinc-900 resize-none"
         autoFocus
         onKeyDown={(e) => {
